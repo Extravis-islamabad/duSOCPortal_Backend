@@ -1,0 +1,15 @@
+[flake8]
+extend-ignore =
+    E501, # E501 line too long (87 > 79 characters)
+    E203, # E203 whitespace before ':'
+    E402, # E402 module level import not at top of file
+    B105, # B105 hardcoded password string
+    B608, # B608 hardcoded_sql_expressions
+    E712, # comparison to True should be 'if cond is True:' or 'if cond:'
+exclude =
+    .git,
+    _pycache_,
+    .vscode,
+    build
+# mccabe
+max-complexity = 25
