@@ -21,3 +21,18 @@ class Tenant(models.Model):
     def __str__(self):
         return f"{self.username} ({self.tenant_id})"
 
+class Role(models.Model):
+    class RoleChoices(models.TextChoices):
+        SUPER_ADMIN = 'SUPER_ADMIN', 'Super Admin'
+        ADMIN = 'ADMIN', 'Admin'
+        USER = 'USER', 'User'
+    name = models.CharField(max_length=100)
+    role_type = models.CharField(
+        max_length=20,
+        choices=RoleChoices.choices,
+        default=RoleChoices.USER
+    )
+
+    def __str__(self):
+        return self.name
+    
