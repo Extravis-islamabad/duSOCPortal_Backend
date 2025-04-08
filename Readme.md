@@ -1,1 +1,1 @@
-DU SOCKPortal 
+DU SOCKPortal

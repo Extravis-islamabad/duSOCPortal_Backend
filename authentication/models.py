@@ -13,6 +13,7 @@ class User(models.Model):
     def __str__(self):
         return self.name
 
+
 # class OrderStatus(models.IntegerChoices):
 #     Awaiting_Pickup = 1
 #     Picked_up = 2
