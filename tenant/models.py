@@ -11,9 +11,11 @@ class Tenant(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="created_tenants"
     )
-    name = models.CharField(max_length=255, default=None, null=True, blank=True)
+    name = models.CharField(
+        max_length=255, default=None, null=True, blank=True, unique=True
+    )
     password = models.CharField(max_length=255, null=True, blank=True)
-    contact_email = models.EmailField(null=True, blank=True)
+    email = models.EmailField(null=True, blank=True, unique=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
