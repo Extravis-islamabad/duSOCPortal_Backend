@@ -61,7 +61,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         return PasswordCreation.check_password(raw_password, self.hashed_password)
 
 
-class PermissionChoices(models.IntegerChoices):
+class UserPermissionChoices(models.IntegerChoices):
     DASHBOARD = 1, "Dashboard"
     CHATBOT = 2, "Chatbot"
     REPORTS = 3, "Reports"
@@ -97,13 +97,13 @@ class UserRole(models.Model):
 class RolePermission(models.Model):
     role = models.ForeignKey(Role, on_delete=models.CASCADE)
     permission = models.IntegerField(
-        choices=PermissionChoices.choices, default=PermissionChoices.DASHBOARD
+        choices=UserPermissionChoices.choices, default=UserPermissionChoices.DASHBOARD
     )
     permission_text = models.CharField(
         max_length=100,
         editable=False,  # Prevent manual edits
         help_text="Automatically set to the text label of the permission choice",
-        default=PermissionChoices.DASHBOARD.label,
+        default=UserPermissionChoices.DASHBOARD.label,
     )
 
     def __str__(self):
@@ -111,5 +111,5 @@ class RolePermission(models.Model):
 
     def save(self, *args, **kwargs):
         # Set permission_text to the label from PermissionChoices based on permission
-        self.permission_text = PermissionChoices(self.permission).label
+        self.permission_text = UserPermissionChoices(self.permission).label
         super().save(*args, **kwargs)
