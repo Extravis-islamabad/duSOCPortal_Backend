@@ -46,7 +46,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
 ]
 
-INSTALLED_APPS += ["authentication", "tenant"]
+INSTALLED_APPS += ["authentication", "tenant", "tenantadmin"]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

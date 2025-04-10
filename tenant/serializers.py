@@ -80,31 +80,10 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Tenant
-        fields = ["name", "password", "email", "phone_number", "permissions"]
+        fields = ["phone_number", "permissions"]  # Exclude name and email
         extra_kwargs = {
-            "name": {"required": False},
-            "password": {"required": False},
-            "email": {"required": False},
             "phone_number": {"required": False},
         }
-
-    def validate_name(self, value):
-        """Check if a tenant with this name already exists, excluding the current instance."""
-        tenant = self.instance
-        if value and Tenant.objects.filter(name=value).exclude(id=tenant.id).exists():
-            raise serializers.ValidationError(
-                f"A tenant with the name '{value}' already exists."
-            )
-        return value
-
-    def validate_email(self, value):
-        """Check if a tenant with this email already exists, excluding the current instance."""
-        tenant = self.instance
-        if value and Tenant.objects.filter(email=value).exclude(id=tenant.id).exists():
-            raise serializers.ValidationError(
-                f"A tenant with the email '{value}' already exists."
-            )
-        return value
 
     def validate_permissions(self, value):
         """Ensure all provided permissions are valid choices."""
@@ -121,18 +100,6 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
         # Extract permissions (if provided)
         permissions = validated_data.pop("permissions", None)
 
-        # Update only provided fields
-        if "name" in validated_data:
-            instance.name = validated_data["name"]
-        if "password" in validated_data:
-            raw_password = validated_data["password"]
-            if raw_password is not None:  # Allow nulling the password
-                if raw_password:
-                    instance.set_password(raw_password)
-                else:
-                    instance.password = None
-        if "email" in validated_data:
-            instance.email = validated_data["email"]
         if "phone_number" in validated_data:
             instance.phone_number = validated_data["phone_number"]
         instance.save()
@@ -154,3 +121,33 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
                 TenantRolePermissions.objects.create(role=role, permission=perm_value)
 
         return instance
+
+
+class TenantRolePermissionsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TenantRolePermissions
+        fields = ["permission", "permission_text"]
+
+
+class TenantDetailSerializer(serializers.ModelSerializer):
+    permissions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Tenant
+        fields = [
+            "id",
+            "name",
+            "email",
+            "phone_number",
+            "created_at",
+            "updated_at",
+            "permissions",
+        ]
+
+    def get_permissions(self, obj):
+        # Get the tenant's role (assuming one role per tenant)
+        role = TenantRole.objects.filter(tenant=obj).first()
+        if role:
+            permissions = TenantRolePermissions.objects.filter(role=role)
+            return TenantRolePermissionsSerializer(permissions, many=True).data
+        return []
