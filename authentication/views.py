@@ -116,7 +116,6 @@ class PermissionChoicesAPIView(APIView):
 
             return Response(
                 {
-                    "message": "Permission choices retrieved successfully",
                     "permissions": permissions,
                 },
                 status=status.HTTP_200_OK,
