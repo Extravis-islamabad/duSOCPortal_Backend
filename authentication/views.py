@@ -2,12 +2,14 @@
 from django.db.models import Q
 from loguru import logger
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import User
-from .serializers import UserCreateSerializer
+from .models import PermissionChoices, User
+from .serializers import UserCreateSerializer, UserDetailSerializer
 
 
 class UserCreateAPIView(APIView):
@@ -30,7 +32,7 @@ class UserLoginAPIView(APIView):
     def post(self, request):
         # Extract credentials from request
         username = request.data.get("username")
-        password = request.data.get("raw_password")
+        password = request.data.get("password")
 
         # Validate input
         if not username or not password:
@@ -50,18 +52,8 @@ class UserLoginAPIView(APIView):
 
                 return Response(
                     {
-                        "message": "Login successful",
-                        "user": {
-                            "id": user.id,
-                            "username": user.username,
-                            "email": user.email,
-                            "is_super_admin": user.is_super_admin,
-                            "is_admin": user.is_admin,
-                        },
-                        "tokens": {
-                            "refresh": str(refresh),
-                            "access": str(refresh.access_token),
-                        },
+                        "refresh": str(refresh),
+                        "access": str(refresh.access_token),
                     },
                     status=status.HTTP_200_OK,
                 )
@@ -77,6 +69,60 @@ class UserLoginAPIView(APIView):
 
         except Exception as e:
             logger.error(f"An error occurred UserLoginAPIView.post: {str(e)}")
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class UserDetailsAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            # The user is already authenticated via JWT
+            user = request.user
+
+            # Serialize the user data
+            serializer = UserDetailSerializer(user)
+
+            return Response(
+                {
+                    "message": "User details retrieved successfully",
+                    "user": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class PermissionChoicesAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            # Get all PermissionChoices as a list of dictionaries
+            permissions = [
+                {"id": choice.value, "text": choice.label}
+                for choice in PermissionChoices
+            ]
+
+            return Response(
+                {
+                    "message": "Permission choices retrieved successfully",
+                    "permissions": permissions,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
             return Response(
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
