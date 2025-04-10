@@ -14,6 +14,26 @@ from .serializers import UserCreateSerializer, UserDetailSerializer
 
 class UserCreateAPIView(APIView):
     def post(self, request):
+        """
+        Creates a new user.
+
+        Accepts POST requests with the following data:
+
+        - username: string
+        - email: string
+        - name: string
+        - password: string
+        - is_admin: boolean
+        - is_superuser: boolean
+
+        Returns a JSON response with the following data:
+
+        - message: string
+        - user_id: integer
+        - username: string
+
+        Returns HTTP 201 status code on success, or HTTP 400 status code on failure.
+        """
         serializer = UserCreateSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
@@ -31,6 +51,24 @@ class UserCreateAPIView(APIView):
 class UserLoginAPIView(APIView):
     def post(self, request):
         # Extract credentials from request
+        """
+        Authenticates a user and returns JWT tokens.
+
+        Accepts POST requests with the following data:
+        - username: string (can be either username or email)
+        - password: string
+
+        Returns a JSON response with the following data on success:
+        - refresh: string (refresh token)
+        - access: string (access token)
+
+        Returns HTTP 200 status code on successful authentication,
+        HTTP 400 for missing credentials,
+        HTTP 401 for invalid password,
+        HTTP 404 if the user does not exist,
+        or HTTP 500 for any other server error.
+        """
+
         username = request.data.get("username")
         password = request.data.get("password")
 
@@ -80,6 +118,15 @@ class UserDetailsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """
+        Retrieves the user details.
+
+        Returns a JSON response with the following data on success:
+        - message: string
+        - user: object (User details)
+
+        Returns HTTP 200 status code on success, or HTTP 500 for any other server error.
+        """
         try:
             # The user is already authenticated via JWT
             user = request.user
@@ -107,6 +154,14 @@ class PermissionChoicesAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """
+        Retrieves the permission choices.
+
+        Returns a JSON response with the following data on success:
+        - permissions: list of objects (Permission choice details)
+
+        Returns HTTP 200 status code on success, or HTTP 500 for any other server error.
+        """
         try:
             # Get all PermissionChoices as a list of dictionaries
             permissions = [
