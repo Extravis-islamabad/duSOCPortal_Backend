@@ -37,10 +37,10 @@ class DjangoConstants:
 
 class AllowedOriginsConstants:
     LOCAL_URL = os.getenv("LOCAL_URL", None)
-    if LOCAL_URL is None:
+    DEV_URL = os.getenv("DEV_URL", None)
+
+    if LOCAL_URL is None or DEV_URL is None:
         logger.warning("Allowed origins are not set...")
         raise ValueError("Allowed origins are not set...")
 
-    ALLOWED_ORIGINS = [
-        LOCAL_URL,
-    ]
+    ALLOWED_ORIGINS = [LOCAL_URL, DEV_URL]
