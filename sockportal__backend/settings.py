@@ -16,6 +16,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from common.constants import DatabaseConstants
+
 load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -90,12 +92,12 @@ WSGI_APPLICATION = "sockportal__backend.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": os.getenv("DB_ENGINE"),
-        "NAME": os.getenv("DB_NAME"),
-        "USER": os.getenv("DB_USER"),
-        "PASSWORD": os.getenv("DB_PASSWORD"),
-        "HOST": os.getenv("DB_HOST"),
-        "PORT": os.getenv("DB_PORT"),
+        "ENGINE": DatabaseConstants.DATABASE_ENGINE,
+        "NAME": DatabaseConstants.DATABASE_NAME,
+        "USER": DatabaseConstants.DATABASE_USER,
+        "PASSWORD": DatabaseConstants.DATABASE_PASSWORD,
+        "HOST": DatabaseConstants.DATABASE_HOST,
+        "PORT": DatabaseConstants.DATABASE_PORT,
     }
 }
 
