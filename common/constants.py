@@ -26,3 +26,10 @@ class DatabaseConstants:
     ):
         logger.warning("Database credentials are not set...")
         raise ValueError("Database credentials are not set...")
+
+
+class DjangoConstants:
+    SECRET_KEY = os.getenv("SECRET_KEY", None)
+    if SECRET_KEY is None:
+        logger.warning("Secret key is not set...")
+        raise ValueError("Secret key is not set...")
