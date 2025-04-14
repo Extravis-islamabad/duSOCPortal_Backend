@@ -44,3 +44,14 @@ class AllowedOriginsConstants:
         raise ValueError("Allowed origins are not set...")
 
     ALLOWED_ORIGINS = [LOCAL_URL, DEV_URL]
+
+
+class AllowedHostsConstants:
+    LOCAL_HOST = os.getenv("LOCAL_HOST", None)
+    DEV_HOST = os.getenv("DEV_HOST", None)
+
+    if LOCAL_HOST is None or DEV_HOST is None:
+        logger.warning("Allowed hosts are not set...")
+        raise ValueError("Allowed hosts are not set...")
+
+    ALLOWED_HOSTS = [LOCAL_HOST, DEV_HOST]
