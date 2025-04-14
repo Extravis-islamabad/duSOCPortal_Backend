@@ -83,6 +83,10 @@ class UserLoginAPIView(APIView):
             # Get the user
             user = User.objects.filter(Q(username=username) | Q(email=username)).first()
 
+            if user is None:
+                return Response(
+                    {"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND
+                )
             # Check password
             if user.check_password(password):
                 # Generate JWT tokens
