@@ -15,4 +15,4 @@ class IntegrationTypesView(APIView):
         integration_types = [
             {"id": choice[0], "name": choice[1]} for choice in IntegrationTypes.choices
         ]
-        return Response(integration_types, status=status.HTTP_200_OK)
+        return Response({"data": integration_types}, status=status.HTTP_200_OK)
