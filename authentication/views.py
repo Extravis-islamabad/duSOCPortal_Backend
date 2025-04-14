@@ -149,3 +149,49 @@ class UserDetailsAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+
+class UserLogoutAPIView(APIView):
+    """
+    Logs out a user by blacklisting the provided refresh token.
+
+    Accepts POST requests with the following data:
+    - refresh: string (refresh token)
+
+    Returns a JSON response with the following data on success:
+    - message: string ("Successfully logged out")
+
+    Returns HTTP 200 status code on successful logout,
+    HTTP 400 for missing or invalid refresh token,
+    or HTTP 500 for any other server error.
+    """
+
+    def post(self, request):
+        start = time.time()
+        refresh_token = request.data.get("refresh")
+
+        # Validate input
+        if not refresh_token:
+            logger.info(f"UserLogoutAPIView.post took {time.time() - start} seconds")
+            return Response(
+                {"error": "Please provide a refresh token"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # Blacklist the refresh token
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+
+            logger.info(f"UserLogoutAPIView.post took {time.time() - start} seconds")
+            return Response(
+                {"message": "Successfully logged out"},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error(f"An error occurred in UserLogoutAPIView.post: {str(e)}")
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
