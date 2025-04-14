@@ -1,4 +1,6 @@
 # Create your views here.
+import time
+
 from django.db.models import Q
 from loguru import logger
 from rest_framework import status
@@ -34,9 +36,11 @@ class UserCreateAPIView(APIView):
 
         Returns HTTP 201 status code on success, or HTTP 400 status code on failure.
         """
+        start = time.time()
         serializer = UserCreateSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
+            logger.info(f"UserCreateAPIView.post took {time.time() - start} seconds")
             return Response(
                 {
                     "message": "User created successfully",
@@ -45,6 +49,7 @@ class UserCreateAPIView(APIView):
                 },
                 status=status.HTTP_201_CREATED,
             )
+        logger.info(f"UserCreateAPIView.post took {time.time() - start} seconds")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -68,52 +73,47 @@ class UserLoginAPIView(APIView):
         HTTP 404 if the user does not exist,
         or HTTP 500 for any other server error.
         """
-
+        start = time.time()
         username = request.data.get("username")
         password = request.data.get("password")
 
         # Validate input
         if not username or not password:
+            logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
             return Response(
                 {"error": "Please provide both username and password"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-            # Get the user
             user = User.objects.filter(Q(username=username) | Q(email=username)).first()
 
             if user is None:
                 return Response(
                     {"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND
                 )
-            # Check password
-            if user.check_password(password):
-                # Generate JWT tokens
-                refresh = RefreshToken.for_user(user)
 
-                return Response(
-                    {
-                        "refresh": str(refresh),
-                        "access": str(refresh.access_token),
-                    },
-                    status=status.HTTP_200_OK,
-                )
-            else:
+            if not user.check_password(password):
+                logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
                 return Response(
                     {"error": "Invalid password"}, status=status.HTTP_401_UNAUTHORIZED
                 )
 
-        except User.DoesNotExist:
+            refresh = RefreshToken.for_user(user)
+            logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
             return Response(
-                {"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND
+                {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                },
+                status=status.HTTP_200_OK,
             )
 
         except Exception as e:
             logger.error(f"An error occurred UserLoginAPIView.post: {str(e)}")
             return Response(
                 {"error": f"An error occurred: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
 
@@ -131,23 +131,21 @@ class UserDetailsAPIView(APIView):
 
         Returns HTTP 200 status code on success, or HTTP 500 for any other server error.
         """
+        start = time.time()
         try:
-            # The user is already authenticated via JWT
             user = request.user
-
-            # Serialize the user data
             serializer = UserDetailSerializer(user)
-
+            logger.info(f"UserDetailsAPIView.get took {time.time() - start} seconds")
             return Response(
                 {
-                    "message": "User details retrieved successfully",
                     "user": serializer.data,
                 },
                 status=status.HTTP_200_OK,
             )
 
         except Exception as e:
+            logger.error(f"An error occurred UserDetailsAPIView.get: {str(e)}")
             return Response(
                 {"error": f"An error occurred: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
