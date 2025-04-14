@@ -55,10 +55,10 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.name
 
     def set_password(self, raw_password):
-        self.hashed_password = PasswordCreation.make_password(raw_password)
+        self.hashed_password = PasswordCreation._make_password(raw_password)
 
     def check_password(self, raw_password):
-        return PasswordCreation.check_password(raw_password, self.hashed_password)
+        return PasswordCreation._check_password(raw_password, self.hashed_password)
 
 
 class UserPermissionChoices(models.IntegerChoices):
