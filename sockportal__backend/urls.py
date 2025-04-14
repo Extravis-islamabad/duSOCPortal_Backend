@@ -22,4 +22,5 @@ urlpatterns = [
     path("auth/", include("authentication.urls")),
     path("tenant/", include("tenant.urls")),
     path("admin/", include("tenantadmin.urls")),
+    path("integration/", include("integration.urls")),
 ]

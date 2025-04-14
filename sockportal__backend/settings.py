@@ -46,7 +46,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
 ]
 
-INSTALLED_APPS += ["authentication", "tenant", "tenantadmin"]
+INSTALLED_APPS += ["authentication", "tenant", "tenantadmin", "integration"]
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
