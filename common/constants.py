@@ -33,3 +33,14 @@ class DjangoConstants:
     if SECRET_KEY is None:
         logger.warning("Secret key is not set...")
         raise ValueError("Secret key is not set...")
+
+
+class AllowedOriginsConstants:
+    LOCAL_URL = os.getenv("LOCAL_URL", None)
+    if LOCAL_URL is None:
+        logger.warning("Allowed origins are not set...")
+        raise ValueError("Allowed origins are not set...")
+
+    ALLOWED_ORIGINS = [
+        LOCAL_URL,
+    ]

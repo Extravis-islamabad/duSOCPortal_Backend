@@ -13,7 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from datetime import timedelta
 from pathlib import Path
 
-from common.constants import DatabaseConstants, DjangoConstants
+from common.constants import AllowedOriginsConstants, DatabaseConstants, DjangoConstants
 
 # load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -62,8 +62,9 @@ MIDDLEWARE = [
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
+    AllowedOriginsConstants.LOCAL_URL,
 ]
+
 ROOT_URLCONF = "sockportal__backend.urls"
 
 TEMPLATES = [
