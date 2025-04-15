@@ -29,14 +29,15 @@ class TenantCreateAPIView(APIView):
             try:
                 tenant = serializer.save()
                 logger.success(
-                    f"Tenant created: {tenant.name or 'Unnamed Tenant'} (ID: {tenant.id})"
+                    f"Tenant created: {tenant.tenant.username} (ID: {tenant.id})"
                 )
                 return Response(
                     {
                         "message": "Tenant created successfully",
                         "tenant_id": tenant.id,
-                        "name": tenant.name,
-                        "created_by": tenant.created_by.username,
+                        "name": tenant.tenant.username,
+                        "email": tenant.tenant.email,
+                        "created_by": tenant.created_by.id,
                     },
                     status=status.HTTP_201_CREATED,
                 )
@@ -60,7 +61,6 @@ class TenantUpdateAPIView(APIView):
             f"Tenant update request by user: {request.user.username} for tenant_id: {tenant_id}"
         )
         try:
-            # Only allow the creator to update their tenant
             tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
         except Tenant.DoesNotExist:
             logger.warning(
@@ -79,14 +79,13 @@ class TenantUpdateAPIView(APIView):
             try:
                 updated_tenant = serializer.save()
                 logger.success(
-                    f"Tenant updated: {updated_tenant.name or 'Unnamed Tenant'} (ID: {updated_tenant.id})"
+                    f"Tenant updated: {updated_tenant.tenant.username} (ID: {updated_tenant.id})"
                 )
+                # Use TenantDetailSerializer for full details
+                detail_serializer = TenantDetailSerializer(updated_tenant)
                 return Response(
                     {
-                        "message": "Tenant updated successfully",
-                        "tenant_id": updated_tenant.id,
-                        "name": updated_tenant.name,
-                        "email": updated_tenant.email,
+                        "tenant": detail_serializer.data,
                     },
                     status=status.HTTP_200_OK,
                 )
@@ -123,7 +122,7 @@ class TenantDetailAPIView(APIView):
 
         serializer = TenantDetailSerializer(tenant)
         logger.success(
-            f"Tenant details retrieved: {tenant.name or 'Unnamed Tenant'} (ID: {tenant.id})"
+            f"Tenant details retrieved: {tenant.tenant.username} (ID: {tenant.id})"
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -178,9 +177,9 @@ class TenantDeleteAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        tenant_name = tenant.name or "Unnamed Tenant"
+        tenant_username = tenant.tenant.username if tenant.tenant else "Unnamed Tenant"
         tenant.delete()
-        logger.success(f"Tenant deleted: {tenant_name} (ID: {tenant_id})")
+        logger.success(f"Tenant deleted: {tenant_username} (ID: {tenant_id})")
         return Response(
             {"message": "Tenant deleted successfully."}, status=status.HTTP_200_OK
         )

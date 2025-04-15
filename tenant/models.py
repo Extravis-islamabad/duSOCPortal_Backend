@@ -1,33 +1,22 @@
 from django.db import models
 
 from authentication.models import User
-from common.utils import PasswordCreation
-
-# Create your models here.
 
 
 # Tenant Model
 class Tenant(models.Model):
+    tenant = models.OneToOneField(
+        User, on_delete=models.SET_NULL, null=True, related_name="tenant_profile"
+    )
     created_by = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="created_tenants"
     )
-    name = models.CharField(
-        max_length=255, default=None, null=True, blank=True, unique=True
-    )
-    password = models.CharField(max_length=255, null=True, blank=True)
-    email = models.EmailField(null=True, blank=True, unique=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.name
-
-    def set_password(self, raw_password):
-        self.hashed_password = PasswordCreation._make_password(raw_password)
-
-    def check_password(self, raw_password):
-        return PasswordCreation._check_password(raw_password, self.hashed_password)
+        return self.tenant.username if self.tenant else "Unnamed Tenant"
 
 
 class TenantPermissionChoices(models.IntegerChoices):
@@ -50,11 +39,13 @@ class TenantRole(models.Model):
     )
 
     def __str__(self):
-        return f"{self.name} ({self.tenant.name or 'Unnamed Tenant'})"
+        return f"{self.name} ({self.tenant.tenant.username if self.tenant.tenant else 'Unnamed Tenant'})"
 
 
 class TenantRolePermissions(models.Model):
-    role = models.ForeignKey(TenantRole, on_delete=models.CASCADE)
+    role = models.ForeignKey(
+        TenantRole, on_delete=models.CASCADE, related_name="role_permissions"
+    )
     permission = models.IntegerField(choices=TenantPermissionChoices.choices)
     permission_text = models.CharField(max_length=100, editable=False)
 

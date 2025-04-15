@@ -22,12 +22,12 @@ class CustomUserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, username, password=None, **extra_fields):
-        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_tenant", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_admin", True)
 
-        if extra_fields.get("is_staff") is not True:
-            raise ValueError("Superuser must have is_staff=True.")
+        if extra_fields.get("is_tenant") is not True:
+            raise ValueError("Superuser must have is_tenant=True.")
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
 
@@ -41,7 +41,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     hashed_password = models.CharField(max_length=255)
     is_super_admin = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
-    is_staff = models.BooleanField(default=False)  # Needed for admin access
+    is_tenant = models.BooleanField(default=False)  # Needed for admin access
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
