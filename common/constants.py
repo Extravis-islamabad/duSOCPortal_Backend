@@ -42,8 +42,8 @@ class AllowedOriginsConstants:
     if LOCAL_URL is None or DEV_URL is None:
         logger.warning("Allowed origins are not set...")
         raise ValueError("Allowed origins are not set...")
-
-    ALLOWED_ORIGINS = [LOCAL_URL, DEV_URL]
+    ALLOWED_ORIGINS = [LOCAL_URL, DEV_URL, "http://localhost:3000"]
+    print(ALLOWED_ORIGINS)
 
 
 class AllowedHostsConstants:
