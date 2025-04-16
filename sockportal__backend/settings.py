@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from datetime import timedelta
 from pathlib import Path
 
+from corsheaders.defaults import default_headers
+
 from common.constants import AllowedOriginsConstants, DatabaseConstants, DjangoConstants
 
 # load_dotenv()
@@ -62,6 +64,10 @@ MIDDLEWARE = [
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = AllowedOriginsConstants.ALLOWED_ORIGINS
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "access-control-allow-origin",
+]
+
 
 ROOT_URLCONF = "sockportal__backend.urls"
 
