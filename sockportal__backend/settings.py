@@ -13,12 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from datetime import timedelta
 from pathlib import Path
 
-from common.constants import (
-    AllowedHostsConstants,
-    AllowedOriginsConstants,
-    DatabaseConstants,
-    DjangoConstants,
-)
+from common.constants import AllowedOriginsConstants, DatabaseConstants, DjangoConstants
 
 # load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -34,7 +29,7 @@ SECRET_KEY = DjangoConstants.SECRET_KEY
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = AllowedHostsConstants.ALLOWED_HOSTS
+ALLOWED_HOSTS = ["*"]  # AllowedHostsConstants.ALLOWED_HOSTS
 
 
 # Application definition
