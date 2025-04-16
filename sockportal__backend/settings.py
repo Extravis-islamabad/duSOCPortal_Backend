@@ -61,9 +61,7 @@ MIDDLEWARE = [
 
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    AllowedOriginsConstants.LOCAL_URL,
-]
+CORS_ALLOWED_ORIGINS = AllowedOriginsConstants.ALLOWED_ORIGINS
 
 ROOT_URLCONF = "sockportal__backend.urls"
 
