@@ -192,6 +192,6 @@ class UserLogoutAPIView(APIView):
         except Exception as e:
             logger.error(f"An error occurred in UserLogoutAPIView.post: {str(e)}")
             return Response(
-                {"error": f"An error occurred: {str(e)}"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                {"message": "Successfully logged out"},
+                status=status.HTTP_200_OK,
             )
