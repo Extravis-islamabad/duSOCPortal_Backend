@@ -1,0 +1,50 @@
+version: '3.9'
+
+services:
+  backend:
+    container_name: duSOC_Backend_Container
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      sh -c "
+        python manage.py migrate &&
+        python manage.py runserver  0.0.0.0:8000
+      "
+    ports:
+      - "8001:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - .:/app  # Optional: for live sync with host
+
+  db:
+    container_name: duSOC_Postgres_Container
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+      timeout: 5s
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
