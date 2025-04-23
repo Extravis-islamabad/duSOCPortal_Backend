@@ -5,6 +5,7 @@ from .models import User
 
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
+    is_admin = serializers.BooleanField(default=True)
 
     class Meta:
         model = User
