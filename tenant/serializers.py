@@ -55,6 +55,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         user_data = {
             "username": validated_data.pop("username"),
             "email": validated_data.pop("email"),
+            "is_tenant": True,
         }
         raw_password = validated_data.pop("password")
         phone_number = validated_data.pop("phone_number", None)
