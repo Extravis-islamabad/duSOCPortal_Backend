@@ -27,7 +27,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
             "username",
             "email",
             "name",
-            "is_super_admin",
+            "is_tenant",
             "is_admin",
             "created_at",
             "updated_at",
