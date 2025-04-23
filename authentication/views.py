@@ -2,6 +2,7 @@
 import time
 
 from django.db.models import Q
+from django.utils import timezone
 from loguru import logger
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -99,6 +100,8 @@ class UserLoginAPIView(APIView):
                     {"error": "Invalid password"}, status=status.HTTP_401_UNAUTHORIZED
                 )
 
+            user.last_login = timezone.now()
+            user.save(update_fields=["last_login"])
             refresh = RefreshToken.for_user(user)
             logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
             return Response(
