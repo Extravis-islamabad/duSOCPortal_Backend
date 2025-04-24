@@ -32,7 +32,7 @@ class TenantRole(models.Model):
     name = models.CharField(max_length=100)
 
     class TenantRoleChoices(models.IntegerChoices):
-        TENANT_ADMIN = 1, "Super Admin"
+        TENANT_ADMIN = 1, "Tenant"
 
     role_type = models.IntegerField(
         choices=TenantRoleChoices.choices, default=TenantRoleChoices.TENANT_ADMIN
