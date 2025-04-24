@@ -169,13 +169,11 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             return []
 
 
-# Serializer for tenant permissions
 class TenantPermissionSerializer(serializers.Serializer):
-    permission_id = serializers.IntegerField(source="permission")
-    permission_text = serializers.CharField()
+    id = serializers.IntegerField(source="permission")
+    text = serializers.CharField()
 
 
-# Serializer for tenant roles and their permissions
 class TenantRoleSerializer(serializers.Serializer):
     role_name = serializers.CharField(source="name")
     role_type = serializers.CharField(source="get_role_type_display")
