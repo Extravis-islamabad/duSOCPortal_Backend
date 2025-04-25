@@ -1,28 +1,6 @@
 version: '3.9'
 
 services:
-  backend:
-    container_name: duSOC_Backend_Container
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: >
-      sh -c "
-        python manage.py migrate &&
-        python manage.py runserver  0.0.0.0:8000
-      "
-    ports:
-      - "8001:8000"
-    env_file:
-      - .env
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    volumes:
-      - .:/app  # Optional: for live sync with host
-
   db:
     container_name: duSOC_Postgres_Container
     image: postgres:16
@@ -42,7 +20,6 @@ services:
       timeout: 5s
 
   redis:
-    container_name: duSOC_Redis_Container
     image: redis:7-alpine
     ports:
       - "6379:6379"
@@ -55,7 +32,6 @@ services:
       retries: 5
 
   rabbitmq:
-    container_name: duSOC_RabbitMQ_Container
     image: rabbitmq:3.13-management-alpine
     ports:
       - "5672:5672"  # AMQP port
@@ -72,6 +48,6 @@ services:
       retries: 5
 
 volumes:
-  postgres_data:
   redis_data:
   rabbitmq_data:
+  postgres_data:
