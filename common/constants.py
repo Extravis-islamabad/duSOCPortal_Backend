@@ -64,10 +64,7 @@ class AllowedHostsConstants:
 
 
 class RedisConstants:
-    if EnvironmentConstants.ENVIRONMENT == "DEV":
-        REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-    else:
-        REDIS_HOST = os.getenv("REDIS_HOST", None)
+    REDIS_HOST = os.getenv("REDIS_HOST", None)
     REDIS_PORT = os.getenv("REDIS_PORT", None)
 
     if REDIS_HOST is None or REDIS_PORT is None:
