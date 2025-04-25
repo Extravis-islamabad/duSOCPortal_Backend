@@ -6,6 +6,13 @@ from loguru import logger
 load_dotenv()
 
 
+class EnvironmentConstants:
+    ENVIRONMENT = os.getenv("ENVIRONMENT", None)
+    if ENVIRONMENT is None:
+        logger.warning("Environment is not set...")
+        raise ValueError("Environment is not set...")
+
+
 class DatabaseConstants:
     DATABASE_NAME = os.getenv("DB_NAME", None)
     DATABASE_USER = os.getenv("DB_USER", None)
@@ -54,3 +61,15 @@ class AllowedHostsConstants:
         raise ValueError("Allowed hosts are not set...")
 
     ALLOWED_HOSTS = [LOCAL_HOST, DEV_HOST]
+
+
+class RedisConstants:
+    if EnvironmentConstants.ENVIRONMENT == "DEV":
+        REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+    else:
+        REDIS_HOST = os.getenv("REDIS_HOST", None)
+    REDIS_PORT = os.getenv("REDIS_PORT", None)
+
+    if REDIS_HOST is None or REDIS_PORT is None:
+        logger.warning("Redis credentials are not set...")
+        raise ValueError("Redis credentials are not set...")
