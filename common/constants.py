@@ -82,12 +82,11 @@ class RedisConstants:
 
 
 class RabbitmqConstants:
-    RABBIT_HOST = os.getenv("RABBIT_HOST", None)
-    RABBIT_PORT = os.getenv("RABBIT_PORT", None)
-
-    if RABBIT_HOST is None or RABBIT_PORT is None:
-        logger.warning("Rabbit MQ credentials are not set...")
-        raise ValueError("Rabbit MQ credentials are not set...")
+    RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", None)
+    RABBITMQ_AMQP_PORT = os.getenv("RABBITMQ_AMQP_PORT", None)
+    RABBITMQ_MUI_PORT = os.getenv("RABBITMQ_MUI_PORT", None)
+    RABBITMQ_DEFAULT_USER = os.getenv("RABBITMQ_DEFAULT_USER", None)
+    RABBITMQ_DEFAULT_PASS = os.getenv("RABBITMQ_DEFAULT_PASS", None)
 
 
 class IBMQradarConstants:

@@ -19,6 +19,7 @@ from common.constants import (
     AllowedOriginsConstants,
     DatabaseConstants,
     DjangoConstants,
+    RabbitmqConstants,
     RedisConstants,
 )
 
@@ -182,8 +183,12 @@ SIMPLE_JWT = {
 
 AUTH_USER_MODEL = "authentication.User"
 
-
-CELERY_BROKER_URL = f"redis://{RedisConstants.REDIS_HOST}:{RedisConstants.REDIS_PORT}/0"  # Use Redis as the message broker
+CELERY_BROKER_URL = (
+    f"amqp://{RabbitmqConstants.RABBITMQ_DEFAULT_USER}:"
+    f"{RabbitmqConstants.RABBITMQ_DEFAULT_PASS}@"
+    f"{RabbitmqConstants.RABBITMQ_HOST}:"
+    f"{RabbitmqConstants.RABBITMQ_AMQP_PORT}//"
+)
 CELERY_RESULT_BACKEND = f"redis://{RedisConstants.REDIS_HOST}:{RedisConstants.REDIS_PORT}/0"  # Store task results
 CELERY_ACCEPT_CONTENT = ["json"]  # Allow JSON serialization
 CELERY_TASK_SERIALIZER = "json"

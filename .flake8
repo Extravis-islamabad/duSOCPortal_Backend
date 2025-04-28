@@ -2,6 +2,7 @@
 extend-ignore =
     E501, # E501 line too long (87 > 79 characters)
     E203, # E203 whitespace before ':'
+    E231, # E231 missing whitespace after ':'
     E402, # E402 module level import not at top of file
     B105, # B105 hardcoded password string
     B608, # B608 hardcoded_sql_expressions
