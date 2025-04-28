@@ -35,6 +35,17 @@ class DjangoConstants:
         raise ValueError("Secret key is not set...")
 
 
+class EnvConstants:
+    ENV = os.getenv("ENV", None)
+
+
+class SSLConstants:
+    if EnvConstants.ENV:
+        VERIFY = True
+    else:
+        VERIFY = False
+
+
 class AllowedOriginsConstants:
     LOCAL_URL = os.getenv("LOCAL_URL", None)
     DEV_URL = os.getenv("DEV_URL", None)
@@ -70,12 +81,18 @@ class RedisConstants:
         raise ValueError("Redis credentials are not set...")
 
 
-# class IBMQradarConstants:
-#     IBM_QRADAR_USERNAME = os.getenv("IBM_QRADAR_USERNAME", None)
-#     IBM_QRADAR_PASSWORD = os.getenv("IBM_QRADAR_PASSWORD", None)
-#     IBM_TENANT_ENDPOINT = (
-#         "https://10.100.70.21/api/config/access/tenant_management/tenants"
-#     )
-#     if IBM_QRADAR_USERNAME is None or IBM_QRADAR_PASSWORD is None:
-#         logger.warning("IBM QRadar credentials are not set...")
-#         raise ValueError("IBM QRadar credentials are not set...")
+class IBMQradarConstants:
+    IBM_QRADAR_USERNAME = os.getenv("IBM_QRADAR_USERNAME", None)
+    IBM_QRADAR_PASSWORD = os.getenv("IBM_QRADAR_PASSWORD", None)
+    IBM_BASE_URL = os.getenv("IBM_BASE_URL", None)
+    IBM_TENANT_ENDPOINT = f"{IBM_BASE_URL}/api/config/access/tenant_management/tenants"
+    IBM_DOMAIN_ENDPOINT = f"{IBM_BASE_URL}/api/config/domain_management/domains"
+    IBM_EVENT_COLLECTOR_ENDPOINT = (
+        f"{IBM_BASE_URL}/api/config/event_sources/event_collectors"
+    )
+    IBM_EVENT_LOGS_ENDPOINT = (
+        f"{IBM_BASE_URL}/api/config/event_sources/log_source_management/log_sources"
+    )
+    if IBM_QRADAR_USERNAME is None or IBM_QRADAR_PASSWORD is None:
+        logger.warning("IBM QRadar credentials are not set...")
+        raise ValueError("IBM QRadar credentials are not set...")
