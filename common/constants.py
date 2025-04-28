@@ -42,7 +42,12 @@ class AllowedOriginsConstants:
     if LOCAL_URL is None or DEV_URL is None:
         logger.warning("Allowed origins are not set...")
         raise ValueError("Allowed origins are not set...")
-    ALLOWED_ORIGINS = [LOCAL_URL, DEV_URL, "http://localhost:3000"]
+    ALLOWED_ORIGINS = [
+        LOCAL_URL,
+        DEV_URL,
+        "http://192.168.10.26",
+        "http://localhost:3000",
+    ]
 
 
 class AllowedHostsConstants:
@@ -63,3 +68,14 @@ class RedisConstants:
     if REDIS_HOST is None or REDIS_PORT is None:
         logger.warning("Redis credentials are not set...")
         raise ValueError("Redis credentials are not set...")
+
+
+# class IBMQradarConstants:
+#     IBM_QRADAR_USERNAME = os.getenv("IBM_QRADAR_USERNAME", None)
+#     IBM_QRADAR_PASSWORD = os.getenv("IBM_QRADAR_PASSWORD", None)
+#     IBM_TENANT_ENDPOINT = (
+#         "https://10.100.70.21/api/config/access/tenant_management/tenants"
+#     )
+#     if IBM_QRADAR_USERNAME is None or IBM_QRADAR_PASSWORD is None:
+#         logger.warning("IBM QRadar credentials are not set...")
+#         raise ValueError("IBM QRadar credentials are not set...")
