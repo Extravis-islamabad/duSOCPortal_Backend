@@ -81,6 +81,15 @@ class RedisConstants:
         raise ValueError("Redis credentials are not set...")
 
 
+class RabbitmqConstants:
+    RABBIT_HOST = os.getenv("RABBIT_HOST", None)
+    RABBIT_PORT = os.getenv("RABBIT_PORT", None)
+
+    if RABBIT_HOST is None or RABBIT_PORT is None:
+        logger.warning("Rabbit MQ credentials are not set...")
+        raise ValueError("Rabbit MQ credentials are not set...")
+
+
 class IBMQradarConstants:
     IBM_QRADAR_USERNAME = os.getenv("IBM_QRADAR_USERNAME", None)
     IBM_QRADAR_PASSWORD = os.getenv("IBM_QRADAR_PASSWORD", None)
