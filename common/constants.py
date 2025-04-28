@@ -88,6 +88,16 @@ class RabbitmqConstants:
     RABBITMQ_DEFAULT_USER = os.getenv("RABBITMQ_DEFAULT_USER", None)
     RABBITMQ_DEFAULT_PASS = os.getenv("RABBITMQ_DEFAULT_PASS", None)
 
+    if (
+        RABBITMQ_HOST is None
+        or RABBITMQ_AMQP_PORT is None
+        or RABBITMQ_MUI_PORT is None
+        or RABBITMQ_DEFAULT_USER is None
+        or RABBITMQ_DEFAULT_PASS is None
+    ):
+        logger.warning("Rabbitmq credentials are not set...")
+        raise ValueError("Rabbitmq credentials are not set...")
+
 
 class IBMQradarConstants:
     IBM_QRADAR_USERNAME = os.getenv("IBM_QRADAR_USERNAME", None)
