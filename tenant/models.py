@@ -38,6 +38,9 @@ class TenantRole(models.Model):
         choices=TenantRoleChoices.choices, default=TenantRoleChoices.TENANT_ADMIN
     )
 
+    class Meta:
+        indexes = [models.Index(fields=["tenant"])]
+
     def __str__(self):
         return f"{self.name} ({self.tenant.tenant.username if self.tenant.tenant else 'Unnamed Tenant'})"
 

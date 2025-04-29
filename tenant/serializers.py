@@ -169,12 +169,18 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             return []
 
 
-class TenantPermissionSerializer(serializers.Serializer):
+class TenantPermissionSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source="permission")
-    text = serializers.CharField()
+    text = serializers.CharField(source="permission_text")
+
+    class Meta:
+        model = TenantRolePermissions
+        fields = ["id", "text"]
 
 
-class TenantRoleSerializer(serializers.Serializer):
-    role_name = serializers.CharField(source="name")
-    role_type = serializers.CharField(source="get_role_type_display")
-    permissions = TenantPermissionSerializer(many=True, source="role_permissions")
+class TenantRoleSerializer(serializers.ModelSerializer):
+    role_permissions = TenantPermissionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = TenantRole
+        fields = ["id", "name", "role_type", "role_permissions"]
