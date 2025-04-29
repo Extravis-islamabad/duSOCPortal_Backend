@@ -2,18 +2,18 @@ import time
 
 from loguru import logger
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from authentication.permissions import IsAdminUser, IsTenant
 from tenant.models import Tenant, TenantPermissionChoices, TenantRole
 from tenant.serializers import TenantRoleSerializer
 
 
 class PermissionChoicesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     def get(self, request):
         """
@@ -47,7 +47,7 @@ class PermissionChoicesAPIView(APIView):
 
 class TenantAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsTenant]
 
     def get(self, request, tenant_id=None):
         start = time.time()
@@ -55,20 +55,6 @@ class TenantAPIView(APIView):
             # Get the authenticated user
             user = request.user
             tenant = Tenant.objects.get(tenant=user)
-
-            # Authorization check: only super admins, admins, or the tenant's user can access
-            if not (user.is_super_admin or user.is_admin or tenant.tenant == user):
-                logger.warning(
-                    f"Unauthorized access attempt by user {user.id} for tenant {tenant.id}"
-                )
-                return Response(
-                    {
-                        "error": "You are not authorized to view this tenant's permissions"
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-            # Fetch roles and permissions for the tenant
             roles = TenantRole.objects.filter(tenant=tenant).prefetch_related(
                 "role_permissions"
             )
