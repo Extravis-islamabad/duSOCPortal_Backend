@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "channels",
 ]
 
 INSTALLED_APPS += ["authentication", "tenant", "tenantadmin", "integration"]
@@ -93,7 +94,9 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "sockportal__backend.wsgi.application"
+# WSGI_APPLICATION = "sockportal__backend.wsgi.application"
+
+ASGI_APPLICATION = "sockportal__backend.asgi.application"
 
 
 # Database
@@ -194,3 +197,12 @@ CELERY_ACCEPT_CONTENT = ["json"]  # Allow JSON serialization
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"  # Set timezone (match Django's TIME_ZONE if needed)
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(RedisConstants.REDIS_HOST, RedisConstants.REDIS_PORT)],
+        },
+    },
+}
