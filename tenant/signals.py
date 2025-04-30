@@ -38,7 +38,9 @@ def tenant_created(sender, instance, created, **kwargs):
             AdminWebsocketConstants.SYSTEM_METRICS_GROUP_NAME,
             {
                 "type": "tenant_count_update",
-                "message": json.dumps({"tenant_count": tenant_count}),
+                "message": json.dumps(
+                    {"action": "updated_tenant_count", "tenant_count": tenant_count}
+                ),
             },
         )
 

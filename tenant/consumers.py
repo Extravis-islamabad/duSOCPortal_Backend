@@ -53,6 +53,7 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
         await self.send(
             text_data=json.dumps(
                 {
+                    "action": "send_data",
                     "tenant_count": tenant_count,
                     "cpu_usage": psutil.cpu_percent(interval=1),
                     "memory_usage": psutil.virtual_memory().percent,
@@ -117,6 +118,7 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
                 await self.send(
                     text_data=json.dumps(
                         {
+                            "action": "send_data",
                             "tenant_count": tenant_count,
                             "cpu_usage": cpu_usage,
                             "memory_usage": memory_usage,
