@@ -94,9 +94,9 @@ TEMPLATES = [
     },
 ]
 
-# WSGI_APPLICATION = "sockportal__backend.wsgi.application"
+WSGI_APPLICATION = "sockportal__backend.wsgi.application"
 
-ASGI_APPLICATION = "sockportal__backend.asgi.application"
+# ASGI_APPLICATION = "sockportal__backend.asgi.application"
 
 
 # Database
