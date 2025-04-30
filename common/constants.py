@@ -114,3 +114,7 @@ class IBMQradarConstants:
     if IBM_QRADAR_USERNAME is None or IBM_QRADAR_PASSWORD is None:
         logger.warning("IBM QRadar credentials are not set...")
         raise ValueError("IBM QRadar credentials are not set...")
+
+
+class AdminWebsocketConstants:
+    SYSTEM_METRICS_GROUP_NAME = "system_metrics_group"
