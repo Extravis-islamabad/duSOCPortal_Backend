@@ -14,6 +14,10 @@ RUN apt-get update && apt-get install -y \
 # Copy the requirements.txt into the container
 COPY requirements.txt /app/
 
+# Install django-redis manually (if it's not in requirements.txt)
+RUN pip install django-redis==5.0.0  # Install the desired version of django-redis
+
+
 # Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 # Copy the entire project into the container
