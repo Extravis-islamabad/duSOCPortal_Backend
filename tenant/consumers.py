@@ -30,6 +30,11 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
                     "tenant_count": tenant_count,
                     "cpu_usage": psutil.cpu_percent(interval=1),
                     "memory_usage": psutil.virtual_memory().percent,
+                    "active_chats": 0,
+                    "pending_resolutions": 0,
+                    "total_interactions": 0,
+                    "active_integrations": 0,
+                    "instance_alarm": 0,
                 }
             )
         )
@@ -72,6 +77,11 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
                             "tenant_count": tenant_count,
                             "cpu_usage": cpu_usage,
                             "memory_usage": memory_usage,
+                            "active_chats": 0,
+                            "pending_resolutions": 0,
+                            "total_interactions": 0,
+                            "active_integrations": 0,
+                            "instance_alarm": 0,
                         }
                     )
                 )
