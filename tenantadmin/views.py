@@ -2,11 +2,11 @@
 
 from loguru import logger
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from authentication.permissions import IsAdminUser
 from tenant.models import Tenant
 from tenant.serializers import (
     TenantCreateSerializer,
@@ -17,7 +17,7 @@ from tenant.serializers import (
 
 class TenantCreateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     def post(self, request):
         logger.info(f"Tenant creation request by user: {request.user.username}")
@@ -54,7 +54,7 @@ class TenantCreateAPIView(APIView):
 
 class TenantUpdateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     def patch(self, request, tenant_id):
         logger.info(
@@ -102,7 +102,7 @@ class TenantUpdateAPIView(APIView):
 
 class TenantDetailAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     def get(self, request, tenant_id):
         logger.info(
@@ -129,7 +129,7 @@ class TenantDetailAPIView(APIView):
 
 class AllTenantsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     def get(self, request):
         logger.info(f"All tenants request by user: {request.user.username}")
@@ -157,7 +157,7 @@ class AllTenantsAPIView(APIView):
 
 class TenantDeleteAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     def delete(self, request, tenant_id):
         logger.info(
