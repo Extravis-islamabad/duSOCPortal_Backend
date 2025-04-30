@@ -5,6 +5,7 @@ import psutil
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.core.cache import cache
+from loguru import logger
 from rest_framework_simplejwt.tokens import AccessToken
 
 from authentication.models import User
@@ -92,7 +93,9 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"Error in send_system_metrics: {str(e)}")
+                logger.error(
+                    f"Error from Admin websocekt sending system metrics: {str(e)}"
+                )
                 await asyncio.sleep(5)
 
     async def tenant_count_update(self, event):
