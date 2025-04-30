@@ -41,3 +41,5 @@ def tenant_created(sender, instance, created, **kwargs):
                 "message": json.dumps({"tenant_count": tenant_count}),
             },
         )
+
+    logger.info("signals.py.tenant_created finished")

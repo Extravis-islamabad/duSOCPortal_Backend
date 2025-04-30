@@ -13,9 +13,31 @@ from common.constants import AdminWebsocketConstants
 
 
 class SystemMetricsConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
-        token = self.get_token_from_headers()
+    def get_query_params(self):
+        """
+        Returns a dictionary of query parameters from the scope's query_string.
+        For example, if the query string is "foo=bar&baz=qux", this method will
+        return {"foo": "bar", "baz": "qux"}.
+        """
+        query_string = self.scope["query_string"].decode()
+        params = dict(
+            param.split("=") for param in query_string.split("&") if "=" in param
+        )
+        return params
 
+    async def connect(self):
+        """
+        Handles the initial connection of a websocket client.
+
+        This method authenticates the user using a JWT token extracted from the headers.
+        If the user is not authenticated or not an admin, the connection is closed.
+        Otherwise, the user is added to the system metrics group and the connection is accepted.
+        Initial system metrics, including tenant count and resource usage, are sent to the client.
+        A periodic task is started to send ongoing system metrics updates.
+        """
+
+        params = self.get_query_params()
+        token = params.get("token")
         self.user = await self.get_user_from_token(token)
         if not self.user or not self.user.is_admin:
             await self.close()
@@ -46,20 +68,20 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
         # Start periodic system metrics updates
         self.task = asyncio.create_task(self.send_system_metrics())
 
-    def get_token_from_headers(self):
+    async def disconnect(self, close_code):
         """
-        Extracts the JWT token from the HTTP headers.
+        Handles the WebSocket DISCONNECT event.
+
+        When the WebSocket connection is closed, this function is called. It
+        removes the channel from the 'system_metrics_group' and cancels any
+        ongoing tasks that were started to send system metrics updates.
+
+        Args:
+            close_code (int): The WebSocket close code.
 
         Returns:
-            str: The JWT token, or None if it's not present in the headers.
+            None
         """
-        headers = dict(self.scope["headers"])
-        auth_header = headers.get(b"authorization", b"").decode()
-        if auth_header.startswith("JWT "):
-            return auth_header.split("JWT ")[1]
-        return None
-
-    async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             "system_metrics_group", self.channel_name
         )
@@ -67,6 +89,23 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
             self.task.cancel()
 
     async def send_system_metrics(self):
+        """
+        Periodically sends system metrics to the WebSocket client.
+
+        This function is called once when the WebSocket connection is established
+        and runs indefinitely until the connection is closed. It fetches the CPU
+        and memory usage, the tenant count from the cache, and sends these metrics
+        to the client as a JSON object.
+
+        If any errors occur while sending the metrics, the error is logged and the
+        function waits 5 seconds before trying again.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
         while True:
             try:
                 # Fetch CPU and memory usage
@@ -99,11 +138,32 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
                 await asyncio.sleep(5)
 
     async def tenant_count_update(self, event):
-        # Send updated tenant count to client
+        """
+        Handles the "tenant_count_update" event sent by the system.
+
+        This event is triggered when a new tenant is created or an existing tenant is deleted.
+        It sends the updated tenant count to the WebSocket client.
+
+        Args:
+            event (dict): The event from the channel layer with the updated tenant count.
+
+        Returns:
+            None
+        """
         await self.send(text_data=event["message"])
 
     @database_sync_to_async
     def get_user_from_token(self, token):
+        """
+        Retrieves the User instance associated with the given JWT token.
+
+        Args:
+            token (str): The JWT token.
+
+        Returns:
+            User: The User instance associated with the token, or None if the
+                token is invalid or missing.
+        """
         try:
             if not token:
                 return None
