@@ -8,6 +8,7 @@ from django.core.cache import cache
 from rest_framework_simplejwt.tokens import AccessToken
 
 from authentication.models import User
+from common.constants import AdminWebsocketConstants
 
 
 class SystemMetricsConsumer(AsyncWebsocketConsumer):
@@ -19,7 +20,9 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
-        await self.channel_layer.group_add("system_metrics_group", self.channel_name)
+        await self.channel_layer.group_add(
+            AdminWebsocketConstants.SYSTEM_METRICS_GROUP_NAME, self.channel_name
+        )
         await self.accept()
 
         # Send initial tenant count on connection

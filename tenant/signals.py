@@ -7,6 +7,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from loguru import logger
 
+from common.constants import AdminWebsocketConstants
 from tenant.models import Tenant
 
 
@@ -34,7 +35,7 @@ def tenant_created(sender, instance, created, **kwargs):
         logger.info("signals.py.tenant_created broadcasting tenant_count_update")
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-            "tenant_count_group",
+            AdminWebsocketConstants.SYSTEM_METRICS_GROUP_NAME,
             {
                 "type": "tenant_count_update",
                 "message": json.dumps({"tenant_count": tenant_count}),
