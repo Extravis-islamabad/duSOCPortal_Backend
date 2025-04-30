@@ -1,5 +1,5 @@
 # Use the official Python base image
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # Set the working directory to /app
 WORKDIR /app
@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy the requirements.txt into the container
 COPY requirements.txt /app/
+
 
 # Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
