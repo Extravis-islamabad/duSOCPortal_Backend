@@ -8,7 +8,7 @@ from common.constants import IBMQradarConstants, SSLConstants
 
 
 class IBMQradar:
-    def __init__(self, username, password):
+    def __init__(self):
         """
         Constructor for IBMQRadar class.
 
@@ -16,8 +16,8 @@ class IBMQradar:
         :param password: The password to use when logging into the QRadar.
         :raises ValueError: If either the username or password are not set.
         """
-        self.username = username
-        self.password = password
+        self.username = IBMQradarConstants.IBM_QRADAR_USERNAME
+        self.password = IBMQradarConstants.IBM_QRADAR_PASSWORD
         if not self.username or not self.password:
             logger.error("IBM QRadar both username and password are required")
             raise ValueError("Both username and password are required")
