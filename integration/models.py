@@ -98,3 +98,15 @@ class Integration(models.Model):
         """Ensure clean is called before saving."""
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class DuIbmQradarTenants(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        db_table = "du_ibm_qradar_tenants"
+
+    def __str__(self):
+        return self.name
