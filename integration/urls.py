@@ -1,6 +1,6 @@
 from django.urls import path
 
-from integration.views import GetIBMQradarTenants, IntegrationTypesView
+from integration.views import DuIbmQradarTenantsListView, IntegrationTypesView
 
 urlpatterns = [
     path(
@@ -10,7 +10,7 @@ urlpatterns = [
     ),
     path(
         "get_ibm_qradar_tenants/",
-        GetIBMQradarTenants.as_view(),
+        DuIbmQradarTenantsListView.as_view(),
         name="get-ibm-qradar-tenants",
     ),
 ]
