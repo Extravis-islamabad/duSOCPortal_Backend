@@ -41,7 +41,9 @@ matplotlib-inline==0.1.7
 msgpack==1.1.0
 nest-asyncio==1.6.0
 nodeenv==1.9.1
+numpy==2.2.5
 packaging==25.0
+pandas==2.2.3
 parso==0.8.4
 pexpect==4.9.0
 platformdirs==4.3.7
@@ -56,6 +58,7 @@ Pygments==2.19.1
 PyJWT==2.9.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
+pytz==2025.2
 PyYAML==6.0.2
 pyzmq==26.4.0
 redis==5.2.1
