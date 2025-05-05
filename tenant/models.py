@@ -3,7 +3,18 @@ from django.db import models
 from authentication.models import User
 
 
-# Tenant Model
+class DuIbmQradarTenants(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        db_table = "du_ibm_qradar_tenants"
+
+    def __str__(self):
+        return self.name
+
+
 class Tenant(models.Model):
     tenant = models.OneToOneField(
         User, on_delete=models.SET_NULL, null=True, related_name="tenant_profile"
@@ -12,6 +23,13 @@ class Tenant(models.Model):
         User, on_delete=models.CASCADE, related_name="created_tenants"
     )
     phone_number = models.CharField(max_length=20, null=True, blank=True)
+    qradar_tenant = models.ForeignKey(
+        DuIbmQradarTenants,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tenants",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
