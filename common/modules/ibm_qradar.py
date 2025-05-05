@@ -1,12 +1,10 @@
 import time
 
-import pandas as pd
 import requests
 from loguru import logger
 from requests.auth import HTTPBasicAuth
 
 from common.constants import IBMQradarConstants, SSLConstants
-from integration.models import DuIbmQradarTenants
 
 
 class IBMQradar:
@@ -177,22 +175,22 @@ class IBMQradar:
             logger.error(f"An error occurred in IBMQradar.__get_event_logs(): {str(e)}")
 
 
-if __name__ == "__main__":
-    # TODO: REmove this
-    df = pd.read_json("/home/oman/DUSOC2/duSOCPortal_Backend/data.json")
-    df.rename(columns={"id": "db_id"}, inplace=True)
-    df.dropna(subset=["name"], inplace=True)
-    df = df[df["name"].str.strip() != ""]
-    df = df[["db_id", "name"]]
-    data = df.to_dict(orient="records")
+# if __name__ == "__main__":
+#     # TODO: REmove this
+#     df = pd.read_json("/home/oman/DUSOC2/duSOCPortal_Backend/data.json")
+#     df.rename(columns={"id": "db_id"}, inplace=True)
+#     df.dropna(subset=["name"], inplace=True)
+#     df = df[df["name"].str.strip() != ""]
+#     df = df[["db_id", "name"]]
+#     data = df.to_dict(orient="records")
 
-    records = [DuIbmQradarTenants(**item) for item in data]
-    try:
-        DuIbmQradarTenants.objects.bulk_create(
-            records,
-            update_conflicts=True,
-            update_fields=["name"],
-            unique_fields=["db_id"],
-        )
-    except Exception as e:
-        print(e)
+#     records = [DuIbmQradarTenants(**item) for item in data]
+#     try:
+#         DuIbmQradarTenants.objects.bulk_create(
+#             records,
+#             update_conflicts=True,
+#             update_fields=["name"],
+#             unique_fields=["db_id"],
+#         )
+#     except Exception as e:
+#         print(e)
