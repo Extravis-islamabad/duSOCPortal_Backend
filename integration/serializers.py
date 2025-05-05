@@ -1,7 +1,6 @@
 from rest_framework import serializers
 
 from integration.models import (
-    DuIbmQradarTenants,
     Integration,
     IntegrationTypes,
     ItsmSubTypes,
@@ -76,9 +75,3 @@ class IntegrationSerializer(serializers.ModelSerializer):
                 )
 
         return data
-
-
-class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DuIbmQradarTenants
-        fields = ["id", "name"]  # Only include id and name, exclude db_id

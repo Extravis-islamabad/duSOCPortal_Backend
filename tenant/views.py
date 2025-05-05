@@ -7,8 +7,13 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
-from tenant.models import Tenant, TenantPermissionChoices, TenantRole
-from tenant.serializers import TenantRoleSerializer
+from tenant.models import (
+    DuIbmQradarTenants,
+    Tenant,
+    TenantPermissionChoices,
+    TenantRole,
+)
+from tenant.serializers import DuIbmQradarTenantsSerializer, TenantRoleSerializer
 
 
 class PermissionChoicesAPIView(APIView):
@@ -87,3 +92,13 @@ class TenantAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class DuIbmQradarTenantsListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        tenants = DuIbmQradarTenants.objects.all()  # Retrieve all records
+        serializer = DuIbmQradarTenantsSerializer(tenants, many=True)
+        return Response(serializer.data)
