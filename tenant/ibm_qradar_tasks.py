@@ -5,8 +5,7 @@ from django.db import transaction
 from loguru import logger
 
 from common.modules.ibm_qradar import IBMQradar
-
-from .models import DuIbmQradarTenants
+from tenant.models import DuIbmQradarTenants
 
 
 class QRadarTasks:

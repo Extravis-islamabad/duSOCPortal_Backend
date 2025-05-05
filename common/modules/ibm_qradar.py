@@ -1,10 +1,12 @@
 import time
 
+import pandas as pd
 import requests
 from loguru import logger
 from requests.auth import HTTPBasicAuth
 
 from common.constants import IBMQradarConstants, SSLConstants
+from tenant.models import DuIbmQradarTenants
 
 
 class IBMQradar:
@@ -174,23 +176,39 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar.__get_event_logs(): {str(e)}")
 
+    def _transform_domains(self, data):
+        """
+        Transforms the list of domains from the IBM QRadar endpoint into a DataFrame, removes
+        any rows with missing or empty names, renames the "id" column to "db_id", and returns
+        the resulting DataFrame as a list of dictionaries.
 
-# if __name__ == "__main__":
-#     # TODO: REmove this
-#     df = pd.read_json("/home/oman/DUSOC2/duSOCPortal_Backend/data.json")
-#     df.rename(columns={"id": "db_id"}, inplace=True)
-#     df.dropna(subset=["name"], inplace=True)
-#     df = df[df["name"].str.strip() != ""]
-#     df = df[["db_id", "name"]]
-#     data = df.to_dict(orient="records")
+        :param data: A list of dictionaries containing domain information.
+        :return: A list of dictionaries containing the transformed domain information.
+        """
+        df = pd.DataFrame(data=data)
+        df.rename(columns={"id": "db_id"}, inplace=True)
+        df.dropna(subset=["name"], inplace=True)
+        df = df[df["name"].str.strip() != ""]
+        df = df[["db_id", "name"]]
+        data = df.to_dict(orient="records")
 
-#     records = [DuIbmQradarTenants(**item) for item in data]
-#     try:
-#         DuIbmQradarTenants.objects.bulk_create(
-#             records,
-#             update_conflicts=True,
-#             update_fields=["name"],
-#             unique_fields=["db_id"],
-#         )
-#     except Exception as e:
-#         print(e)
+        return data
+
+    def _insert_domains(self, data):
+        start = time.time()
+        logger.info(f"IBMQRadar._insert_domains() started : {start}")
+        records = [DuIbmQradarTenants(**item) for item in data]
+        logger.info(f"Inserting the domains records: {len(records)}")
+        try:
+            DuIbmQradarTenants.objects.bulk_create(
+                records,
+                update_conflicts=True,
+                update_fields=["name"],
+                unique_fields=["db_id"],
+            )
+            logger.info(f"Inserted the domains records: {len(records)}")
+            logger.success(
+                f"IBMQRadar._insert_domains() took: {time.time() - start} seconds"
+            )
+        except Exception as e:
+            logger.error(f"An error occurred in IBMQradar._insert_domains(): {str(e)}")
