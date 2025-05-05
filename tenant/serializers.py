@@ -301,6 +301,8 @@ class TenantCreateSerializer(serializers.ModelSerializer):
 
 
 class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
+    qradar_tenant_id = serializers.IntegerField(source="id", read_only=True)
+
     class Meta:
         model = DuIbmQradarTenants
-        fields = ["id", "name"]  # Only include id and name, exclude db_id
+        fields = ["qradar_tenant_id", "name"]

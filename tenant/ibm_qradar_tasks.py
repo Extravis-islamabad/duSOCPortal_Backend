@@ -5,7 +5,6 @@ from django.db import transaction
 from loguru import logger
 
 from common.modules.ibm_qradar import IBMQradar
-from tenant.models import DuIbmQradarTenants
 
 
 class QRadarTasks:
@@ -14,36 +13,31 @@ class QRadarTasks:
     def sync_qradar_tenants():
         """
         Celery task to fetch QRadar tenants data from an endpoint every 30 minutes
-        and sync it into the du_ibm_qradar_tenants table.
+        and sync it into the du_ibm_qradar_tenants table using IBMQRadar's _insert_domains method.
         """
         start = time.time()
         logger.info("Running QRadarTasks.sync_qradar_tenants() task")
         try:
-            # Fetch data from the endpoint
+            # Fetch data from the endpoint and transform it
             with IBMQradar() as ibm_qradar:
                 data = ibm_qradar._get_domains()
                 if data is None:
+                    logger.error("No data returned from IBM QRadar domains endpoint")
                     return
-            if not isinstance(data, list):
+
+                # Transform the data into the required format
+                transformed_data = ibm_qradar._transform_domains(data)
+
+            if not isinstance(transformed_data, list):
                 logger.error("Invalid data format: Expected a list")
                 return
 
             # Use a transaction to ensure atomicity
             with transaction.atomic():
-                for item in data:
-                    db_id = item.get("id")
-                    name = item.get("name", "")
+                # Insert or update the domains using IBMQRadar's _insert_domains
+                ibm_qradar._insert_domains(transformed_data)
 
-                    # Validate required fields
-                    if db_id is None:
-                        logger.warning(f"Skipping record with missing id: {item}")
-                        continue
-
-                    DuIbmQradarTenants.objects.update_or_create(
-                        db_id=db_id, defaults={"name": name}
-                    )
-
-            logger.info(f"Successfully synced {len(data)} QRadar tenants")
+            logger.info(f"Successfully synced {len(transformed_data)} QRadar tenants")
             logger.info(
                 f"QRadarTasks.sync_qradar_tenants() task took {time.time() - start} seconds"
             )
