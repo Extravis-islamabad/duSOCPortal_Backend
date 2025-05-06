@@ -26,7 +26,6 @@ class IntegrationSerializer(serializers.ModelSerializer):
             "soar_subtype",
             "itsm_subtype",
             "instance_name",
-            "instance_type",
             "credentials",
         ]
 
