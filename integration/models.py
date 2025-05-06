@@ -54,8 +54,6 @@ class Integration(models.Model):
         help_text="Required for ITSM Integration type",
     )
     instance_name = models.CharField(max_length=100)
-    instance_type = models.CharField(max_length=100)
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
