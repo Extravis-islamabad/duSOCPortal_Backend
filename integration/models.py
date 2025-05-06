@@ -1,8 +1,6 @@
 from django.db import models
 from django.forms import ValidationError
 
-from tenant.models import Tenant
-
 
 class IntegrationTypes(models.IntegerChoices):
     SIEM_INTEGRATION = 1, "SIEM Integration"
@@ -32,9 +30,9 @@ class Integration(models.Model):
     integration_type = models.IntegerField(
         choices=IntegrationTypes.choices, default=IntegrationTypes.SIEM_INTEGRATION
     )
-    tenant = models.ForeignKey(
-        Tenant, on_delete=models.CASCADE, related_name="integrations"
-    )
+    # tenant = models.ForeignKey(
+    #     Tenant, on_delete=models.CASCADE, related_name="integrations"
+    # )
     siem_subtype = models.IntegerField(
         choices=SiemSubTypes.choices,
         null=True,
@@ -98,3 +96,16 @@ class Integration(models.Model):
         """Ensure clean is called before saving."""
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class IntegrationCredentials(models.Model):
+    integration = models.ForeignKey(
+        Integration, on_delete=models.CASCADE, related_name="credentials"
+    )
+    username = models.CharField(max_length=100)
+    password = models.CharField(max_length=100)
+    ip_address = models.CharField(max_length=100, unique=True)
+    port = models.CharField(max_length=100)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

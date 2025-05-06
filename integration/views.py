@@ -6,8 +6,15 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser
 from common.modules.ibm_qradar import IBMQradar
+from integration.serializers import IntegrationSerializer
 
-from .models import IntegrationTypes, ItsmSubTypes, SiemSubTypes, SoarSubTypes
+from .models import (
+    Integration,
+    IntegrationTypes,
+    ItsmSubTypes,
+    SiemSubTypes,
+    SoarSubTypes,
+)
 
 
 class IntegrationTypesView(APIView):
@@ -53,3 +60,25 @@ class GetIBMQradarTenants(APIView):
             if data:
                 return Response({"data": data}, status=status.HTTP_200_OK)
         return Response({"data": []}, status=status.HTTP_200_OK)
+
+
+class IntegrationCreateAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        serializer = IntegrationSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Integration created successfully"},
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class IntegrationListAPIView(APIView):
+    def get(self, request):
+        integrations = Integration.objects.all()
+        serializer = IntegrationSerializer(integrations, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
