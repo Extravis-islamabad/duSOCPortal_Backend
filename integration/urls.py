@@ -1,8 +1,8 @@
 from django.urls import path
 
 from integration.views import (
+    CredentialTypesListAPIView,
     IntegrationCreateAPIView,
-    IntegrationListAPIView,
     IntegrationTypesView,
 )
 
@@ -18,8 +18,13 @@ urlpatterns = [
         name="add-integration",
     ),
     path(
-        "get_all_integrations/",
-        IntegrationListAPIView.as_view(),
-        name="get-all-integrations",
-    ),
+        "get_types/",
+        CredentialTypesListAPIView.as_view(),
+        name="get-types",
+    )
+    # path(
+    #     "get_all_integrations/",
+    #     IntegrationListAPIView.as_view(),
+    #     name="get-all-integrations",
+    # ),
 ]

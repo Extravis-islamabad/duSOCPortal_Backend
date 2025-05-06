@@ -8,7 +8,13 @@ from authentication.permissions import IsAdminUser
 from common.modules.ibm_qradar import IBMQradar
 from integration.serializers import IntegrationSerializer
 
-from .models import IntegrationTypes, ItsmSubTypes, SiemSubTypes, SoarSubTypes
+from .models import (
+    CredentialTypes,
+    IntegrationTypes,
+    ItsmSubTypes,
+    SiemSubTypes,
+    SoarSubTypes,
+)
 
 
 class IntegrationTypesView(APIView):
@@ -41,6 +47,17 @@ class IntegrationTypesView(APIView):
             for choice in IntegrationTypes.choices
         ]
         return Response({"data": integration_types}, status=status.HTTP_200_OK)
+
+
+class CredentialTypesListAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        credential_types = [
+            {"id": choice[0], "text": choice[1]} for choice in CredentialTypes.choices
+        ]
+        return Response(credential_types, status=status.HTTP_200_OK)
 
 
 class GetIBMQradarTenants(APIView):
