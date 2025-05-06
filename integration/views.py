@@ -62,11 +62,17 @@ class GetIBMQradarTenants(APIView):
         return Response({"data": []}, status=status.HTTP_200_OK)
 
 
-class IntegrationCreateAPIView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+# class IntegrationCreateAPIView(APIView):
+#     def post(self, request):
+#         serializer = IntegrationSerializer(data=request.data)
+#         if serializer.is_valid():
+#             integration = serializer.save()
+#             return Response(serializer.data, status=status.HTTP_201_CREATED)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    def post(self, request):
+
+class IntegrationCreateAPIView(APIView):
+    def post(self, request, *args, **kwargs):
         serializer = IntegrationSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -77,8 +83,11 @@ class IntegrationCreateAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class IntegrationListAPIView(APIView):
-    def get(self, request):
-        integrations = Integration.objects.all()
-        serializer = IntegrationSerializer(integrations, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+# integrations/views.py
+
+from rest_framework.generics import ListAPIView
+
+
+class IntegrationListAPIView(ListAPIView):
+    queryset = Integration.objects.all().prefetch_related("credentials")
+    serializer_class = IntegrationSerializer
