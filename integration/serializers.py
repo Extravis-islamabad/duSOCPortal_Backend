@@ -29,7 +29,6 @@ class IntegrationSerializer(serializers.ModelSerializer):
             "itsm_subtype",
             "instance_name",
             "instance_type",
-            "version",
             "credentials",
         ]
 
