@@ -142,5 +142,6 @@ class TestIntegrationView(APIView):
                     {"message": "Integration is working"}, status=status.HTTP_200_OK
                 )
         return Response(
-            {"message": "Integration is not working"}, status=status.HTTP_200_OK
+            {"message": "Integration is not working"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
