@@ -8,13 +8,7 @@ from authentication.permissions import IsAdminUser
 from common.modules.ibm_qradar import IBMQradar
 from integration.serializers import IntegrationSerializer
 
-from .models import (
-    Integration,
-    IntegrationTypes,
-    ItsmSubTypes,
-    SiemSubTypes,
-    SoarSubTypes,
-)
+from .models import IntegrationTypes, ItsmSubTypes, SiemSubTypes, SoarSubTypes
 
 
 class IntegrationTypesView(APIView):
@@ -62,15 +56,6 @@ class GetIBMQradarTenants(APIView):
         return Response({"data": []}, status=status.HTTP_200_OK)
 
 
-# class IntegrationCreateAPIView(APIView):
-#     def post(self, request):
-#         serializer = IntegrationSerializer(data=request.data)
-#         if serializer.is_valid():
-#             integration = serializer.save()
-#             return Response(serializer.data, status=status.HTTP_201_CREATED)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
 class IntegrationCreateAPIView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = IntegrationSerializer(data=request.data)
@@ -81,13 +66,3 @@ class IntegrationCreateAPIView(APIView):
                 status=status.HTTP_201_CREATED,
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-# integrations/views.py
-
-from rest_framework.generics import ListAPIView
-
-
-class IntegrationListAPIView(ListAPIView):
-    queryset = Integration.objects.all().prefetch_related("credentials")
-    serializer_class = IntegrationSerializer
