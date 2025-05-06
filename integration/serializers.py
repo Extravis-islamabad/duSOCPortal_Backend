@@ -45,3 +45,9 @@ class IntegrationSerializer(serializers.ModelSerializer):
         )
         integration.clean()  # triggers model validation
         return data
+
+
+class IntegrationCredentialUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IntegrationCredentials
+        fields = ["id", "credential_type", "username", "password", "ip_address", "port"]

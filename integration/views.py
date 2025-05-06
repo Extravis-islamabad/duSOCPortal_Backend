@@ -6,11 +6,15 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser
 from common.modules.ibm_qradar import IBMQradar
-from integration.serializers import IntegrationSerializer
+from integration.serializers import (
+    IntegrationCredentialUpdateSerializer,
+    IntegrationSerializer,
+)
 
 from .models import (
     CredentialTypes,
     Integration,
+    IntegrationCredentials,
     IntegrationTypes,
     ItsmSubTypes,
     SiemSubTypes,
@@ -87,7 +91,31 @@ class IntegrationCreateAPIView(APIView):
 
 
 class GetAllIntegrationsAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
     def get(self, request):
         integrations = Integration.objects.all().prefetch_related("credentials")
         serializer = IntegrationSerializer(integrations, many=True)
         return Response(serializer.data)
+
+
+class UpdateCredentialView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def put(self, request, pk):
+        try:
+            credential = IntegrationCredentials.objects.get(pk=pk)
+        except IntegrationCredentials.DoesNotExist:
+            return Response(
+                {"error": "Credential not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = IntegrationCredentialUpdateSerializer(
+            credential, data=request.data, partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
