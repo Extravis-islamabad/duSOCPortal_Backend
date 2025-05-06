@@ -1,7 +1,15 @@
 from django.core.validators import validate_ipv46_address
 from rest_framework import serializers
 
-from .models import CredentialTypes, Integration, IntegrationCredentials
+from .models import (
+    CredentialTypes,
+    Integration,
+    IntegrationCredentials,
+    IntegrationTypes,
+    ItsmSubTypes,
+    SiemSubTypes,
+    SoarSubTypes,
+)
 
 
 class IntegrationCredentialsSerializer(serializers.ModelSerializer):
@@ -21,6 +29,26 @@ class IntegrationCredentialsSerializer(serializers.ModelSerializer):
         except Exception:
             raise serializers.ValidationError("Invalid IP address format.")
         return value
+
+
+class GetIntegrationCredentialsSerializer(serializers.ModelSerializer):
+    credential_type_text = serializers.SerializerMethodField()
+
+    class Meta:
+        model = IntegrationCredentials
+        fields = [
+            "id",
+            "credential_type",
+            "credential_type_text",
+            "username",
+            "password",
+            "api_key",
+            "ip_address",
+            "port",
+        ]
+
+    def get_credential_type_text(self, obj):
+        return dict(CredentialTypes.choices).get(obj.credential_type)
 
 
 class IntegrationSerializer(serializers.ModelSerializer):
@@ -57,7 +85,11 @@ class IntegrationSerializer(serializers.ModelSerializer):
 
 
 class GetIntegrationSerializer(serializers.ModelSerializer):
-    credentials = IntegrationCredentialsSerializer(many=True, read_only=True)
+    credentials = GetIntegrationCredentialsSerializer(many=True, read_only=True)
+    integration_type_text = serializers.SerializerMethodField()
+    siem_subtype_text = serializers.SerializerMethodField()
+    soar_subtype_text = serializers.SerializerMethodField()
+    itsm_subtype_text = serializers.SerializerMethodField()
 
     class Meta:
         model = Integration
@@ -66,12 +98,40 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
             "status",
             "admin",
             "integration_type",
+            "integration_type_text",
             "siem_subtype",
+            "siem_subtype_text",
             "soar_subtype",
+            "soar_subtype_text",
             "itsm_subtype",
+            "itsm_subtype_text",
             "instance_name",
             "credentials",
         ]
+
+    def get_integration_type_text(self, obj):
+        return dict(IntegrationTypes.choices).get(obj.integration_type)
+
+    def get_siem_subtype_text(self, obj):
+        return (
+            dict(SiemSubTypes.choices).get(obj.siem_subtype)
+            if obj.siem_subtype
+            else None
+        )
+
+    def get_soar_subtype_text(self, obj):
+        return (
+            dict(SoarSubTypes.choices).get(obj.soar_subtype)
+            if obj.soar_subtype
+            else None
+        )
+
+    def get_itsm_subtype_text(self, obj):
+        return (
+            dict(ItsmSubTypes.choices).get(obj.itsm_subtype)
+            if obj.itsm_subtype
+            else None
+        )
 
 
 class IntegrationCredentialUpdateSerializer(serializers.ModelSerializer):
