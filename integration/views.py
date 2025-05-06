@@ -10,6 +10,7 @@ from integration.serializers import (
     GetIntegrationSerializer,
     IntegrationCredentialUpdateSerializer,
     IntegrationSerializer,
+    TestCredentialSerializer,
 )
 
 from .models import (
@@ -83,7 +84,7 @@ class IntegrationCreateAPIView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = IntegrationSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            serializer.save(admin=request.user)
             return Response(
                 {"message": "Integration created successfully"},
                 status=status.HTTP_201_CREATED,
@@ -126,24 +127,16 @@ class TestIntegrationView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def get(self, request, pk):
-        try:
-            credentials = IntegrationCredentials.objects.get(pk=pk)
-        except Exception:
-            return Response(
-                {"error": "Integration not found"}, status=status.HTTP_404_NOT_FOUND
+    def post(self, request):
+        serializer = TestCredentialSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.data
+        with IBMQradar(data["username"], data["password"]) as ibm_qradar:
+            data = ibm_qradar.test_integration(
+                ip_address=data["ip_address"], port=data["port"]
             )
-        if credentials.credential_type == CredentialTypes.USERNAME_PASSWORD:
-            with IBMQradar(
-                username=credentials.username, password=credentials.password
-            ) as ibm_qradar:
-                data = ibm_qradar.test_integration(
-                    ip_address=credentials.ip_address, port=credentials.port
-                )
-                if data:
-                    return Response(
-                        {"message": "Integration is working"}, status=status.HTTP_200_OK
-                    )
-        return Response(
-            {"message": "Integration is not working"}, status=status.HTTP_200_OK
-        )
+            if data:
+                return Response({"data": data}, status=status.HTTP_200_OK)
+        return Response({"data": []}, status=status.HTTP_200_OK)

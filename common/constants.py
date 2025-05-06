@@ -103,7 +103,7 @@ class IBMQradarConstants:
     IBM_QRADAR_USERNAME = os.getenv("IBM_QRADAR_USERNAME", None)
     IBM_QRADAR_PASSWORD = os.getenv("IBM_QRADAR_PASSWORD", None)
     IBM_BASE_URL = os.getenv("IBM_BASE_URL", None)
-    IBM_TEST_ENDPOINT = "api/config/access/tenant_management/tenants"
+    IBM_TEST_ENDPOINT = "api/system/about"
     IBM_TENANT_ENDPOINT = f"{IBM_BASE_URL}/api/config/access/tenant_management/tenants"
     IBM_DOMAIN_ENDPOINT = f"{IBM_BASE_URL}/api/config/domain_management/domains"
     IBM_EVENT_COLLECTOR_ENDPOINT = (

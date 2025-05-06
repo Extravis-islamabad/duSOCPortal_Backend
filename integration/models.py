@@ -1,5 +1,8 @@
+from django.contrib.auth.hashers import make_password
 from django.db import models
 from django.forms import ValidationError
+
+from authentication.models import User
 
 
 class IntegrationTypes(models.IntegerChoices):
@@ -32,6 +35,13 @@ class CredentialTypes(models.IntegerChoices):
 
 
 class Integration(models.Model):
+    admin = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="integration",
+        null=True,
+        blank=True,
+    )
     integration_type = models.IntegerField(
         choices=IntegrationTypes.choices, default=IntegrationTypes.SIEM_INTEGRATION
     )
@@ -53,6 +63,7 @@ class Integration(models.Model):
         blank=True,
         help_text="Required for ITSM Integration type",
     )
+    status = models.BooleanField(default=True)
     instance_name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -106,7 +117,7 @@ class IntegrationCredentials(models.Model):
     username = models.CharField(max_length=100, null=True, blank=True)
     password = models.CharField(max_length=100, null=True, blank=True)
     api_key = models.CharField(max_length=100, null=True, blank=True)
-    ip_address = models.CharField(max_length=100, unique=True)
+    ip_address = models.GenericIPAddressField(unique=True)
     port = models.IntegerField(default=80)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -142,6 +153,10 @@ class IntegrationCredentials(models.Model):
                 )
 
     def save(self, *args, **kwargs):
-        """Ensure clean is called before saving."""
+        """Ensure clean is called and password is securely hashed before saving."""
         self.full_clean()
+
+        if self.credential_type == CredentialTypes.USERNAME_PASSWORD and self.password:
+            self.password = make_password(self.password)
+
         super().save(*args, **kwargs)

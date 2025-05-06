@@ -36,7 +36,7 @@ urlpatterns = [
         name="update-credential",
     ),
     path(
-        "test_integration/<int:pk>/",
+        "test_integration/",
         TestIntegrationView.as_view(),
         name="test-integration",
     ),
