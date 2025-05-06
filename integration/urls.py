@@ -2,6 +2,7 @@ from django.urls import path
 
 from integration.views import (
     CredentialTypesListAPIView,
+    GetAllIntegrationsAPIView,
     IntegrationCreateAPIView,
     IntegrationTypesView,
 )
@@ -21,10 +22,10 @@ urlpatterns = [
         "get_types/",
         CredentialTypesListAPIView.as_view(),
         name="get-types",
-    )
-    # path(
-    #     "get_all_integrations/",
-    #     IntegrationListAPIView.as_view(),
-    #     name="get-all-integrations",
-    # ),
+    ),
+    path(
+        "get_all_integrations/",
+        GetAllIntegrationsAPIView.as_view(),
+        name="get-all-integrations",
+    ),
 ]

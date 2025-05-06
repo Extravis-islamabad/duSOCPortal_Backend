@@ -10,6 +10,7 @@ from integration.serializers import IntegrationSerializer
 
 from .models import (
     CredentialTypes,
+    Integration,
     IntegrationTypes,
     ItsmSubTypes,
     SiemSubTypes,
@@ -83,3 +84,10 @@ class IntegrationCreateAPIView(APIView):
                 status=status.HTTP_201_CREATED,
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GetAllIntegrationsAPIView(APIView):
+    def get(self, request):
+        integrations = Integration.objects.all().prefetch_related("credentials")
+        serializer = IntegrationSerializer(integrations, many=True)
+        return Response(serializer.data)

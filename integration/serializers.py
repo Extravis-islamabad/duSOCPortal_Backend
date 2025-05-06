@@ -16,11 +16,12 @@ class IntegrationCredentialsSerializer(serializers.ModelSerializer):
 
 
 class IntegrationSerializer(serializers.ModelSerializer):
-    credentials = IntegrationCredentialsSerializer()
+    credentials = IntegrationCredentialsSerializer(many=True, read_only=True)
 
     class Meta:
         model = Integration
         fields = [
+            "id",
             "integration_type",
             "siem_subtype",
             "soar_subtype",
