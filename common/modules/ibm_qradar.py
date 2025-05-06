@@ -10,7 +10,7 @@ from tenant.models import DuIbmQradarTenants
 
 
 class IBMQradar:
-    def __init__(self):
+    def __init__(self, username: str, password: str):
         """
         Constructor for IBMQRadar class.
 
@@ -18,8 +18,8 @@ class IBMQradar:
         :param password: The password to use when logging into the QRadar.
         :raises ValueError: If either the username or password are not set.
         """
-        self.username = IBMQradarConstants.IBM_QRADAR_USERNAME
-        self.password = IBMQradarConstants.IBM_QRADAR_PASSWORD
+        self.username = username
+        self.password = password
         if not self.username or not self.password:
             logger.error("IBM QRadar both username and password are required")
             raise ValueError("Both username and password are required")
@@ -30,6 +30,35 @@ class IBMQradar:
 
     def __exit__(self, exc_type, exc_value, traceback):
         logger.info("Logging out of IBM QRadar")
+
+    def test_integration(self, ip_address: str, port: int):
+        start = time.time()
+        if port == 80:
+            endpoint = f"https://{ip_address}/{IBMQradarConstants.IBM_TEST_ENDPOINT}"
+        else:
+            endpoint = (
+                f"https://{ip_address}:{port}/{IBMQradarConstants.IBM_TEST_ENDPOINT}"
+            )
+        try:
+            response = requests.get(
+                endpoint,
+                auth=HTTPBasicAuth(
+                    self.username,
+                    self.password,
+                ),
+                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                timeout=10,
+            )
+            if response.status_code != 200:
+                return False
+            logger.success(
+                f"IBMQRadar.test_integration() took: {time.time() - start} seconds"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"An error occurred in IBMQradar._get_tenants(): {str(e)}")
+            return False
 
     def _get_tenants(self):
         """

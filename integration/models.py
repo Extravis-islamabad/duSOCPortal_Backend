@@ -107,7 +107,7 @@ class IntegrationCredentials(models.Model):
     password = models.CharField(max_length=100, null=True, blank=True)
     api_key = models.CharField(max_length=100, null=True, blank=True)
     ip_address = models.CharField(max_length=100, unique=True)
-    port = models.CharField(max_length=100)
+    port = models.IntegerField(default=80)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

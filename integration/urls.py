@@ -5,6 +5,7 @@ from integration.views import (
     GetAllIntegrationsAPIView,
     IntegrationCreateAPIView,
     IntegrationTypesView,
+    TestIntegrationView,
     UpdateCredentialView,
 )
 
@@ -33,5 +34,10 @@ urlpatterns = [
         "credentials/<int:pk>/update/",
         UpdateCredentialView.as_view(),
         name="update-credential",
+    ),
+    path(
+        "test_integration/<int:pk>/",
+        TestIntegrationView.as_view(),
+        name="test-integration",
     ),
 ]

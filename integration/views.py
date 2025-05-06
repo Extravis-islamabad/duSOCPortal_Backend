@@ -7,6 +7,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from authentication.permissions import IsAdminUser
 from common.modules.ibm_qradar import IBMQradar
 from integration.serializers import (
+    GetIntegrationSerializer,
     IntegrationCredentialUpdateSerializer,
     IntegrationSerializer,
 )
@@ -96,7 +97,7 @@ class GetAllIntegrationsAPIView(APIView):
 
     def get(self, request):
         integrations = Integration.objects.all().prefetch_related("credentials")
-        serializer = IntegrationSerializer(integrations, many=True)
+        serializer = GetIntegrationSerializer(integrations, many=True)
         return Response(serializer.data)
 
 
@@ -119,3 +120,30 @@ class UpdateCredentialView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class TestIntegrationView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, pk):
+        try:
+            credentials = IntegrationCredentials.objects.get(pk=pk)
+        except Exception:
+            return Response(
+                {"error": "Integration not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        if credentials.credential_type == CredentialTypes.USERNAME_PASSWORD:
+            with IBMQradar(
+                username=credentials.username, password=credentials.password
+            ) as ibm_qradar:
+                data = ibm_qradar.test_integration(
+                    ip_address=credentials.ip_address, port=credentials.port
+                )
+                if data:
+                    return Response(
+                        {"message": "Integration is working"}, status=status.HTTP_200_OK
+                    )
+        return Response(
+            {"message": "Integration is not working"}, status=status.HTTP_200_OK
+        )

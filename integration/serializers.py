@@ -16,7 +16,7 @@ class IntegrationCredentialsSerializer(serializers.ModelSerializer):
 
 
 class IntegrationSerializer(serializers.ModelSerializer):
-    credentials = IntegrationCredentialsSerializer(many=True, read_only=True)
+    credentials = IntegrationCredentialsSerializer()
 
     class Meta:
         model = Integration
@@ -45,6 +45,22 @@ class IntegrationSerializer(serializers.ModelSerializer):
         )
         integration.clean()  # triggers model validation
         return data
+
+
+class GetIntegrationSerializer(serializers.ModelSerializer):
+    credentials = IntegrationCredentialsSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Integration
+        fields = [
+            "id",
+            "integration_type",
+            "siem_subtype",
+            "soar_subtype",
+            "itsm_subtype",
+            "instance_name",
+            "credentials",
+        ]
 
 
 class IntegrationCredentialUpdateSerializer(serializers.ModelSerializer):
