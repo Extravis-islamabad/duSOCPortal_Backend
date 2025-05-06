@@ -97,7 +97,8 @@ class UserLoginAPIView(APIView):
             if not user.check_password(password):
                 logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
                 return Response(
-                    {"error": "Invalid password"}, status=status.HTTP_401_UNAUTHORIZED
+                    {"error": "Invalid password or username"},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             user.last_login = timezone.now()
