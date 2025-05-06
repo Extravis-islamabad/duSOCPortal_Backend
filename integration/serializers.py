@@ -43,6 +43,8 @@ class IntegrationSerializer(serializers.ModelSerializer):
         siem_subtype = data.get("siem_subtype")
         soar_subtype = data.get("soar_subtype")
         itsm_subtype = data.get("itsm_subtype")
+        api_key = data.get("api_key")
+        credentials = data.get("credentials")
 
         # Validate subtype requirements based on integration type
         if integration_type == IntegrationTypes.SIEM_INTEGRATION:
@@ -74,10 +76,25 @@ class IntegrationSerializer(serializers.ModelSerializer):
                 )
 
         # Validate credentials
-        credentials = data.get("credentials")
         if not credentials:
             raise serializers.ValidationError(
                 {"credentials": "At least one set of credentials is required."}
+            )
+
+        # Validate that either api_key or (username and password) is provided
+        has_valid_credentials = False
+        for cred in credentials:
+            username = cred.get("username")
+            password = cred.get("password")
+            if username and password:
+                has_valid_credentials = True
+                break
+
+        if not (api_key or has_valid_credentials):
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": "Either an api_key or both username and password in credentials must be provided."
+                }
             )
 
         return data

@@ -26,13 +26,15 @@ class ItsmSubTypes(models.IntegerChoices):
     OTHER = 3, "Other"
 
 
+class CredentialTypes(models.IntegerChoices):
+    API_KEY = 1, "API Key"
+    USERNAME_PASSWORD = 2, "Username and Password"
+
+
 class Integration(models.Model):
     integration_type = models.IntegerField(
         choices=IntegrationTypes.choices, default=IntegrationTypes.SIEM_INTEGRATION
     )
-    # tenant = models.ForeignKey(
-    #     Tenant, on_delete=models.CASCADE, related_name="integrations"
-    # )
     siem_subtype = models.IntegerField(
         choices=SiemSubTypes.choices,
         null=True,
@@ -53,7 +55,6 @@ class Integration(models.Model):
     )
     instance_name = models.CharField(max_length=100)
     instance_type = models.CharField(max_length=100)
-    api_key = models.CharField(max_length=100)
     version = models.CharField(max_length=100)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -102,10 +103,48 @@ class IntegrationCredentials(models.Model):
     integration = models.ForeignKey(
         Integration, on_delete=models.CASCADE, related_name="credentials"
     )
-    username = models.CharField(max_length=100)
-    password = models.CharField(max_length=100)
+    credential_type = models.IntegerField(
+        choices=CredentialTypes.choices, default=CredentialTypes.API_KEY
+    )
+    username = models.CharField(max_length=100, null=True, blank=True)
+    password = models.CharField(max_length=100, null=True, blank=True)
+    api_key = models.CharField(max_length=100, null=True, blank=True)
     ip_address = models.CharField(max_length=100, unique=True)
     port = models.CharField(max_length=100)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        """Validate credential_type constraints."""
+        if self.credential_type == CredentialTypes.API_KEY:
+            if not self.api_key:
+                raise ValidationError(
+                    {"api_key": "API key is required for API Key credential type."}
+                )
+            if self.username or self.password:
+                raise ValidationError(
+                    {
+                        "username": "Username and password must be null for API Key credential type.",
+                        "password": "Username and password must be null for API Key credential type.",
+                    }
+                )
+        elif self.credential_type == CredentialTypes.USERNAME_PASSWORD:
+            if not (self.username and self.password):
+                raise ValidationError(
+                    {
+                        "username": "Both username and password are required for Username and Password credential type.",
+                        "password": "Both username and password are required for Username and Password credential type.",
+                    }
+                )
+            if self.api_key:
+                raise ValidationError(
+                    {
+                        "api_key": "API key must be null for Username and Password credential type."
+                    }
+                )
+
+    def save(self, *args, **kwargs):
+        """Ensure clean is called before saving."""
+        self.full_clean()
+        super().save(*args, **kwargs)
