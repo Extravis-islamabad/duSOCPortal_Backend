@@ -138,5 +138,9 @@ class TestIntegrationView(APIView):
                 ip_address=data["ip_address"], port=data["port"]
             )
             if data:
-                return Response({"data": data}, status=status.HTTP_200_OK)
-        return Response({"data": []}, status=status.HTTP_200_OK)
+                return Response(
+                    {"message": "Integration is working"}, status=status.HTTP_200_OK
+                )
+        return Response(
+            {"message": "Integration is not working"}, status=status.HTTP_200_OK
+        )
