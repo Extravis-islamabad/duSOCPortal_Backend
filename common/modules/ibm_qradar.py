@@ -54,11 +54,12 @@ class IBMQradar:
             logger.success(
                 f"IBMQRadar.test_integration() took: {time.time() - start} seconds"
             )
-            return True
+            data = response.json()
+            return data
 
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._get_tenants(): {str(e)}")
-            return False
+            return []
 
     def _get_tenants(self):
         """
