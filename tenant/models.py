@@ -44,6 +44,13 @@ class Tenant(models.Model):
         blank=True,
         related_name="tenants",
     )
+    event_collector = models.ForeignKey(
+        IBMQradarEventCollector,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tenants",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
