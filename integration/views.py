@@ -7,6 +7,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from authentication.permissions import IsAdminUser
 from common.modules.ibm_qradar import IBMQradar
 from integration.serializers import (
+    GetIntegrationInstanceSerializer,
     GetIntegrationSerializer,
     IntegrationCredentialUpdateSerializer,
     IntegrationSerializer,
@@ -150,3 +151,71 @@ class TestIntegrationView(APIView):
             {"message": "Integration is not working"},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
+
+
+class GetIntegrationInstanceListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        integration_type = request.data.get("integration_type")
+        siem_subtype = request.data.get("siem_subtype")
+        soar_subtype = request.data.get("soar_subtype")
+        itsm_subtype = request.data.get("itsm_subtype")
+
+        # Validate integration_type
+        if not integration_type or integration_type not in [
+            choice[0] for choice in IntegrationTypes.choices
+        ]:
+            return Response(
+                {"error": "Invalid or missing integration_type"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Build query filters
+        filters = {"integration_type": integration_type}
+
+        if integration_type == IntegrationTypes.SIEM_INTEGRATION:
+            if siem_subtype and siem_subtype in [
+                choice[0] for choice in SiemSubTypes.choices
+            ]:
+                filters["siem_subtype"] = siem_subtype
+            elif siem_subtype is not None:
+                return Response(
+                    {"error": "Invalid siem_subtype"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif integration_type == IntegrationTypes.SOAR_INTEGRATION:
+            if soar_subtype and soar_subtype in [
+                choice[0] for choice in SoarSubTypes.choices
+            ]:
+                filters["soar_subtype"] = soar_subtype
+            elif soar_subtype is not None:
+                return Response(
+                    {"error": "Invalid soar_subtype"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif integration_type == IntegrationTypes.ITSM_INTEGRATION:
+            if itsm_subtype and itsm_subtype in [
+                choice[0] for choice in ItsmSubTypes.choices
+            ]:
+                filters["itsm_subtype"] = itsm_subtype
+            elif itsm_subtype is not None:
+                return Response(
+                    {"error": "Invalid itsm_subtype"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Query integrations
+        try:
+            integrations = Integration.objects.filter(**filters)
+            serializer = GetIntegrationInstanceSerializer(integrations, many=True)
+            return Response(
+                {
+                    "message": "Integrations retrieved successfully",
+                    "data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -3,6 +3,7 @@ from django.urls import path
 from integration.views import (
     CredentialTypesListAPIView,
     GetAllIntegrationsAPIView,
+    GetIntegrationInstanceListView,
     IntegrationCreateAPIView,
     IntegrationTypesView,
     TestIntegrationView,
@@ -40,4 +41,5 @@ urlpatterns = [
         TestIntegrationView.as_view(),
         name="test-integration",
     ),
+    path("get_integration_instances/", GetIntegrationInstanceListView.as_view()),
 ]

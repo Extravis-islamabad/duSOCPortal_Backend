@@ -227,3 +227,30 @@ class TestCredentialSerializer(serializers.Serializer):
             raise serializers.ValidationError("Unsupported credential type.")
 
         return data
+
+
+class GetIntegrationInstanceSerializer(serializers.ModelSerializer):
+    integration_type = serializers.ChoiceField(choices=IntegrationTypes.choices)
+    siem_subtype = serializers.ChoiceField(
+        choices=SiemSubTypes.choices, allow_null=True, required=False
+    )
+    soar_subtype = serializers.ChoiceField(
+        choices=SoarSubTypes.choices, allow_null=True, required=False
+    )
+    itsm_subtype = serializers.ChoiceField(
+        choices=ItsmSubTypes.choices, allow_null=True, required=False
+    )
+
+    class Meta:
+        model = Integration
+        fields = [
+            "id",
+            "instance_name",
+            "integration_type",
+            "siem_subtype",
+            "soar_subtype",
+            "itsm_subtype",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
