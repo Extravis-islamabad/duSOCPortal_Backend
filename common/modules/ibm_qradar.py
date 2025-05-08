@@ -281,7 +281,7 @@ class IBMQradar:
                     records,
                     update_conflicts=True,
                     update_fields=["name", "host_id", "component_name"],
-                    unique_fields=["id"],
+                    unique_fields=["db_id"],
                 )
             logger.info(f"Inserted event collector records: {len(records)}")
             logger.success(
