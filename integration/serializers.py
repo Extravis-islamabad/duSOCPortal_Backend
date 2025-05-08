@@ -84,19 +84,71 @@ class IntegrationSerializer(serializers.ModelSerializer):
         return data
 
 
+# class GetIntegrationSerializer(serializers.ModelSerializer):
+#     credentials = GetIntegrationCredentialsSerializer(many=True, read_only=True)
+#     integration_type_text = serializers.SerializerMethodField()
+#     siem_subtype_text = serializers.SerializerMethodField()
+#     soar_subtype_text = serializers.SerializerMethodField()
+#     itsm_subtype_text = serializers.SerializerMethodField()
+
+#     class Meta:
+#         model = Integration
+#         fields = [
+#             "id",
+#             "status",
+#             "admin",
+#             "integration_type",
+#             "integration_type_text",
+#             "siem_subtype",
+#             "siem_subtype_text",
+#             "soar_subtype",
+#             "soar_subtype_text",
+#             "itsm_subtype",
+#             "itsm_subtype_text",
+#             "instance_name",
+#             "credentials",
+#         ]
+
+#     def get_integration_type_text(self, obj):
+#         return dict(IntegrationTypes.choices).get(obj.integration_type)
+
+#     def get_siem_subtype_text(self, obj):
+#         return (
+#             dict(SiemSubTypes.choices).get(obj.siem_subtype)
+#             if obj.siem_subtype
+#             else None
+#         )
+
+#     def get_soar_subtype_text(self, obj):
+#         return (
+#             dict(SoarSubTypes.choices).get(obj.soar_subtype)
+#             if obj.soar_subtype
+#             else None
+#         )
+
+
+#     def get_itsm_subtype_text(self, obj):
+#         return (
+#             dict(ItsmSubTypes.choices).get(obj.itsm_subtype)
+#             if obj.itsm_subtype
+#             else None
+#         )
 class GetIntegrationSerializer(serializers.ModelSerializer):
     credentials = GetIntegrationCredentialsSerializer(many=True, read_only=True)
     integration_type_text = serializers.SerializerMethodField()
     siem_subtype_text = serializers.SerializerMethodField()
     soar_subtype_text = serializers.SerializerMethodField()
     itsm_subtype_text = serializers.SerializerMethodField()
+    modified_by = serializers.SerializerMethodField()
+    modified_by_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Integration
         fields = [
             "id",
             "status",
-            "admin",
+            "modified_by_id",  # Renamed from 'admin'
+            "modified_by",  # New field for admin.username
             "integration_type",
             "integration_type_text",
             "siem_subtype",
@@ -107,6 +159,8 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
             "itsm_subtype_text",
             "instance_name",
             "credentials",
+            "created_at",  # Added
+            "updated_at",  # Added
         ]
 
     def get_integration_type_text(self, obj):
@@ -132,6 +186,12 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
             if obj.itsm_subtype
             else None
         )
+
+    def get_modified_by(self, obj):
+        return obj.admin.username if obj.admin else None
+
+    def get_modified_by_id(self, obj):
+        return obj.admin.id if obj.admin else None
 
 
 class IntegrationCredentialUpdateSerializer(serializers.ModelSerializer):
