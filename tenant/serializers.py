@@ -1,5 +1,6 @@
 # tenant/serializers.py
 from django.db import transaction
+from loguru import logger
 from rest_framework import serializers
 
 from authentication.models import User
@@ -73,6 +74,12 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="tenant.username", read_only=True)
     email = serializers.EmailField(source="tenant.email", read_only=True)
     permissions = serializers.SerializerMethodField()
+    tenant_admin = serializers.SerializerMethodField()
+    asset_count = serializers.SerializerMethodField()
+    total_incidents = serializers.SerializerMethodField()
+    active_incidents = serializers.SerializerMethodField()
+    tickets_count = serializers.SerializerMethodField()
+    sla = serializers.SerializerMethodField()
 
     class Meta:
         model = Tenant
@@ -84,17 +91,116 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "permissions",
+            "asset_count",
+            "total_incidents",
+            "active_incidents",
+            "tickets_count",
+            "sla",
+            "tenant_admin",
         ]
 
     def get_permissions(self, obj):
         try:
-            role = obj.roles.get()  # Assumes one role per tenant
+            role = obj.roles.get()
             return [
                 {"id": perm.permission, "name": perm.permission_text}
                 for perm in role.role_permissions.all()
             ]
-        except TenantRole.DoesNotExist:
+        except Exception as e:
+            logger.error(e)
             return []
+
+    def get_tenant_admin(self, obj):
+        if obj.tenant:
+            return obj.created_by.username or None
+        return None
+
+    def get_asset_count(self, obj):
+        try:
+            return obj.asset_set.count()
+        except Exception:
+            return 2
+
+    def get_total_incidents(self, obj):
+        try:
+            return obj.incident_set.count()
+        except Exception:
+            return 0
+
+    def get_active_incidents(self, obj):
+        try:
+            return obj.incident_set.filter(status="active").count()
+        except Exception:
+            return 0
+
+    def get_tickets_count(self, obj):
+        try:
+            return obj.ticket_set.count()
+        except Exception:
+            return 0
+
+    def get_sla(self, obj):
+        try:
+            return obj.sla.name
+        except Exception:
+            return 0
+
+
+# class TenantDetailSerializer(serializers.ModelSerializer):
+#     username = serializers.CharField(source="tenant.username", read_only=True)
+#     email = serializers.EmailField(source="tenant.email", read_only=True)
+#     permissions = serializers.SerializerMethodField()
+#     # tenant_admin = serializers.SerializerMethodField()
+#     # assert_count = serializers.SerializerMethodField()
+#     # total_incidents = serializers.SerializerMethodField()
+#     # active_incidents = serializers.SerializerMethodField()
+#     tickets_count = serializers.SerializerMethodField()
+#     sla = serializers.SerializerMethodField()
+#     class Meta:
+#         model = Tenant
+#         fields = [
+#             "id",
+#             "username",
+#             "email",
+#             "phone_number",
+#             "total_incidents",
+#             # "active_incidents",
+#             "tickets_count",
+#             "sla",
+#             # "tenant_admin",
+#             "created_at",
+#             "updated_at",
+#             "permissions",
+#         ]
+
+#     def get_permissions(self, obj):
+#         try:
+#             role = obj.roles.get()  # Assumes one role per tenant
+#             return [
+#                 {"id": perm.permission, "name": perm.permission_text}
+#                 for perm in role.role_permissions.all()
+#             ]
+#         except TenantRole.DoesNotExist:
+#             return []
+
+#     # def get_tenant_admin(self, obj):
+#     #     return obj.tenant.get_full_name()  # Assuming `tenant` is a User with first_name and last_name
+
+#     # def get_assert_count(self, obj):
+#     #     # Replace with actual logic to count tenant's assets
+#     #     return obj.assets.count() if hasattr(obj, "assets") else 0
+
+#     def get_total_incidents(self, obj):
+#         return 0 #obj.incidents.count() if hasattr(obj, "incidents") else 0
+
+#     # def get_active_incidents(self, obj):
+#     #     return 0
+
+#     def get_tickets_count(self, obj):
+#         return obj.tickets.count() if hasattr(obj, "tickets") else 0
+
+#     def get_sla(self, obj):
+#         return obj.sla.name if hasattr(obj, "sla") and obj.sla else None
 
 
 class TenantPermissionSerializer(serializers.ModelSerializer):
