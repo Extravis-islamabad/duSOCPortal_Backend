@@ -12,6 +12,7 @@ from integration.models import (
 
 from .models import (
     DuIbmQradarTenants,
+    IBMQradarEventCollector,
     Tenant,
     TenantPermissionChoices,
     TenantRole,
@@ -306,3 +307,14 @@ class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
     class Meta:
         model = DuIbmQradarTenants
         fields = ["qradar_tenant_id", "name"]
+
+
+class IBMQradarEventCollectorSerializer(serializers.Serializer):
+    event_collector_id = serializers.IntegerField(source="id", read_only=True)
+    name = serializers.CharField(max_length=255, allow_blank=True, default="")
+    host_id = serializers.IntegerField()
+    component_name = serializers.CharField(max_length=255, allow_blank=True, default="")
+
+    class Meta:
+        model = IBMQradarEventCollector
+        fields = ["event_collector_id", "name", "host_id", "component_name"]

@@ -9,11 +9,16 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from authentication.permissions import IsAdminUser, IsTenant
 from tenant.models import (
     DuIbmQradarTenants,
+    IBMQradarEventCollector,
     Tenant,
     TenantPermissionChoices,
     TenantRole,
 )
-from tenant.serializers import DuIbmQradarTenantsSerializer, TenantRoleSerializer
+from tenant.serializers import (
+    DuIbmQradarTenantsSerializer,
+    IBMQradarEventCollectorSerializer,
+    TenantRoleSerializer,
+)
 
 
 class PermissionChoicesAPIView(APIView):
@@ -102,3 +107,22 @@ class DuIbmQradarTenantsListView(APIView):
         tenants = DuIbmQradarTenants.objects.all()  # Retrieve all records
         serializer = DuIbmQradarTenantsSerializer(tenants, many=True)
         return Response(serializer.data)
+
+
+class EventCollectorsListAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+    """
+    API endpoint to retrieve all records from the IBMQradarEventCollector table.
+    """
+
+    def get(self, request, *args, **kwargs):
+        try:
+            event_collectors = IBMQradarEventCollector.objects.all()
+            serializer = IBMQradarEventCollectorSerializer(event_collectors, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to retrieve event collectors: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
