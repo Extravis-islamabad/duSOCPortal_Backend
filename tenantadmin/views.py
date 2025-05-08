@@ -20,38 +20,20 @@ class TenantCreateAPIView(APIView):
     permission_classes = [IsAdminUser]
 
     def post(self, request):
-        logger.info(f"Tenant creation request by user: {request.user.username}")
         serializer = TenantCreateSerializer(
             data=request.data, context={"request": request}
         )
-
         if serializer.is_valid():
-            try:
-                tenant = serializer.save()
-                logger.success(
-                    f"Tenant created: {tenant.tenant.username} (ID: {tenant.id})"
-                )
-                return Response(
-                    {
-                        "message": "Tenant created successfully",
-                        "tenant_id": tenant.id,
-                        "name": tenant.tenant.username,
-                        "email": tenant.tenant.email,
-                        "created_by": tenant.created_by.id,
-                        "qradar_tenant_id": tenant.qradar_tenant.id
-                        if tenant.qradar_tenant
-                        else None,
-                    },
-                    status=status.HTTP_201_CREATED,
-                )
-            except Exception as e:
-                logger.error(f"Error creating tenant: {str(e)}")
-                return Response(
-                    {"error": f"An error occurred: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-
-        logger.warning(f"Tenant creation failed: {serializer.errors}")
+            tenant = serializer.save()
+            return Response(
+                {
+                    "message": "Tenant created successfully",
+                    "tenant_id": tenant.id,
+                    "user_id": tenant.tenant.id,
+                    "role_id": tenant.roles.first().id,
+                },
+                status=status.HTTP_201_CREATED,
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

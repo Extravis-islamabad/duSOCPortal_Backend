@@ -1,14 +1,9 @@
 # tenant/serializers.py
+from django.db import transaction
 from rest_framework import serializers
 
 from authentication.models import User
-from integration.models import (
-    Integration,
-    IntegrationTypes,
-    ItsmSubTypes,
-    SiemSubTypes,
-    SoarSubTypes,
-)
+from integration.models import Integration
 
 from .models import (
     DuIbmQradarTenants,
@@ -119,186 +114,289 @@ class TenantRoleSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "role_type", "role_permissions"]
 
 
+# class TenantCreateSerializer(serializers.ModelSerializer):
+#     username = serializers.CharField(max_length=100, write_only=True)
+#     email = serializers.EmailField(write_only=True)
+#     password = serializers.CharField(write_only=True, style={"input_type": "password"})
+#     phone_number = serializers.CharField(
+#         max_length=20, required=False, allow_blank=True
+#     )
+#     permissions = serializers.ListField(
+#         child=serializers.IntegerField(min_value=1, max_value=5),
+#         required=False,
+#         help_text="List of permission integers from TenantPermissionChoices (1-5)",
+#     )
+#     qradar_tenant_id = serializers.IntegerField(
+#         required=True, help_text="ID of the associated DuIbmQradarTenants"
+#     )
+
+#     def validate_username(self, value):
+#         if User.objects.filter(username=value).exists():
+#             raise serializers.ValidationError(
+#                 f"A user with the username '{value}' already exists."
+#             )
+#         return value
+
+#     def validate_email(self, value):
+#         if User.objects.filter(email=value).exists():
+#             raise serializers.ValidationError(
+#                 f"A user with the email '{value}' already exists."
+#             )
+#         return value
+
+#     def validate_permissions(self, value):
+#         valid_choices = [choice.value for choice in TenantPermissionChoices]
+#         if value:
+#             invalid = [p for p in value if p not in valid_choices]
+#             if invalid:
+#                 raise serializers.ValidationError(
+#                     f"Invalid permissions: {invalid}. Must be one of {valid_choices}"
+#                 )
+#         return value
+
+#     def validate_qradar_tenant_id(self, value):
+#         # Check if the qradar_tenant_id exists
+#         if not DuIbmQradarTenants.objects.filter(id=value).exists():
+#             raise serializers.ValidationError(
+#                 f"No DuIbmQradarTenants found with ID {value}"
+#             )
+#         # Check if a tenant already exists with this qradar_tenant_id
+#         if Tenant.objects.filter(qradar_tenant__id=value).exists():
+#             raise serializers.ValidationError(
+#                 f"A tenant already exists for DuIbmQradarTenants ID {value}"
+#             )
+#         return value
+
+#     def validate(self, data):
+#         integration_type = data.get("integration_type")
+#         siem_subtype = data.get("siem_subtype")
+#         soar_subtype = data.get("soar_subtype")
+#         itsm_subtype = data.get("itsm_subtype")
+
+#         if integration_type == IntegrationTypes.SIEM_INTEGRATION:
+#             if not siem_subtype:
+#                 raise serializers.ValidationError(
+#                     {
+#                         "siem_subtype": "SIEM subtype is required for SIEM Integration type."
+#                     }
+#                 )
+#         elif integration_type == IntegrationTypes.SOAR_INTEGRATION:
+#             if not soar_subtype:
+#                 raise serializers.ValidationError(
+#                     {
+#                         "soar_subtype": "SOAR subtype is required for SOAR Integration type."
+#                     }
+#                 )
+#         elif integration_type == IntegrationTypes.ITSM_INTEGRATION:
+#             if not itsm_subtype:
+#                 raise serializers.ValidationError(
+#                     {
+#                         "itsm_subtype": "ITSM subtype is required for ITSM Integration type."
+#                     }
+#                 )
+#         return data
+
+#     def create(self, validated_data):
+#         permissions = validated_data.pop("permissions", [])
+#         integration_type = validated_data.pop("integration_type")
+#         siem_subtype = validated_data.pop("siem_subtype", None)
+#         soar_subtype = validated_data.pop("soar_subtype", None)
+#         itsm_subtype = validated_data.pop("itsm_subtype", None)
+#         instance_name = validated_data.pop("instance_name")
+#         instance_type = validated_data.pop("instance_type")
+#         api_key = validated_data.pop("api_key")
+#         version = validated_data.pop("version")
+#         qradar_tenant_id = validated_data.pop("qradar_tenant_id")
+
+#         user_data = {
+#             "username": validated_data.pop("username"),
+#             "email": validated_data.pop("email"),
+#             "is_tenant": True,
+#         }
+#         raw_password = validated_data.pop("password")
+#         phone_number = validated_data.pop("phone_number", None)
+
+#         # Create User instance
+#         user = User(**user_data)
+#         user.set_password(raw_password)
+#         user.save()
+
+#         # Get qradar tenant
+#         qradar_tenant = DuIbmQradarTenants.objects.get(id=qradar_tenant_id)
+
+#         # Create Tenant instance
+#         tenant = Tenant(
+#             tenant=user,
+#             created_by=self.context["request"].user,
+#             phone_number=phone_number,
+#             qradar_tenant=qradar_tenant,
+#         )
+#         tenant.save()
+
+#         # Create TenantRole
+#         role = TenantRole.objects.create(
+#             tenant=tenant,
+#             name=f"{user.username} Admin",
+#             role_type=TenantRole.TenantRoleChoices.TENANT_ADMIN,
+#         )
+
+#         # Assign permissions
+#         for perm_value in permissions:
+#             TenantRolePermissions.objects.create(role=role, permission=perm_value)
+
+#         # Create Integration
+#         integration = Integration(
+#             tenant=tenant,
+#             integration_type=integration_type,
+#             siem_subtype=siem_subtype,
+#             soar_subtype=soar_subtype,
+#             itsm_subtype=itsm_subtype,
+#             instance_name=instance_name,
+#             instance_type=instance_type,
+#             api_key=api_key,
+#             version=version,
+#         )
+#         integration.save()
+
+#         return tenant
+
+
 class TenantCreateSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(max_length=100, write_only=True)
     email = serializers.EmailField(write_only=True)
+    username = serializers.CharField(write_only=True)
+    name = serializers.CharField(write_only=True)
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
-    phone_number = serializers.CharField(
-        max_length=20, required=False, allow_blank=True
-    )
-    permissions = serializers.ListField(
-        child=serializers.IntegerField(min_value=1, max_value=5),
-        required=False,
-        help_text="List of permission integers from TenantPermissionChoices (1-5)",
-    )
-    integration_type = serializers.ChoiceField(
-        choices=IntegrationTypes.choices, required=True, help_text="Type of integration"
-    )
-    siem_subtype = serializers.ChoiceField(
-        choices=SiemSubTypes.choices, required=False, allow_null=True
-    )
-    soar_subtype = serializers.ChoiceField(
-        choices=SoarSubTypes.choices, required=False, allow_null=True
-    )
-    itsm_subtype = serializers.ChoiceField(
-        choices=ItsmSubTypes.choices, required=False, allow_null=True
-    )
-    instance_name = serializers.CharField(max_length=100, required=True)
-    instance_type = serializers.CharField(max_length=100, required=True)
-    api_key = serializers.CharField(max_length=100, required=True)
-    version = serializers.CharField(max_length=100, required=True)
-    qradar_tenant_id = serializers.IntegerField(
-        required=True, help_text="ID of the associated DuIbmQradarTenants"
+    qradar_tenant_id = serializers.IntegerField(required=False, allow_null=True)
+    event_collector_id = serializers.IntegerField(required=False, allow_null=True)
+    integration_id = serializers.IntegerField(required=False, allow_null=True)
+    role_permissions = serializers.ListField(
+        child=serializers.IntegerField(), required=False, write_only=True
     )
 
     class Meta:
         model = Tenant
         fields = [
-            "username",
             "email",
+            "username",
+            "name",
             "password",
             "phone_number",
-            "permissions",
-            "integration_type",
-            "siem_subtype",
-            "soar_subtype",
-            "itsm_subtype",
-            "instance_name",
-            "instance_type",
-            "api_key",
-            "version",
+            "country",
             "qradar_tenant_id",
+            "event_collector_id",
+            "integration_id",
+            "role_permissions",
+            "id",
+            "created_at",
+            "updated_at",
         ]
-
-    def validate_username(self, value):
-        if User.objects.filter(username=value).exists():
-            raise serializers.ValidationError(
-                f"A user with the username '{value}' already exists."
-            )
-        return value
-
-    def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError(
-                f"A user with the email '{value}' already exists."
-            )
-        return value
-
-    def validate_permissions(self, value):
-        valid_choices = [choice.value for choice in TenantPermissionChoices]
-        if value:
-            invalid = [p for p in value if p not in valid_choices]
-            if invalid:
-                raise serializers.ValidationError(
-                    f"Invalid permissions: {invalid}. Must be one of {valid_choices}"
-                )
-        return value
-
-    def validate_qradar_tenant_id(self, value):
-        # Check if the qradar_tenant_id exists
-        if not DuIbmQradarTenants.objects.filter(id=value).exists():
-            raise serializers.ValidationError(
-                f"No DuIbmQradarTenants found with ID {value}"
-            )
-        # Check if a tenant already exists with this qradar_tenant_id
-        if Tenant.objects.filter(qradar_tenant__id=value).exists():
-            raise serializers.ValidationError(
-                f"A tenant already exists for DuIbmQradarTenants ID {value}"
-            )
-        return value
+        read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate(self, data):
-        integration_type = data.get("integration_type")
-        siem_subtype = data.get("siem_subtype")
-        soar_subtype = data.get("soar_subtype")
-        itsm_subtype = data.get("itsm_subtype")
-
-        if integration_type == IntegrationTypes.SIEM_INTEGRATION:
-            if not siem_subtype:
-                raise serializers.ValidationError(
-                    {
-                        "siem_subtype": "SIEM subtype is required for SIEM Integration type."
-                    }
-                )
-        elif integration_type == IntegrationTypes.SOAR_INTEGRATION:
-            if not soar_subtype:
-                raise serializers.ValidationError(
-                    {
-                        "soar_subtype": "SOAR subtype is required for SOAR Integration type."
-                    }
-                )
-        elif integration_type == IntegrationTypes.ITSM_INTEGRATION:
-            if not itsm_subtype:
-                raise serializers.ValidationError(
-                    {
-                        "itsm_subtype": "ITSM subtype is required for ITSM Integration type."
-                    }
-                )
+        # Validate role_permissions
+        if "role_permissions" in data:
+            valid_permissions = [
+                choice[0] for choice in TenantPermissionChoices.choices
+            ]
+            for perm in data["role_permissions"]:
+                if perm not in valid_permissions:
+                    raise serializers.ValidationError(
+                        {"role_permissions": f"Invalid permission value: {perm}"}
+                    )
         return data
 
     def create(self, validated_data):
-        permissions = validated_data.pop("permissions", [])
-        integration_type = validated_data.pop("integration_type")
-        siem_subtype = validated_data.pop("siem_subtype", None)
-        soar_subtype = validated_data.pop("soar_subtype", None)
-        itsm_subtype = validated_data.pop("itsm_subtype", None)
-        instance_name = validated_data.pop("instance_name")
-        instance_type = validated_data.pop("instance_type")
-        api_key = validated_data.pop("api_key")
-        version = validated_data.pop("version")
-        qradar_tenant_id = validated_data.pop("qradar_tenant_id")
+        with transaction.atomic():
+            # Extract user data
+            user_data = {
+                "email": validated_data.pop("email"),
+                "username": validated_data.pop("username"),
+                "name": validated_data.pop("name"),
+                "password": validated_data.pop("password"),
+            }
+            role_permissions = validated_data.pop("role_permissions", [])
 
-        user_data = {
-            "username": validated_data.pop("username"),
-            "email": validated_data.pop("email"),
-            "is_tenant": True,
-        }
-        raw_password = validated_data.pop("password")
-        phone_number = validated_data.pop("phone_number", None)
+            # Create User
+            if User.objects.filter(email=user_data["email"]).exists():
+                raise serializers.ValidationError(
+                    {"email": "User with this email already exists"}
+                )
+            if User.objects.filter(username=user_data["username"]).exists():
+                raise serializers.ValidationError(
+                    {"username": "User with this username already exists"}
+                )
 
-        # Create User instance
-        user = User(**user_data)
-        user.set_password(raw_password)
-        user.save()
+            user = User(
+                email=user_data["email"],
+                username=user_data["username"],
+                name=user_data["name"],
+                is_tenant=True,
+                is_active=True,
+            )
+            user.set_password(user_data["password"])
+            user.save()
 
-        # Get qradar tenant
-        qradar_tenant = DuIbmQradarTenants.objects.get(id=qradar_tenant_id)
+            # Get created_by from request user
+            created_by = self.context["request"].user
 
-        # Create Tenant instance
-        tenant = Tenant(
-            tenant=user,
-            created_by=self.context["request"].user,
-            phone_number=phone_number,
-            qradar_tenant=qradar_tenant,
-        )
-        tenant.save()
+            # Handle qradar_tenant
+            qradar_tenant = None
+            if validated_data.get("qradar_tenant_id"):
+                try:
+                    qradar_tenant = DuIbmQradarTenants.objects.get(
+                        id=validated_data.pop("qradar_tenant_id")
+                    )
+                except DuIbmQradarTenants.DoesNotExist:
+                    raise serializers.ValidationError(
+                        {"qradar_tenant_id": "Invalid qradar_tenant_id"}
+                    )
 
-        # Create TenantRole
-        role = TenantRole.objects.create(
-            tenant=tenant,
-            name=f"{user.username} Admin",
-            role_type=TenantRole.TenantRoleChoices.TENANT_ADMIN,
-        )
+            # Handle event_collector
+            event_collector = None
+            if validated_data.get("event_collector_id"):
+                try:
+                    event_collector = IBMQradarEventCollector.objects.get(
+                        id=validated_data.pop("event_collector_id")
+                    )
+                except IBMQradarEventCollector.DoesNotExist:
+                    raise serializers.ValidationError(
+                        {"event_collector_id": "Invalid event_collector_id"}
+                    )
 
-        # Assign permissions
-        for perm_value in permissions:
-            TenantRolePermissions.objects.create(role=role, permission=perm_value)
+            # Handle integration
+            integration = None
+            if validated_data.get("integration_id"):
+                try:
+                    integration = Integration.objects.get(
+                        id=validated_data.pop("integration_id")
+                    )
+                except Integration.DoesNotExist:
+                    raise serializers.ValidationError(
+                        {"integration_id": "Invalid integration_id"}
+                    )
 
-        # Create Integration
-        integration = Integration(
-            tenant=tenant,
-            integration_type=integration_type,
-            siem_subtype=siem_subtype,
-            soar_subtype=soar_subtype,
-            itsm_subtype=itsm_subtype,
-            instance_name=instance_name,
-            instance_type=instance_type,
-            api_key=api_key,
-            version=version,
-        )
-        integration.save()
+            # Create Tenant
+            tenant = Tenant.objects.create(
+                tenant=user,
+                created_by=created_by,
+                integration=integration,
+                qradar_tenant=qradar_tenant,
+                event_collector=event_collector,
+                **validated_data,
+            )
 
-        return tenant
+            # Create TenantRole
+            role = TenantRole.objects.create(
+                tenant=tenant,
+                name="Tenant Admin",
+                role_type=TenantRole.TenantRoleChoices.TENANT_ADMIN,
+            )
+
+            # Create TenantRolePermissions
+            for permission in role_permissions:
+                TenantRolePermissions.objects.create(role=role, permission=permission)
+
+            return tenant
 
 
 class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
