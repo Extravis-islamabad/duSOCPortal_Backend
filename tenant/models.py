@@ -1,6 +1,7 @@
 from django.db import models
 
 from authentication.models import User
+from integration.models import Integration
 
 
 class DuIbmQradarTenants(models.Model):
@@ -36,7 +37,7 @@ class Tenant(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="created_tenants"
     )
-    phone_number = models.CharField(max_length=20, null=True, blank=True)
+    integration = models.ForeignKey(Integration, on_delete=models.SET_NULL, null=True)
     qradar_tenant = models.ForeignKey(
         DuIbmQradarTenants,
         on_delete=models.SET_NULL,
@@ -51,6 +52,7 @@ class Tenant(models.Model):
         blank=True,
         related_name="tenants",
     )
+    phone_number = models.CharField(max_length=20, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
