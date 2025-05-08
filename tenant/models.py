@@ -15,9 +15,6 @@ class DuIbmQradarTenants(models.Model):
         return self.name
 
 
-from django.db import models
-
-
 class IBMQradarEventCollector(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)
@@ -26,7 +23,7 @@ class IBMQradarEventCollector(models.Model):
     component_name = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
-        db_table = "IBMQradarEventCollector"
+        db_table = "du_ibm_qradar_event_collector"
 
     def __str__(self):
         return self.name
