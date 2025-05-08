@@ -10,7 +10,7 @@ from common.modules.ibm_qradar import IBMQradar
 class QRadarTasks:
     @staticmethod
     @shared_task
-    def sync_qradar_tenants():
+    def sync_qradar_tenants(username, password):
         """
         Celery task to fetch QRadar tenants data from an endpoint every 30 minutes
         and sync it into the du_ibm_qradar_tenants table using IBMQRadar's _insert_domains method.
@@ -19,7 +19,7 @@ class QRadarTasks:
         logger.info("Running QRadarTasks.sync_qradar_tenants() task")
         try:
             # Fetch data from the endpoint and transform it
-            with IBMQradar() as ibm_qradar:
+            with IBMQradar(username=username, password=password) as ibm_qradar:
                 data = ibm_qradar._get_domains()
                 if data is None:
                     logger.error("No data returned from IBM QRadar domains endpoint")
