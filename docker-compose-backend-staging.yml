@@ -67,6 +67,27 @@ services:
       timeout: 5s
       retries: 5
 
+
+  celery:
+    container_name: duSOC_Celery_Container
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "sockportal__backend", "worker", "--loglevel=info"]
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app  # Optional: for live sync with host
+    environment:
+      - C_FORCE_ROOT=true  # Allows Celery to run as root in the container (optional, use with caution)
+
 volumes:
   dusocportal_backend_dusocportal_backend_postgres_data:
   redis_data:
