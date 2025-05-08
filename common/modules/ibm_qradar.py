@@ -2,11 +2,12 @@ import time
 
 import pandas as pd
 import requests
+from django.db import transaction
 from loguru import logger
 from requests.auth import HTTPBasicAuth
 
 from common.constants import IBMQradarConstants, SSLConstants
-from tenant.models import DuIbmQradarTenants
+from tenant.models import DuIbmQradarTenants, IBMQradarEventCollector
 
 
 class IBMQradar:
@@ -225,20 +226,69 @@ class IBMQradar:
         return data
 
     def _insert_domains(self, data):
+        """
+        Inserts or updates domain records in the DuIbmQradarTenants table.
+
+        :param data: A list of dictionaries containing domain information.
+        """
         start = time.time()
         logger.info(f"IBMQRadar._insert_domains() started : {start}")
         records = [DuIbmQradarTenants(**item) for item in data]
         logger.info(f"Inserting the domains records: {len(records)}")
         try:
-            DuIbmQradarTenants.objects.bulk_create(
-                records,
-                update_conflicts=True,
-                update_fields=["name"],
-                unique_fields=["db_id"],
-            )
-            logger.info(f"Inserted the domains records: {len(records)}")
-            logger.success(
-                f"IBMQRadar._insert_domains() took: {time.time() - start} seconds"
-            )
+            with transaction.atomic():
+                DuIbmQradarTenants.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=["name"],
+                    unique_fields=["db_id"],
+                )
+                logger.info(f"Inserted the domains records: {len(records)}")
+                logger.success(
+                    f"IBMQRadar._insert_domains() took: {time.time() - start} seconds"
+                )
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._insert_domains(): {str(e)}")
+            transaction.rollback()
+
+    def _transform_event_collectors(self, data):
+        """
+        Transforms the list of event collectors from the IBM QRadar endpoint into a list of dictionaries.
+
+        :param data: A list of dictionaries containing event collector information.
+        :return: A list of dictionaries containing the transformed event collector information.
+        """
+        df = pd.DataFrame(data=data)
+        df = df[["id", "name", "host_id", "component_name"]]
+        df.dropna(subset=["id", "name"], inplace=True)
+        df = df[df["name"].str.strip() != ""]
+        df.rename(columns={"id": "db_id"}, inplace=True)
+        return df.to_dict(orient="records")
+
+    def _insert_event_collectors(self, data):
+        """
+        Inserts or updates event collector records in the IBMQradarEventCollector table.
+
+        :param data: A list of dictionaries containing event collector information.
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._insert_event_collectors() started: {start}")
+        records = [IBMQradarEventCollector(**item) for item in data]
+        logger.info(f"Inserting event collector records: {len(records)}")
+        try:
+            with transaction.atomic():
+                IBMQradarEventCollector.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=["name", "host_id", "component_name"],
+                    unique_fields=["id"],
+                )
+            logger.info(f"Inserted event collector records: {len(records)}")
+            logger.success(
+                f"IBMQRadar._insert_event_collectors() took: {time.time() - start} seconds"
+            )
+        except Exception as e:
+            logger.error(
+                f"An error occurred in IBMQradar._insert_event_collectors(): {str(e)}"
+            )
+            transaction.rollback()
