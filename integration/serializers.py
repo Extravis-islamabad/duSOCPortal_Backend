@@ -147,8 +147,8 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "status",
-            "modified_by_id",  # Renamed from 'admin'
-            "modified_by",  # New field for admin.username
+            "modified_by_id",
+            "modified_by",
             "integration_type",
             "integration_type_text",
             "siem_subtype",
@@ -159,8 +159,8 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
             "itsm_subtype_text",
             "instance_name",
             "credentials",
-            "created_at",  # Added
-            "updated_at",  # Added
+            "created_at",
+            "updated_at",
         ]
 
     def get_integration_type_text(self, obj):
