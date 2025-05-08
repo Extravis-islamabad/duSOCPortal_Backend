@@ -15,6 +15,23 @@ class DuIbmQradarTenants(models.Model):
         return self.name
 
 
+from django.db import models
+
+
+class IBMQradarEventCollector(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=255, blank=True, default="")
+    host_id = models.IntegerField()
+    component_name = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        db_table = "IBMQradarEventCollector"
+
+    def __str__(self):
+        return self.name
+
+
 class Tenant(models.Model):
     tenant = models.OneToOneField(
         User, on_delete=models.SET_NULL, null=True, related_name="tenant_profile"
