@@ -57,7 +57,12 @@ INSTALLED_APPS = [
     "channels",
 ]
 
-INSTALLED_APPS += ["authentication", "tenant", "tenantadmin", "integration"]
+INSTALLED_APPS += [
+    "authentication",
+    "tenant",
+    "tenantadmin",
+    "integration",
+]
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
