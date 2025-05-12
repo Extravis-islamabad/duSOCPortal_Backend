@@ -39,10 +39,30 @@ class IBMQradar:
         self.base_url = self.get_base_url()
 
     def __enter__(self):
+        """
+        Enter the runtime context related to this object.
+
+        This method logs the entry into the IBM QRadar context using the
+        provided username and prepares the object for use with a context
+        manager (e.g., with statement).
+
+        :return: Returns self after logging the entry.
+        """
+
         logger.info(f"Logging into IBM QRadar with username: {self.username}")
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Exit the runtime context related to this object.
+
+        This method logs the exit from the IBM QRadar context and
+        performs any necessary cleanup.
+
+        :param exc_type: The type of exception thrown, if any.
+        :param exc_value: The value of the exception thrown, if any.
+        :param traceback: The traceback of the exception thrown, if any.
+        """
         logger.info("Logging out of IBM QRadar")
 
     def get_base_url(self):

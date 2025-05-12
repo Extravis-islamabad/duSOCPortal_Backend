@@ -10,7 +10,18 @@ from common.modules.ibm_qradar import IBMQradar
 def sync_qradar_tenants(
     username: str, password: str, ip_address: str, port: int, integration_id: int
 ):
-    """"""
+    """
+    Syncs the QRadar tenants with the database.
+
+    This task fetches the domains (tenants) from the IBM QRadar instance and
+    inserts them into the database.
+
+    :param username: The username to use when logging into the QRadar.
+    :param password: The password to use when logging into the QRadar.
+    :param ip_address: The IP address of the QRadar instance.
+    :param port: The port to use when connecting to the QRadar instance.
+    :param integration_id: The ID of the integration for which to sync the tenants.
+    """
     start = time.time()
     logger.info("Running QRadarTasks.sync_qradar_tenants() task")
     try:
@@ -46,6 +57,16 @@ def sync_qradar_tenants(
 def sync_event_collectors(
     username: str, password: str, ip_address: str, port: str, integration_id: int
 ):
+    """
+    Syncs the event collectors for a given QRadar integration.
+
+    :param username: The username to use when logging into the QRadar.
+    :param password: The password to use when logging into the QRadar.
+    :param ip_address: The IP address of the QRadar instance.
+    :param port: The port to use when connecting to the QRadar instance.
+    :param integration_id: The ID of the integration for which to sync the event collectors.
+    """
+
     start = time.time()
     logger.info("Running QRadarTasks.sync_event_collectors() task")
     try:

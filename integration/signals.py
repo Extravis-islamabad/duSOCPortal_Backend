@@ -17,14 +17,17 @@ from .models import (
 def trigger_integration_tasks(
     sender, instance: IntegrationCredentials, created, **kwargs
 ):
+    """
+    Trigger IBM QRadar integration tasks when a new IntegrationCredentials object is created.
+    If the integration type is SIEM and subtype is IBM QRadar, trigger the tasks to sync
+    tenants and event collectors.
+    """
     if created:
         if instance.integration.integration_type == IntegrationTypes.SIEM_INTEGRATION:
             if instance.integration.siem_subtype == SiemSubTypes.IBM_QRADAR:
                 if instance.credential_type == CredentialTypes.USERNAME_PASSWORD:
                     username = instance.username
-                    password = getattr(
-                        instance, "_plaintext_password", None
-                    )  # Get plaintext password
+                    password = getattr(instance, "_plaintext_password", None)
                     ip_address = instance.ip_address
                     port = instance.port
 
