@@ -11,6 +11,20 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
 && rm -rf /var/lib/apt/lists/*
 
+
+# FOR THE LDAPs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    libldap2-dev \
+    libsasl2-dev \
+    slapd \
+    ldap-utils \
+    tox \
+    lcov \
+    valgrind \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy the requirements.txt into the container
 COPY requirements.txt /app/
 
