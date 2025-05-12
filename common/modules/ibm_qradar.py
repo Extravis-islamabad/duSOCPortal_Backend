@@ -245,7 +245,7 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar.__get_event_logs(): {str(e)}")
 
-    def _transform_domains(self, data):
+    def _transform_domains(self, data, integration_id):
         """
         Transforms the list of domains from the IBM QRadar endpoint into a DataFrame, removes
         any rows with missing or empty names, renames the "id" column to "db_id", and returns
@@ -259,6 +259,7 @@ class IBMQradar:
         df.dropna(subset=["name"], inplace=True)
         df = df[df["name"].str.strip() != ""]
         df = df[["db_id", "name"]]
+        df["integration_id"] = integration_id
         data = df.to_dict(orient="records")
 
         return data
@@ -289,7 +290,7 @@ class IBMQradar:
             logger.error(f"An error occurred in IBMQradar._insert_domains(): {str(e)}")
             transaction.rollback()
 
-    def _transform_event_collectors(self, data):
+    def _transform_event_collectors(self, data, integration_id):
         """
         Transforms the list of event collectors from the IBM QRadar endpoint into a list of dictionaries.
 
@@ -301,6 +302,7 @@ class IBMQradar:
         df.dropna(subset=["id", "name"], inplace=True)
         df = df[df["name"].str.strip() != ""]
         df.rename(columns={"id": "db_id"}, inplace=True)
+        df["integration_id"] = integration_id
         return df.to_dict(orient="records")
 
     def _insert_event_collectors(self, data):
