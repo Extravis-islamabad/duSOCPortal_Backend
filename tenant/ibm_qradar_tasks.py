@@ -7,23 +7,26 @@ from common.modules.ibm_qradar import IBMQradar
 
 
 @shared_task
-def sync_qradar_tenants(username, password):
-    """
-    Celery task to fetch QRadar tenants data from an endpoint every 30 minutes
-    and sync it into the du_ibm_qradar_tenants table using IBMQRadar's _insert_domains method.
-    """
+def sync_qradar_tenants(
+    username: str, password: str, ip_address: str, port: int, integration_id: int
+):
+    """"""
     start = time.time()
     logger.info("Running QRadarTasks.sync_qradar_tenants() task")
     try:
         # Fetch data from the endpoint and transform it
-        with IBMQradar(username=username, password=password) as ibm_qradar:
+        with IBMQradar(
+            username=username, password=password, ip_address=ip_address, port=port
+        ) as ibm_qradar:
             data = ibm_qradar._get_domains()
             if data is None:
                 logger.error("No data returned from IBM QRadar domains endpoint")
                 return
 
             # Transform the data into the required format
-            transformed_data = ibm_qradar._transform_domains(data)
+            transformed_data = ibm_qradar._transform_domains(
+                data, integration_id=integration_id
+            )
 
         if not isinstance(transformed_data, list):
             logger.error("Invalid data format: Expected a list")
@@ -40,11 +43,15 @@ def sync_qradar_tenants(username, password):
 
 
 @shared_task
-def sync_event_collectors(username, password):
+def sync_event_collectors(
+    username: str, password: str, ip_address: str, port: str, integration_id: int
+):
     start = time.time()
     logger.info("Running QRadarTasks.sync_event_collectors() task")
     try:
-        with IBMQradar(username=username, password=password) as ibm_qradar:
+        with IBMQradar(
+            username=username, password=password, ip_address=ip_address, port=port
+        ) as ibm_qradar:
             data = ibm_qradar._get_event_collectors()
             if data is None:
                 logger.error(
@@ -52,7 +59,9 @@ def sync_event_collectors(username, password):
                 )
                 return
 
-            transformed_data = ibm_qradar._transform_event_collectors(data)
+            transformed_data = ibm_qradar._transform_event_collectors(
+                data, integration_id=integration_id
+            )
 
         if not isinstance(transformed_data, list):
             logger.error("Invalid data format: Expected a list")
