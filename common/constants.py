@@ -100,21 +100,13 @@ class RabbitmqConstants:
 
 
 class IBMQradarConstants:
-    IBM_QRADAR_USERNAME = os.getenv("IBM_QRADAR_USERNAME", None)
-    IBM_QRADAR_PASSWORD = os.getenv("IBM_QRADAR_PASSWORD", None)
-    IBM_BASE_URL = os.getenv("IBM_BASE_URL", None)
-    IBM_TEST_ENDPOINT = "api/system/about"
-    IBM_TENANT_ENDPOINT = f"{IBM_BASE_URL}/api/config/access/tenant_management/tenants"
-    IBM_DOMAIN_ENDPOINT = f"{IBM_BASE_URL}/api/config/domain_management/domains"
-    IBM_EVENT_COLLECTOR_ENDPOINT = (
-        f"{IBM_BASE_URL}/api/config/event_sources/event_collectors"
-    )
+    IBM_ABOUT_ENDPOINT = "api/system/about"
+    IBM_TENANT_ENDPOINT = "api/config/access/tenant_management/tenants"
+    IBM_DOMAIN_ENDPOINT = "api/config/domain_management/domains"
+    IBM_EVENT_COLLECTOR_ENDPOINT = "api/config/event_sources/event_collectors"
     IBM_EVENT_LOGS_ENDPOINT = (
-        f"{IBM_BASE_URL}/api/config/event_sources/log_source_management/log_sources"
+        "api/config/event_sources/log_source_management/log_sources"
     )
-    if IBM_QRADAR_USERNAME is None or IBM_QRADAR_PASSWORD is None:
-        logger.warning("IBM QRadar credentials are not set...")
-        raise ValueError("IBM QRadar credentials are not set...")
 
 
 class AdminWebsocketConstants:
