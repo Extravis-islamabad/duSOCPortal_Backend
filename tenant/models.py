@@ -7,7 +7,14 @@ from integration.models import Integration
 class DuIbmQradarTenants(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)
-    name = models.CharField(max_length=255, blank=True, default="")
+    name = models.CharField(max_length=255, blank=True, default=None)
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_tenants",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         db_table = "du_ibm_qradar_tenants"
@@ -19,9 +26,16 @@ class DuIbmQradarTenants(models.Model):
 class IBMQradarEventCollector(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)
-    name = models.CharField(max_length=255, blank=True, default="")
+    name = models.CharField(max_length=255, blank=True, default=None)
     host_id = models.IntegerField()
-    component_name = models.CharField(max_length=255, blank=True, default="")
+    component_name = models.CharField(max_length=255, blank=True, default=None)
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="ibm_qradar_event_collectors",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         db_table = "du_ibm_qradar_event_collector"
