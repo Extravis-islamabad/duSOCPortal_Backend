@@ -13,7 +13,6 @@ from integration.serializers import (
     IntegrationSerializer,
     TestCredentialSerializer,
 )
-from tenant.ibm_qradar_tasks import sync_event_collectors, sync_qradar_tenants
 
 from .models import (
     CredentialTypes,
@@ -87,10 +86,6 @@ class IntegrationCreateAPIView(APIView):
         serializer = IntegrationSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(admin=request.user)
-            username = request.data["credentials"]["username"]
-            password = request.data["credentials"]["password"]
-            sync_qradar_tenants.delay(username=username, password=password)
-            sync_event_collectors.delay(username=username, password=password)
             return Response(
                 {"message": "Integration created successfully"},
                 status=status.HTTP_201_CREATED,
