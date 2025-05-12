@@ -11,7 +11,7 @@ from tenant.models import DuIbmQradarTenants, IBMQradarEventCollector
 
 
 class IBMQradar:
-    def __init__(self, username: str, password: str):
+    def __init__(self, username: str, password: str, ip_address: str, port: int):
         """
         Constructor for IBMQRadar class.
 
@@ -21,9 +21,22 @@ class IBMQradar:
         """
         self.username = username
         self.password = password
-        if not self.username or not self.password:
-            logger.error("IBM QRadar both username and password are required")
-            raise ValueError("Both username and password are required")
+        self.ip_address = ip_address
+        self.port = port
+        if (
+            not self.username
+            or not self.password
+            or not self.ip_address
+            or not self.port
+        ):
+            logger.error(
+                "IBM QRadar both username, password ip_address and port are required"
+            )
+            raise ValueError(
+                "Both username, password, ip_address and port are required"
+            )
+
+        self.base_url = self.get_base_url()
 
     def __enter__(self):
         logger.info(f"Logging into IBM QRadar with username: {self.username}")
@@ -32,14 +45,35 @@ class IBMQradar:
     def __exit__(self, exc_type, exc_value, traceback):
         logger.info("Logging out of IBM QRadar")
 
-    def test_integration(self, ip_address: str, port: int):
+    def get_base_url(self):
+        """
+        Return the base URL of the IBM QRadar instance.
+
+        :param ip_address: The IP address of the IBM QRadar instance.
+        :param port: The port number of the IBM QRadar instance.
+        :return: The base URL of the IBM QRadar instance.
+        """
+        if self.port != 80:
+            return f"https://{self.ip_address}:{self.port}"
+        return f"https://{self.ip_address}"
+
+    def test_integration(self):
+        """
+        Tests the integration with the IBM QRadar instance.
+
+        This method sends an HTTP GET request to the IBM QRadar 'about' API endpoint
+        using the credentials and base URL set in the IBMQradar class. It uses HTTP basic
+        authentication. If the request is successful, it returns the parsed JSON response.
+        If the request fails or an exception occurs, it logs an error and returns False or
+        an empty list.
+
+        :return: A dictionary containing 'about' information from the QRadar instance if
+                the request is successful, otherwise False or an empty list.
+        :raises: Logs any exceptions that occur during the request.
+        """
+
         start = time.time()
-        if port == 80:
-            endpoint = f"https://{ip_address}/{IBMQradarConstants.IBM_TEST_ENDPOINT}"
-        else:
-            endpoint = (
-                f"https://{ip_address}:{port}/{IBMQradarConstants.IBM_TEST_ENDPOINT}"
-            )
+        endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_ABOUT_ENDPOINT}"
         try:
             response = requests.get(
                 endpoint,
@@ -76,12 +110,13 @@ class IBMQradar:
         :raises: Logs any exceptions that occur during the request.
         """
         start = time.time()
+        endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_TENANT_ENDPOINT}"
         try:
             response = requests.get(
-                IBMQradarConstants.IBM_TENANT_ENDPOINT,
+                endpoint,
                 auth=HTTPBasicAuth(
-                    IBMQradarConstants.IBM_QRADAR_USERNAME,
-                    IBMQradarConstants.IBM_QRADAR_PASSWORD,
+                    self.username,
+                    self.password,
                 ),
                 verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
                 timeout=10,
@@ -112,12 +147,13 @@ class IBMQradar:
         :raises: Logs any exceptions that occur during the request.
         """
         start = time.time()
+        endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_DOMAIN_ENDPOINT}"
         try:
             response = requests.get(
-                IBMQradarConstants.IBM_DOMAIN_ENDPOINT,
+                endpoint,
                 auth=HTTPBasicAuth(
-                    IBMQradarConstants.IBM_QRADAR_USERNAME,
-                    IBMQradarConstants.IBM_QRADAR_PASSWORD,
+                    self.username,
+                    self.password,
                 ),
                 verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
                 timeout=10,
@@ -148,12 +184,13 @@ class IBMQradar:
         :raises: Logs any exceptions that occur during the request.
         """
         start = time.time()
+        endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_EVENT_COLLECTOR_ENDPOINT}"
         try:
             response = requests.get(
-                IBMQradarConstants.IBM_EVENT_COLLECTOR_ENDPOINT,
+                endpoint,
                 auth=HTTPBasicAuth(
-                    IBMQradarConstants.IBM_QRADAR_USERNAME,
-                    IBMQradarConstants.IBM_QRADAR_PASSWORD,
+                    self.username,
+                    self.password,
                 ),
                 verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
                 timeout=10,
@@ -186,12 +223,13 @@ class IBMQradar:
         :raises: Logs any exceptions that occur during the request.
         """
         start = time.time()
+        endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_EVENT_LOGS_ENDPOINT}"
         try:
             response = requests.get(
-                IBMQradarConstants.IBM_EVENT_LOGS_ENDPOINT,
+                endpoint,
                 auth=HTTPBasicAuth(
-                    IBMQradarConstants.IBM_QRADAR_USERNAME,
-                    IBMQradarConstants.IBM_QRADAR_PASSWORD,
+                    self.username,
+                    self.password,
                 ),
                 verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
                 timeout=10,
