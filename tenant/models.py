@@ -37,17 +37,17 @@ class Tenant(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="created_tenants"
     )
-    integration = models.ForeignKey(Integration, on_delete=models.SET_NULL, null=True)
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE, null=True)
     qradar_tenant = models.ForeignKey(
         DuIbmQradarTenants,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="tenants",
     )
     event_collector = models.ForeignKey(
         IBMQradarEventCollector,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name="tenants",
