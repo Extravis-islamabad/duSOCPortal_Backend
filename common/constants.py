@@ -44,6 +44,7 @@ class SSLConstants:
         VERIFY = True
     else:
         VERIFY = False
+    TIMEOUT = 10
 
 
 class AllowedOriginsConstants:
@@ -107,6 +108,10 @@ class IBMQradarConstants:
     IBM_EVENT_LOGS_ENDPOINT = (
         "api/config/event_sources/log_source_management/log_sources"
     )
+
+
+class ITSMConstants:
+    ITSM_ACCOUNTS_ENDPOINT = "api/v3/accounts"
 
 
 class AdminWebsocketConstants:

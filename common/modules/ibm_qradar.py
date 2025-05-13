@@ -102,14 +102,17 @@ class IBMQradar:
                     self.password,
                 ),
                 verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=10,
+                timeout=SSLConstants.TIMEOUT,
             )
             if response.status_code != 200:
+                logger.warning(
+                    f"IBMQRadar.test_integration() return the status code {response.status_code}"
+                )
                 return False
+            data = response.json()
             logger.success(
                 f"IBMQRadar.test_integration() took: {time.time() - start} seconds"
             )
-            data = response.json()
             return data
 
         except Exception as e:
@@ -139,9 +142,12 @@ class IBMQradar:
                     self.password,
                 ),
                 verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=10,
+                timeout=SSLConstants.TIMEOUT,
             )
             if response.status_code != 200:
+                logger.warning(
+                    f"IBMQRadar._get_tenants() return the status code {response.status_code}"
+                )
                 return
 
             tenants = response.json()
@@ -176,9 +182,12 @@ class IBMQradar:
                     self.password,
                 ),
                 verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=10,
+                timeout=SSLConstants.TIMEOUT,
             )
             if response.status_code != 200:
+                logger.warning(
+                    f"IBMQRadar._get_domains() return the status code {response.status_code}"
+                )
                 return
 
             domains = response.json()
@@ -213,9 +222,12 @@ class IBMQradar:
                     self.password,
                 ),
                 verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=10,
+                timeout=SSLConstants.TIMEOUT,
             )
             if response.status_code != 200:
+                logger.warning(
+                    f"IBMQRadar._get_event_collectors() return the status code {response.status_code}"
+                )
                 return
 
             event_collectors = response.json()
@@ -252,9 +264,12 @@ class IBMQradar:
                     self.password,
                 ),
                 verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=10,
+                timeout=SSLConstants.TIMEOUT,
             )
             if response.status_code != 200:
+                logger.warning(
+                    f"IBMQRadar._get_event_logs() return the status code {response.status_code}"
+                )
                 return
             logs = response.json()
             logger.success(
