@@ -1,0 +1,309 @@
+{
+    "response_status": [
+        {
+            "status_code": 2000,
+            "status": "success"
+        }
+    ],
+    "list_info": {
+        "has_more_rows": false,
+        "start_index": 1,
+        "sort_field": "name",
+        "sort_order": "asc",
+        "row_count": 73
+    },
+    "accounts": [
+        {
+            "name": "3M",
+            "id": "22803"
+        },
+        {
+            "name": "ADNOC_Azure",
+            "id": "40503"
+        },
+        {
+            "name": "ADT- DRaaS",
+            "id": "28201"
+        },
+        {
+            "name": "AlCatel Lucent",
+            "id": "40217"
+        },
+        {
+            "name": "AlFattan",
+            "id": "1801"
+        },
+        {
+            "name": "BOT",
+            "id": "18603"
+        },
+        {
+            "name": "BPAAS - test",
+            "id": "21901"
+        },
+        {
+            "name": "CDC_PerformanceMonitoring",
+            "id": "29404"
+        },
+        {
+            "name": "CDC-MEY-ADGM",
+            "id": "27003"
+        },
+        {
+            "name": "CDC-Mey-ADNOC",
+            "id": "36905"
+        },
+        {
+            "name": "CDC-Mey-AEP",
+            "id": "37201"
+        },
+        {
+            "name": "CDC-Mey-DW",
+            "id": "34201"
+        },
+        {
+            "name": "CDC-Mey-DWHouse",
+            "id": "40201"
+        },
+        {
+            "name": "CDC-Mey-EMFA",
+            "id": "36607"
+        },
+        {
+            "name": "CDC-Mey-Tabreed",
+            "id": "28203"
+        },
+        {
+            "name": "DefaultAcccountTest",
+            "id": "21601"
+        },
+        {
+            "name": "-do not use-",
+            "id": "3901"
+        },
+        {
+            "name": "DROOR",
+            "id": "18605"
+        },
+        {
+            "name": "du Telecom",
+            "id": "1"
+        },
+        {
+            "name": "DU-CDC",
+            "id": "25803"
+        },
+        {
+            "name": "Elister_Technologies",
+            "id": "40507"
+        },
+        {
+            "name": "EM Credit",
+            "id": "40221"
+        },
+        {
+            "name": "ICT - Du EMR Clinics",
+            "id": "37811"
+        },
+        {
+            "name": "ICT-SDP Contracts",
+            "id": "35401"
+        },
+        {
+            "name": "Imperium-Avaya-Partner",
+            "id": "26105"
+        },
+        {
+            "name": "Liberty Steel Group",
+            "id": "40215"
+        },
+        {
+            "name": "masdar-adgm",
+            "id": "19801"
+        },
+        {
+            "name": "masdar-adnoc",
+            "id": "7503"
+        },
+        {
+            "name": "Masdar-DigitalWallet",
+            "id": "35103"
+        },
+        {
+            "name": "masdar-eda",
+            "id": "14705"
+        },
+        {
+            "name": "masdar-imdaad",
+            "id": "9901"
+        },
+        {
+            "name": "masdar-msplatform",
+            "id": "11"
+        },
+        {
+            "name": "masdar-mubadala",
+            "id": "8101"
+        },
+        {
+            "name": "Masdar-ZHO",
+            "id": "35410"
+        },
+        {
+            "name": "MDM ADF",
+            "id": "22811"
+        },
+        {
+            "name": "MDM ADT",
+            "id": "22819"
+        },
+        {
+            "name": "MDM Gargash",
+            "id": "22817"
+        },
+        {
+            "name": "MDM-DUTCO",
+            "id": "22813"
+        },
+        {
+            "name": "MDM-UAB",
+            "id": "22815"
+        },
+        {
+            "name": "Meydan- Alcatel Lucent Enterprise",
+            "id": "32701"
+        },
+        {
+            "name": "meydan_ecg",
+            "id": "14401"
+        },
+        {
+            "name": "meydan-almadina",
+            "id": "12601"
+        },
+        {
+            "name": "meydan-Avaya_Imperium",
+            "id": "10801"
+        },
+        {
+            "name": "Meydan-DigitalWallet",
+            "id": "35101"
+        },
+        {
+            "name": "meydan-dmcc",
+            "id": "13201"
+        },
+        {
+            "name": "Meydan-Faraidooni",
+            "id": "35404"
+        },
+        {
+            "name": "meydan-fewa",
+            "id": "14103"
+        },
+        {
+            "name": "meydan-mbme",
+            "id": "12003"
+        },
+        {
+            "name": "meydan-otb",
+            "id": "14703"
+        },
+        {
+            "name": "meydan-tabreed",
+            "id": "15901"
+        },
+        {
+            "name": "Meydan-University of Dubai",
+            "id": "26703"
+        },
+        {
+            "name": "Meydan-ZHO",
+            "id": "35408"
+        },
+        {
+            "name": "MEY-MAS-MOALAJAH",
+            "id": "20401"
+        },
+        {
+            "name": "Mey-ReelShipping",
+            "id": "26401"
+        },
+        {
+            "name": "NBI Operations",
+            "id": "28501"
+        },
+        {
+            "name": "PURE CS IT INFRASTRUCTURE LLC",
+            "id": "40219"
+        },
+        {
+            "name": "ravi_test",
+            "id": "39602"
+        },
+        {
+            "name": "SIEM-ADMC",
+            "id": "22809"
+        },
+        {
+            "name": "SIEM-AFZ",
+            "id": "22805"
+        },
+        {
+            "name": "SIEM-RAKEZ",
+            "id": "22807"
+        },
+        {
+            "name": "SIKA",
+            "id": "18601"
+        },
+        {
+            "name": "Smart City - AMAF",
+            "id": "38402"
+        },
+        {
+            "name": "Smart City - DAW",
+            "id": "40207"
+        },
+        {
+            "name": "Smart City - DDA",
+            "id": "38416"
+        },
+        {
+            "name": "Smart City - DFZC",
+            "id": "40211"
+        },
+        {
+            "name": "Smart City - DMHRC",
+            "id": "40209"
+        },
+        {
+            "name": "Smart City - Dubai Pulse",
+            "id": "37803"
+        },
+        {
+            "name": "Smart City - FAA",
+            "id": "40223"
+        },
+        {
+            "name": "Smart City - HHPO",
+            "id": "40213"
+        },
+        {
+            "name": "Smart City - IACAD",
+            "id": "39301"
+        },
+        {
+            "name": "Smart City - IID",
+            "id": "37805"
+        },
+        {
+            "name": "Smart City - SIEM-CDA",
+            "id": "22801"
+        },
+        {
+            "name": "Smart City - UAE Falcon",
+            "id": "40203"
+        }
+    ]
+}

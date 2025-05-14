@@ -1,4 +1,5 @@
 import json
+import os
 import time
 
 import pandas as pd
@@ -64,6 +65,28 @@ class ITSM:
         if self.port != 80:
             return f"https://{self.ip_address}:{self.port}"
         return f"https://{self.ip_address}"
+
+    def _get_accounts_test(self):
+        """
+        Fetches the list of accounts from the ITSM instance.
+
+        This method sends an HTTP GET request to the ITSM accounts API endpoint
+        to retrieve the list of accounts. It uses HTTP basic authentication with the credentials
+        set in the ITSMConstants. If the request is successful, it returns the parsed JSON
+        response. If the request fails or an exception occurs, it logs an error and returns an
+        empty list.
+
+        :return: A list of accounts if the request is successful, otherwise an empty list.
+        :raises: Logs any exceptions that occur during the request.
+        """
+        start = time.time()
+        logger.info(f"ITSM._get_accounts() started : {start}")
+        file_path = f"{os.getcwd()}/itsm_data.json"
+        with open(file_path, "r") as f:
+            data = json.load(f)
+        accounts = data.get("accounts", [])
+        logger.info(f"ITSM._get_accounts() took: {time.time() - start} seconds")
+        return accounts
 
     def _get_accounts(self):
         """

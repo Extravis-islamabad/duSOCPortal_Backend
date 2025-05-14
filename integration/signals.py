@@ -3,11 +3,8 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from tenant.ibm_qradar_tasks import (
-    sync_event_collectors,
-    sync_itsm_tenants,
-    sync_qradar_tenants,
-)
+from tenant.ibm_qradar_tasks import sync_event_collectors, sync_qradar_tenants
+from tenant.itsm_tasks import sync_itsm_tenants_test
 
 from .models import (
     CredentialTypes,
@@ -46,16 +43,16 @@ def trigger_integration_tasks(
                     sync_qradar_tenants.delay(**kwargs)
                     sync_event_collectors.delay(**kwargs)
 
-    elif instance.integration.integration_type == IntegrationTypes.ITSM_INTEGRATION:
-        if instance.integration.itsm_subtype == ItsmSubTypes.MANAGE_ENGINE:
-            if instance.credential_type == CredentialTypes.API_KEY:
-                ip_address = instance.ip_address
-                port = instance.port
-                token = instance.api_key
-                kwargs = {
-                    "auth_token": token,
-                    "ip_address": ip_address,
-                    "port": port,
-                    "integration_id": instance.integration.id,
-                }
-                sync_itsm_tenants(**kwargs)
+        elif instance.integration.integration_type == IntegrationTypes.ITSM_INTEGRATION:
+            if instance.integration.itsm_subtype == ItsmSubTypes.MANAGE_ENGINE:
+                if instance.credential_type == CredentialTypes.API_KEY:
+                    ip_address = instance.ip_address
+                    port = instance.port
+                    token = instance.api_key
+                    kwargs = {
+                        "auth_token": token,
+                        "ip_address": ip_address,
+                        "port": port,
+                        "integration_id": instance.integration.id,
+                    }
+                    sync_itsm_tenants_test.delay(**kwargs)

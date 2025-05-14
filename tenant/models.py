@@ -56,6 +56,12 @@ class DuITSMTenants(models.Model):
         blank=True,
     )
 
+    class Meta:
+        db_table = "du_itsm_tenants"
+
+    def __str__(self):
+        return self.name
+
 
 class Tenant(models.Model):
     tenant = models.OneToOneField(
