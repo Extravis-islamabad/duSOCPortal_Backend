@@ -24,7 +24,7 @@ class SoarSubTypes(models.IntegerChoices):
 
 
 class ItsmSubTypes(models.IntegerChoices):
-    JIRA = 1, "Jira"
+    MANAGE_ENGINE = 1, "M.E ServiceDesk Plus MSP"
     ZENDESK = 2, "Zendesk"
     OTHER = 3, "Other"
 
