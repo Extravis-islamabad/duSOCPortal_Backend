@@ -44,6 +44,19 @@ class IBMQradarEventCollector(models.Model):
         return self.name
 
 
+class DuITSMTenants(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=255, blank=True, default=None)
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_itsm_tenants",
+        null=True,
+        blank=True,
+    )
+
+
 class Tenant(models.Model):
     tenant = models.OneToOneField(
         User, on_delete=models.SET_NULL, null=True, related_name="tenant_profile"

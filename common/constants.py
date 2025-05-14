@@ -111,6 +111,10 @@ class IBMQradarConstants:
 
 
 class ITSMConstants:
+    ITSM_START_INDEX = 1
+    ITSM_ROW_COUNT = 1000
+    STATUS_CODE = 2000
+    SUCCESS = "success"
     ITSM_ACCOUNTS_ENDPOINT = "api/v3/accounts"
 
 
