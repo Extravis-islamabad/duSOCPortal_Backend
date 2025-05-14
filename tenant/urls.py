@@ -2,6 +2,7 @@ from django.urls import path
 
 from tenant.views import (
     DuIbmQradarTenantsListView,
+    DuITSMTenantsListView,
     EventCollectorsListAPIView,
     PermissionChoicesAPIView,
     TenantAPIView,
@@ -19,5 +20,10 @@ urlpatterns = [
         "get_event_collecors/",
         EventCollectorsListAPIView.as_view(),
         name="get-event-collectors",
+    ),
+    path(
+        "get_itsm_tenants/",
+        DuITSMTenantsListView.as_view(),
+        name="get-itsm-tenants",
     ),
 ]

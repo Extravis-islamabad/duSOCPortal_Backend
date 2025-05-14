@@ -8,6 +8,7 @@ from integration.models import Integration
 
 from .models import (
     DuIbmQradarTenants,
+    DuITSMTenants,
     IBMQradarEventCollector,
     Tenant,
     TenantPermissionChoices,
@@ -522,3 +523,11 @@ class IBMQradarEventCollectorSerializer(serializers.Serializer):
     class Meta:
         model = IBMQradarEventCollector
         fields = ["event_collector_id", "name", "host_id", "component_name"]
+
+
+class DuITSMTenantsSerializer(serializers.ModelSerializer):
+    itsm_tenant_id = serializers.IntegerField(source="id", read_only=True)
+
+    class Meta:
+        model = DuITSMTenants
+        fields = ["itsm_tenant_id", "name"]

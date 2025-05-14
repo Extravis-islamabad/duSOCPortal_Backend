@@ -9,6 +9,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from authentication.permissions import IsAdminUser, IsTenant
 from tenant.models import (
     DuIbmQradarTenants,
+    DuITSMTenants,
     IBMQradarEventCollector,
     Tenant,
     TenantPermissionChoices,
@@ -16,6 +17,7 @@ from tenant.models import (
 )
 from tenant.serializers import (
     DuIbmQradarTenantsSerializer,
+    DuITSMTenantsSerializer,
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
 )
@@ -126,3 +128,13 @@ class EventCollectorsListAPIView(APIView):
                 {"error": f"Failed to retrieve event collectors: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class DuITSMTenantsListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        tenants = DuITSMTenants.objects.all()
+        serializer = DuITSMTenantsSerializer(tenants, many=True)
+        return Response(serializer.data)
