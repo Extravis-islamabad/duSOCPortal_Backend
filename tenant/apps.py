@@ -6,4 +6,4 @@ class TenantConfig(AppConfig):
     name = "tenant"
 
     def ready(self):
-        pass
+        import tenant.signals

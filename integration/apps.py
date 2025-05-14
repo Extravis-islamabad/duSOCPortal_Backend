@@ -6,4 +6,4 @@ class IntegrationConfig(AppConfig):
     name = "integration"
 
     def ready(self):
-        pass
+        import integration.signals

@@ -7,6 +7,7 @@ extend-ignore =
     B105, # B105 hardcoded password string
     B608, # B608 hardcoded_sql_expressions
     E712, # comparison to True should be 'if cond is True:' or 'if cond:'
+    F401, # imported but unused
 exclude =
     .git,
     _pycache_,
