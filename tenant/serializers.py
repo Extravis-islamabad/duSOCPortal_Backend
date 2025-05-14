@@ -507,11 +507,9 @@ class TenantCreateSerializer(serializers.ModelSerializer):
 
 
 class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
-    qradar_tenant_id = serializers.IntegerField(source="id", read_only=True)
-
     class Meta:
         model = DuIbmQradarTenants
-        fields = ["qradar_tenant_id", "name"]
+        fields = ["id", "name"]
 
 
 class IBMQradarEventCollectorSerializer(serializers.Serializer):
@@ -526,8 +524,6 @@ class IBMQradarEventCollectorSerializer(serializers.Serializer):
 
 
 class DuITSMTenantsSerializer(serializers.ModelSerializer):
-    itsm_tenant_id = serializers.IntegerField(source="id", read_only=True)
-
     class Meta:
         model = DuITSMTenants
-        fields = ["itsm_tenant_id", "name"]
+        fields = ["id", "name"]
