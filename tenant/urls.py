@@ -1,6 +1,7 @@
 from django.urls import path
 
 from tenant.views import (
+    DuCortexSOARTenantsListView,
     DuIbmQradarTenantsListView,
     DuITSMTenantsListView,
     EventCollectorsListAPIView,
@@ -25,5 +26,10 @@ urlpatterns = [
         "get_itsm_tenants/",
         DuITSMTenantsListView.as_view(),
         name="get-itsm-tenants",
+    ),
+    path(
+        "get_cortex_soar_tenants/",
+        DuCortexSOARTenantsListView.as_view(),
+        name="get-cortex-soar-tenants",
     ),
 ]

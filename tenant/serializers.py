@@ -7,6 +7,7 @@ from authentication.models import User
 from integration.models import Integration
 
 from .models import (
+    DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMTenants,
     IBMQradarEventCollector,
@@ -469,4 +470,10 @@ class IBMQradarEventCollectorSerializer(serializers.Serializer):
 class DuITSMTenantsSerializer(serializers.ModelSerializer):
     class Meta:
         model = DuITSMTenants
+        fields = ["id", "name"]
+
+
+class DuCortexSOARTenantsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DuCortexSOARTenants
         fields = ["id", "name"]

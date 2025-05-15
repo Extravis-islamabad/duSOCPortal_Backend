@@ -8,6 +8,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
 from tenant.models import (
+    DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMTenants,
     IBMQradarEventCollector,
@@ -16,6 +17,7 @@ from tenant.models import (
     TenantRole,
 )
 from tenant.serializers import (
+    DuCortexSOARTenantsSerializer,
     DuIbmQradarTenantsSerializer,
     DuITSMTenantsSerializer,
     IBMQradarEventCollectorSerializer,
@@ -137,4 +139,14 @@ class DuITSMTenantsListView(APIView):
     def get(self, request):
         tenants = DuITSMTenants.objects.all()
         serializer = DuITSMTenantsSerializer(tenants, many=True)
+        return Response(serializer.data)
+
+
+class DuCortexSOARTenantsListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        tenants = DuCortexSOARTenants.objects.all()
+        serializer = DuCortexSOARTenantsSerializer(tenants, many=True)
         return Response(serializer.data)
