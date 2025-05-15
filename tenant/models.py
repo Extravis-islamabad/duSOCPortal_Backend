@@ -63,6 +63,25 @@ class DuITSMTenants(models.Model):
         return self.name
 
 
+class DuSOARTenants(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=255, blank=True, default=None)
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_soar_tenants",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "du_soar_tenants"
+
+    def __str__(self):
+        return self.name
+
+
 class Tenant(models.Model):
     tenant = models.ForeignKey(User, on_delete=models.CASCADE)
     created_by = models.ForeignKey(
