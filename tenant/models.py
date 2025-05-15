@@ -90,8 +90,8 @@ class Tenant(models.Model):
     qradar_tenants = models.ManyToManyField(DuIbmQradarTenants, blank=True)
     event_collectors = models.ManyToManyField(IBMQradarEventCollector, blank=True)
     integrations = models.ManyToManyField(Integration, blank=True)
-    itsm_tenants = models.ManyToManyField(DuITSMTenants, blank=True)  # New field
-    is_itsm_tenant = models.BooleanField(default=False)
+    itsm_tenants = models.ManyToManyField(DuITSMTenants, blank=True)
+    soar_tenants = models.ManyToManyField(DuCortexSOARTenants, blank=True)
     phone_number = models.CharField(max_length=20, blank=True)
     country = models.CharField(max_length=2, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

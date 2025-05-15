@@ -190,7 +190,9 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     role_permissions = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
     )
-    is_itsm_tenant = serializers.BooleanField(default=False, write_only=True)
+    soar_tenant_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, write_only=True
+    )
 
     class Meta:
         model = Tenant
@@ -204,8 +206,8 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             "qradar_tenants",
             "integration_ids",
             "itsm_tenant_ids",
+            "soar_tenant_ids",
             "role_permissions",
-            "is_itsm_tenant",
             "id",
             "created_at",
             "updated_at",
@@ -223,10 +225,12 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             and len(data["qradar_tenants"]) == 0
             and "itsm_tenant_ids"
             and len(data["itsm_tenant_ids"]) == 0
+            and "soar_tenant_ids" in data
+            and len(data["soar_tenant_ids"]) == 0
         ):
             raise serializers.ValidationError(
                 {
-                    "qradar_tenants": "At least one qradar tenant or itsm tenant is required"
+                    "error": "At least one qradar tenant or itsm tenant or soar tenant is required"
                 }
             )
         # Validate role_permissions
@@ -298,14 +302,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     {"integration_ids": f"Invalid integration_ids: {invalid_ids}"}
                 )
 
-        # Validate itsm_tenant_ids and integration_ids consistency
-        if "itsm_tenant_ids" in data and data.get("is_itsm_tenant") is False:
-            raise serializers.ValidationError(
-                {
-                    "itsm_tenant_ids": "is_itsm_tenant must be true when itsm_tenant_ids are provided"
-                }
-            )
-
         if "itsm_tenant_ids" in data:
             itsm_tenants = DuITSMTenants.objects.filter(
                 id__in=data["itsm_tenant_ids"]
@@ -329,6 +325,29 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                             }
                         )
 
+        if "soar_tenant_ids" in data:
+            soar_tenants = DuCortexSOARTenants.objects.filter(
+                id__in=data["soar_tenant_ids"]
+            ).select_related("integration")
+            if len(soar_tenants) != len(data["soar_tenant_ids"]):
+                invalid_ids = set(data["soar_tenant_ids"]) - set(
+                    itsm.id for itsm in soar_tenants
+                )
+                raise serializers.ValidationError(
+                    {"soar_tenant_ids": f"Invalid soar_tenant_ids: {invalid_ids}"}
+                )
+            if "integration_ids" in data:
+                for soar_tenant in soar_tenants:
+                    if (
+                        soar_tenant.integration
+                        and soar_tenant.integration.id not in data["integration_ids"]
+                    ):
+                        raise serializers.ValidationError(
+                            {
+                                "soar_tenant_ids": f"Cortex Soar tenant {soar_tenant.id} is linked to integration {soar_tenant.integration.id}, which is not included in integration_ids"
+                            }
+                        )
+
         logger.debug("Validation passed")
         return data
 
@@ -347,7 +366,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             integration_ids = validated_data.pop("integration_ids", [])
             qradar_tenants_data = validated_data.pop("qradar_tenants", [])
             itsm_tenant_ids = validated_data.pop("itsm_tenant_ids", [])
-            is_itsm_tenant = validated_data.pop("is_itsm_tenant", False)
+            soar_tenant_ids = validated_data.pop("soar_tenant_ids", [])
 
             # Create User
             logger.debug("Checking for existing user")
@@ -380,7 +399,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             tenant = Tenant.objects.create(
                 tenant=user,
                 created_by=created_by,
-                is_itsm_tenant=is_itsm_tenant,
                 **validated_data,
             )
 
@@ -416,6 +434,17 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     )  # Already validated
                     itsm_tenants.append(itsm_tenant)
                 tenant.itsm_tenants.set(itsm_tenants)
+
+            # Handle soar_tenants
+            soar_tenants = []
+            if soar_tenant_ids:
+                logger.debug("Processing soar_tenant_ids: %s", soar_tenant_ids)
+                for soar_id in soar_tenant_ids:
+                    soar_tenant = DuCortexSOARTenants.objects.get(
+                        id=soar_id
+                    )  # Already validated
+                    soar_tenants.append(soar_tenant)
+                tenant.soar_tenants.set(soar_tenants)
 
             # Handle integrations
             integrations = []
