@@ -118,5 +118,9 @@ class ITSMConstants:
     ITSM_ACCOUNTS_ENDPOINT = "api/v3/accounts"
 
 
+class CortexSOARConstants:
+    TENANT_ENDPOINT = "accounts"
+
+
 class AdminWebsocketConstants:
     SYSTEM_METRICS_GROUP_NAME = "system_metrics_group"
