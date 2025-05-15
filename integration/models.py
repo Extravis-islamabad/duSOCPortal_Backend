@@ -18,7 +18,7 @@ class SiemSubTypes(models.IntegerChoices):
 
 
 class SoarSubTypes(models.IntegerChoices):
-    SERVICENOW = 1, "ServiceNow"
+    CORTEX_SOAR = 1, "Cortex SOAR"
     IBM_RESILIENT = 2, "IBM Resilient"
     OTHER = 3, "Other"
 
