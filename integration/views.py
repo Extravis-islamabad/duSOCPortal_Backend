@@ -134,10 +134,13 @@ class TestIntegrationView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.data
-        with IBMQradar(data["username"], data["password"]) as ibm_qradar:
-            data = ibm_qradar.test_integration(
-                ip_address=data["ip_address"], port=data["port"]
-            )
+        with IBMQradar(
+            data["username"],
+            data["password"],
+            ip_address=data["ip_address"],
+            port=data["port"],
+        ) as ibm_qradar:
+            data = ibm_qradar.test_integration()
             if data:
                 return Response({"data": data}, status=status.HTTP_200_OK)
         return Response(
