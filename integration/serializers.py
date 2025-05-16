@@ -138,7 +138,8 @@ class IntegrationSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError(
                             "Cortex SOAR integration is not accessible."
                         )
-
+        else:
+            raise serializers.ValidationError("Integration type not supported.")
         return data
 
 
