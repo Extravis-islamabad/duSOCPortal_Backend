@@ -60,8 +60,7 @@ def trigger_integration_tasks(
                         "port": port,
                         "integration_id": instance.integration.id,
                     }
-                    sync_itsm_tenants_test.delay(**kwargs)
-                    # sync_itsm_tenants.delay(**kwargs)
+                    sync_itsm_tenants.delay(**kwargs)
 
         elif instance.integration.integration_type == IntegrationTypes.SOAR_INTEGRATION:
             if instance.integration.soar_subtype == SoarSubTypes.CORTEX_SOAR:
@@ -75,5 +74,5 @@ def trigger_integration_tasks(
                         "port": port,
                         "integration_id": instance.integration.id,
                     }
-                    sync_cortex_soar_tenants_test.delay(**kwargs)
-                    # sync_cortex_soar_tenants.delay(**kwargs)
+
+                    sync_cortex_soar_tenants.delay(**kwargs)
