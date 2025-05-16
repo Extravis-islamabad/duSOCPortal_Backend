@@ -92,6 +92,7 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
     itsm_subtype_text = serializers.SerializerMethodField()
     modified_by = serializers.SerializerMethodField()
     modified_by_id = serializers.SerializerMethodField()
+    tenant_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Integration
@@ -110,6 +111,7 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
             "itsm_subtype_text",
             "instance_name",
             "credentials",
+            "tenant_count",
             "created_at",
             "updated_at",
         ]
@@ -143,6 +145,15 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
 
     def get_modified_by_id(self, obj):
         return obj.admin.id if obj.admin else None
+
+    def get_tenant_count(self, obj):
+        if obj.integration_type == IntegrationTypes.SIEM_INTEGRATION:
+            return obj.du_ibm_qradar_tenants.count()
+        elif obj.integration_type == IntegrationTypes.SOAR_INTEGRATION:
+            return obj.du_cortex_soar_tenants.count()
+        elif obj.integration_type == IntegrationTypes.ITSM_INTEGRATION:
+            return obj.du_itsm_tenants.count()
+        return 0
 
 
 class IntegrationCredentialUpdateSerializer(serializers.ModelSerializer):
