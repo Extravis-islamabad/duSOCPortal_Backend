@@ -82,8 +82,8 @@ class IntegrationSerializer(serializers.ModelSerializer):
     def validate(self, data):
         integration_type = data.get("integration_type")
         siem_subtype = data.get("siem_subtype")
-        data.get("itsm_subtype")
-        data.get("soar_subtype")
+        itsm_subtype = data.get("itsm_subtype")
+        soar_subtype = data.get("soar_subtype")
         credentials_type = data.get("credentials").get("credential_type")
         credentials = data.get("credentials")
         # Only validate Integration itself; credentials are separate
@@ -109,35 +109,35 @@ class IntegrationSerializer(serializers.ModelSerializer):
                             "QRadar integration is not accessible."
                         )
 
-        # elif (
-        #     integration_type == IntegrationTypes.ITSM_INTEGRATION
-        #     and itsm_subtype == ItsmSubTypes.MANAGE_ENGINE
-        # ):
-        #     if credentials_type == CredentialTypes.API_KEY:
-        #         with ITSM(
-        #             ip_address=credentials.get("ip_address"),
-        #             port=credentials.get("port"),
-        #             token=credentials.get("api_key"),
-        #         ) as itsm:
-        #             if not itsm._get_accounts():
-        #                 raise serializers.ValidationError(
-        #                     "ManageEngine integration is not accessible."
-        #                 )
+        elif (
+            integration_type == IntegrationTypes.ITSM_INTEGRATION
+            and itsm_subtype == ItsmSubTypes.MANAGE_ENGINE
+        ):
+            if credentials_type == CredentialTypes.API_KEY:
+                with ITSM(
+                    ip_address=credentials.get("ip_address"),
+                    port=credentials.get("port"),
+                    token=credentials.get("api_key"),
+                ) as itsm:
+                    if not itsm._get_accounts():
+                        raise serializers.ValidationError(
+                            "ManageEngine integration is not accessible."
+                        )
 
-        # elif (
-        #     integration_type == IntegrationTypes.SOAR_INTEGRATION
-        #     and soar_subtype == SoarSubTypes.CORTEX_SOAR
-        # ):
-        #     if credentials_type == CredentialTypes.API_KEY:
-        #         with CortexSOAR(
-        #             ip_address=credentials.get("ip_address"),
-        #             port=credentials.get("port"),
-        #             token=credentials.get("api_key"),
-        #         ) as soar:
-        #             if not soar._get_accounts():
-        #                 raise serializers.ValidationError(
-        #                     "Cortex SOAR integration is not accessible."
-        #                 )
+        elif (
+            integration_type == IntegrationTypes.SOAR_INTEGRATION
+            and soar_subtype == SoarSubTypes.CORTEX_SOAR
+        ):
+            if credentials_type == CredentialTypes.API_KEY:
+                with CortexSOAR(
+                    ip_address=credentials.get("ip_address"),
+                    port=credentials.get("port"),
+                    token=credentials.get("api_key"),
+                ) as soar:
+                    if not soar._get_accounts():
+                        raise serializers.ValidationError(
+                            "Cortex SOAR integration is not accessible."
+                        )
 
         return data
 
