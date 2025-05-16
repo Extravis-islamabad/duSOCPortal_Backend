@@ -1,6 +1,10 @@
 from django.core.validators import validate_ipv46_address
 from rest_framework import serializers
 
+from common.modules.cortex_soar import CortexSOAR
+from common.modules.ibm_qradar import IBMQradar
+from common.modules.itsm import ITSM
+
 from .models import (
     CredentialTypes,
     Integration,
@@ -76,11 +80,65 @@ class IntegrationSerializer(serializers.ModelSerializer):
         return integration
 
     def validate(self, data):
+        integration_type = data.get("integration_type")
+        siem_subtype = data.get("siem_subtype")
+        itsm_subtype = data.get("itsm_subtype")
+        soar_subtype = data.get("soar_subtype")
+        credentials_type = data.get("credentials").get("credential_type")
+        credentials = data.get("credentials")
         # Only validate Integration itself; credentials are separate
         integration = Integration(
             **{k: v for k, v in data.items() if k != "credentials"}
         )
         integration.clean()  # triggers model validation
+
+        # Perform actual reachability check based on type
+        if (
+            integration_type == IntegrationTypes.SIEM_INTEGRATION
+            and siem_subtype == SiemSubTypes.IBM_QRADAR
+        ):
+            if credentials_type == CredentialTypes.USERNAME_PASSWORD:
+                with IBMQradar(
+                    username=credentials.get("username"),
+                    password=credentials.get("password"),
+                    ip_address=credentials.get("ip_address"),
+                    port=credentials.get("port"),
+                ) as ibm_qradar:
+                    if not ibm_qradar.test_integration():
+                        raise serializers.ValidationError(
+                            "QRadar integration is not accessible."
+                        )
+
+        elif (
+            integration_type == IntegrationTypes.ITSM_INTEGRATION
+            and itsm_subtype == ItsmSubTypes.MANAGE_ENGINE
+        ):
+            if credentials_type == CredentialTypes.API_KEY:
+                with ITSM(
+                    ip_address=credentials.get("ip_address"),
+                    port=credentials.get("port"),
+                    token=credentials.get("api_key"),
+                ) as itsm:
+                    if not itsm._get_accounts():
+                        raise serializers.ValidationError(
+                            "ManageEngine integration is not accessible."
+                        )
+
+        elif (
+            integration_type == IntegrationTypes.SOAR_INTEGRATION
+            and soar_subtype == SoarSubTypes.CORTEX_SOAR
+        ):
+            if credentials_type == CredentialTypes.API_KEY:
+                with CortexSOAR(
+                    ip_address=credentials.get("ip_address"),
+                    port=credentials.get("port"),
+                    token=credentials.get("api_key"),
+                ) as soar:
+                    if not soar._get_accounts():
+                        raise serializers.ValidationError(
+                            "Cortex SOAR integration is not accessible."
+                        )
+
         return data
 
 

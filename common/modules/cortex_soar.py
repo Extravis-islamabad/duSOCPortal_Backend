@@ -94,7 +94,7 @@ class CortexSOAR:
             )
         except Exception as e:
             logger.error(f"CortexSOAR._get_accounts() failed with exception : {str(e)}")
-
+            return
         if response.status_code != 200:
             logger.warning(
                 f"CortexSOAR._get_accounts() return the status code {response.status_code}"

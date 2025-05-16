@@ -3,9 +3,12 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from tenant.cortex_soar_tasks import sync_cortex_soar_tenants_test
+from tenant.cortex_soar_tasks import (
+    sync_cortex_soar_tenants,
+    sync_cortex_soar_tenants_test,
+)
 from tenant.ibm_qradar_tasks import sync_event_collectors, sync_qradar_tenants
-from tenant.itsm_tasks import sync_itsm_tenants_test
+from tenant.itsm_tasks import sync_itsm_tenants, sync_itsm_tenants_test
 
 from .models import (
     CredentialTypes,
@@ -57,7 +60,7 @@ def trigger_integration_tasks(
                         "port": port,
                         "integration_id": instance.integration.id,
                     }
-                    sync_itsm_tenants_test.delay(**kwargs)
+                    sync_itsm_tenants.delay(**kwargs)
 
         elif instance.integration.integration_type == IntegrationTypes.SOAR_INTEGRATION:
             if instance.integration.soar_subtype == SoarSubTypes.CORTEX_SOAR:
@@ -72,4 +75,4 @@ def trigger_integration_tasks(
                         "integration_id": instance.integration.id,
                     }
 
-                    sync_cortex_soar_tenants_test.delay(**kwargs)
+                    sync_cortex_soar_tenants.delay(**kwargs)
