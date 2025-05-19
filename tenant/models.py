@@ -44,6 +44,27 @@ class IBMQradarEventCollector(models.Model):
         return self.name
 
 
+class IBMQradarAssests(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=255, blank=True, default=None)
+    description = models.CharField(max_length=255, blank=True, default=None)
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="ibm_qradar_assets",
+        null=True,
+        blank=True,
+    )
+    average_eps = models.IntegerField()
+
+    creation_date = models.CharField(max_length=255, blank=True, default=None)
+    modified_date = models.CharField(max_length=255, blank=True, default=None)
+    last_event_time = models.CharField(max_length=255, blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class DuITSMTenants(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)
