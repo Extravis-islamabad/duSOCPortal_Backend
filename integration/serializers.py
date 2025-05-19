@@ -108,6 +108,10 @@ class IntegrationSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError(
                             "QRadar integration is not accessible."
                         )
+            else:
+                raise serializers.ValidationError(
+                    "Unsupported credential type for IBM Qradar for Now..."
+                )
 
         elif (
             integration_type == IntegrationTypes.ITSM_INTEGRATION
@@ -123,6 +127,10 @@ class IntegrationSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError(
                             "ManageEngine integration is not accessible."
                         )
+            else:
+                raise serializers.ValidationError(
+                    "Unsupported credential type for ManageEngine for Now..."
+                )
 
         elif (
             integration_type == IntegrationTypes.SOAR_INTEGRATION
@@ -138,8 +146,10 @@ class IntegrationSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError(
                             "Cortex SOAR integration is not accessible."
                         )
-        else:
-            raise serializers.ValidationError("Integration type not supported.")
+            else:
+                raise serializers.ValidationError(
+                    "Unsupported credential type for Cortex SOAR for Now..."
+                )
         return data
 
 
