@@ -57,6 +57,13 @@ class IBMQradarAssests(models.Model):
         blank=True,
     )
     target_event_collector_id = models.IntegerField(null=True, blank=True)
+    event_collector_id = models.ForeignKey(
+        IBMQradarEventCollector,
+        on_delete=models.CASCADE,
+        related_name="ibm_qradar_assets",
+        null=True,
+        blank=True,
+    )
     average_eps = models.IntegerField(default=0)
     creation_date = models.CharField(max_length=255, blank=True, default=None)
     modified_date = models.CharField(max_length=255, blank=True, default=None)
