@@ -416,8 +416,21 @@ class IBMQradar:
         :param data: A list of dictionaries containing event log information.
         """
         start = time.time()
+        records = []
+        for item in data:
+            try:
+                # Convert event_collector_id (int) to instance
+                if isinstance(item.get("event_collector_id"), int):
+                    item["event_collector_id"] = IBMQradarEventCollector.objects.get(
+                        pk=item["event_collector_id"]
+                    )
+                    item.pop("event_collector_id", None)
+                records.append(IBMQradarAssests(**item))
+            except IBMQradarEventCollector.DoesNotExist:
+                logger.warning(
+                    f"EventCollector with id {item['event_collector_id']} not found, skipping this record."
+                )
         logger.info(f"IBMQRadar._insert_event_logs() started: {start}")
-        records = [IBMQradarAssests(**item) for item in data]
         logger.info(f"Inserting event log records: {len(records)}")
         try:
             with transaction.atomic():

@@ -60,7 +60,7 @@ class IBMQradarAssests(models.Model):
     sending_ip = models.CharField(max_length=255, blank=True, default=None, null=True)
     enabled = models.BooleanField(default=False)
     status = models.CharField(max_length=255, blank=True, default=None, null=True)
-    event_collector_id = models.ForeignKey(
+    event_collector = models.ForeignKey(
         IBMQradarEventCollector,
         on_delete=models.CASCADE,
         related_name="du_ibm_qradar_assets",
