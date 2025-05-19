@@ -35,4 +35,5 @@ urlpatterns = [
         name="get-cortex-soar-tenants",
     ),
     path("get_tenant_assets/", GetTenantAssetsList.as_view(), name="get-tenant-assets"),
+    path("test/", TestView.as_view(), name="test"),
 ]
