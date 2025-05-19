@@ -428,7 +428,7 @@ class IBMQradar:
                         "name",
                         "description",
                         "average_eps",
-                        "event_collector_id_id",
+                        "event_collector_id",
                     ],
                     unique_fields=["db_id"],
                 )
