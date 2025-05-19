@@ -32,7 +32,7 @@ class IBMQradarEventCollector(models.Model):
     integration = models.ForeignKey(
         Integration,
         on_delete=models.CASCADE,
-        related_name="ibm_qradar_event_collectors",
+        related_name="du_ibm_qradar_event_collectors",
         null=True,
         blank=True,
     )
