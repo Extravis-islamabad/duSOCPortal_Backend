@@ -45,8 +45,8 @@ class GetIntegrationCredentialsSerializer(serializers.ModelSerializer):
             "credential_type",
             "credential_type_text",
             "username",
-            "password",
-            "api_key",
+            # "password",
+            # "api_key",
             "ip_address",
             "port",
         ]
@@ -162,6 +162,7 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
     modified_by = serializers.SerializerMethodField()
     modified_by_id = serializers.SerializerMethodField()
     tenant_count = serializers.SerializerMethodField()
+    assets_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Integration
@@ -181,6 +182,7 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
             "instance_name",
             "credentials",
             "tenant_count",
+            "assets_count",
             "created_at",
             "updated_at",
         ]
@@ -222,6 +224,14 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
             return obj.du_cortex_soar_tenants.count()
         elif obj.integration_type == IntegrationTypes.ITSM_INTEGRATION:
             return obj.du_itsm_tenants.count()
+        return 0
+
+    def get_assets_count(self, obj):
+        if (
+            obj.integration_type == IntegrationTypes.SIEM_INTEGRATION
+            and obj.siem_subtype == SiemSubTypes.IBM_QRADAR
+        ):
+            return obj.ibm_qradar_assets.count()
         return 0
 
 
