@@ -382,11 +382,18 @@ class IBMQradar:
 
         df = pd.DataFrame(data=data)
         df["integration_id"] = integration_id
+        df["status_value"] = df["status"].apply(
+            lambda x: x.get("status") if isinstance(x, dict) else None
+        )
+
         df = df[
             [
                 "id",
                 "name",
                 "description",
+                "sending_ip",
+                "enabled",
+                "status_value",
                 "average_eps",
                 "target_event_collector_id",
                 "creation_date",
@@ -395,7 +402,7 @@ class IBMQradar:
                 "integration_id",
             ]
         ]
-        df.rename(columns={"id": "db_id"}, inplace=True)
+        df.rename(columns={"id": "db_id", "status_value": "status"}, inplace=True)
         df.dropna(subset=["target_event_collector_id"], inplace=True)
         df["event_collector_id_id"] = df["target_event_collector_id"].map(collector_map)
         data = df.to_dict(orient="records")

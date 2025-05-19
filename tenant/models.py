@@ -57,6 +57,9 @@ class IBMQradarAssests(models.Model):
         blank=True,
     )
     target_event_collector_id = models.IntegerField(null=True, blank=True)
+    sending_ip = models.CharField(max_length=255, blank=True, default=None, null=True)
+    enabled = models.BooleanField(default=False)
+    status = models.CharField(max_length=255, blank=True, default=None, null=True)
     event_collector_id = models.ForeignKey(
         IBMQradarEventCollector,
         on_delete=models.CASCADE,
