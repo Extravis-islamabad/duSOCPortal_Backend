@@ -52,7 +52,7 @@ class IBMQradarAssests(models.Model):
     integration = models.ForeignKey(
         Integration,
         on_delete=models.CASCADE,
-        related_name="ibm_qradar_assets",
+        related_name="du_ibm_qradar_assets",
         null=True,
         blank=True,
     )
@@ -63,7 +63,7 @@ class IBMQradarAssests(models.Model):
     event_collector_id = models.ForeignKey(
         IBMQradarEventCollector,
         on_delete=models.CASCADE,
-        related_name="ibm_qradar_assets",
+        related_name="du_ibm_qradar_assets",
         null=True,
         blank=True,
     )
@@ -75,7 +75,7 @@ class IBMQradarAssests(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "ibm_qradar_assets"
+        db_table = "du_ibm_qradar_assets"
 
 
 class DuITSMTenants(models.Model):
