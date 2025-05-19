@@ -7,7 +7,8 @@ from loguru import logger
 from requests.auth import HTTPBasicAuth
 
 from common.constants import IBMQradarConstants, SSLConstants
-from tenant.models import DuIbmQradarTenants, IBMQradarEventCollector
+from common.utils import DBMappings
+from tenant.models import DuIbmQradarTenants, IBMQradarAssests, IBMQradarEventCollector
 
 
 class IBMQradar:
@@ -365,5 +366,71 @@ class IBMQradar:
         except Exception as e:
             logger.error(
                 f"An error occurred in IBMQradar._insert_event_collectors(): {str(e)}"
+            )
+            transaction.rollback()
+
+    def _transform_event_logs(self, data, integration_id):
+        """
+        Transforms the list of event logs from the IBM QRadar endpoint into a DataFrame, removes
+        any rows with missing or empty names, renames the "id" column to "db_id", and returns
+        the resulting DataFrame as a list of dictionaries.
+
+        :param data: A list of dictionaries containing event log information.
+        :return: A list of dictionaries containing the transformed event log information.
+        """
+        collector_map = DBMappings.get_db_id_to_id_mapping(IBMQradarEventCollector)
+
+        df = pd.DataFrame(data=data)
+        df["integration_id"] = integration_id
+        df = df[
+            [
+                "id",
+                "name",
+                "description",
+                "average_eps",
+                "target_event_collector_id",
+                "creation_date",
+                "modified_date",
+                "last_event_time",
+                "integration_id",
+            ]
+        ]
+        df.rename(columns={"id": "db_id"}, inplace=True)
+        df.dropna(subset=["target_event_collector_id"], inplace=True)
+        df["event_collector_id_id"] = df["target_event_collector_id"].map(collector_map)
+        data = df.to_dict(orient="records")
+
+        return data
+
+    def _insert_event_logs(self, data):
+        """
+        Inserts or updates event log records in the IBMQradarEventLog table.
+
+        :param data: A list of dictionaries containing event log information.
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._insert_event_logs() started: {start}")
+        records = [IBMQradarAssests(**item) for item in data]
+        logger.info(f"Inserting event log records: {len(records)}")
+        try:
+            with transaction.atomic():
+                IBMQradarAssests.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=[
+                        "name",
+                        "description",
+                        "average_eps",
+                        "event_collector_id_id",
+                    ],
+                    unique_fields=["db_id"],
+                )
+            logger.info(f"Inserted event log records: {len(records)}")
+            logger.success(
+                f"IBMQRadar._insert_event_logs() took: {time.time() - start} seconds"
+            )
+        except Exception as e:
+            logger.error(
+                f"An error occurred in IBMQradar._insert_event_logs(): {str(e)}"
             )
             transaction.rollback()

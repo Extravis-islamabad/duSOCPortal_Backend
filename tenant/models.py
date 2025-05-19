@@ -71,6 +71,9 @@ class IBMQradarAssests(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        db_table = "ibm_qradar_assets"
+
 
 class DuITSMTenants(models.Model):
     id = models.AutoField(primary_key=True)

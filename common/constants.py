@@ -44,7 +44,7 @@ class SSLConstants:
         VERIFY = True
     else:
         VERIFY = False
-    TIMEOUT = 10
+    TIMEOUT = 20
 
 
 class AllowedOriginsConstants:
@@ -74,7 +74,7 @@ class AllowedHostsConstants:
 
 
 class RedisConstants:
-    REDIS_HOST = "redis"
+    REDIS_HOST = os.getenv("REDIS_HOST", None)
     REDIS_PORT = os.getenv("REDIS_PORT", None)
 
     if REDIS_HOST is None or REDIS_PORT is None:

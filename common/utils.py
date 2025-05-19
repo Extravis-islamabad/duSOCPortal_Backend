@@ -45,3 +45,16 @@ class PasswordCreation:
             return False
         check_hashed = hashlib.sha256((salt + raw_password).encode("utf-8")).hexdigest()
         return check_hashed == hashed
+
+
+class DBMappings:
+    @staticmethod
+    def get_db_id_to_id_mapping(model_class):
+        """
+        Returns a dictionary mapping db_id to id for the given model class.
+        The model must have 'db_id' and 'id' fields.
+
+        :param model_class: A Django model class
+        :return: Dictionary {db_id: id}
+        """
+        return dict(model_class.objects.values_list("db_id", "id"))

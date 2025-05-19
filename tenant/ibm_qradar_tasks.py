@@ -4,6 +4,13 @@ from celery import shared_task
 from loguru import logger
 
 from common.modules.ibm_qradar import IBMQradar
+from integration.models import (
+    CredentialTypes,
+    Integration,
+    IntegrationCredentials,
+    IntegrationTypes,
+    SiemSubTypes,
+)
 
 
 @shared_task
@@ -96,3 +103,58 @@ def sync_event_collectors(
         )
     except Exception as e:
         logger.error(f"Unexpected error in sync_event_collectors: {str(e)}")
+
+
+@shared_task
+def sync_event_log_assets(
+    username: str, password: str, ip_address: str, port: str, integration_id: int
+):
+    start = time.time()
+    logger.info("Running QRadarTasks.sync_event_log_assets() task")
+    try:
+        with IBMQradar(
+            username=username, password=password, ip_address=ip_address, port=port
+        ) as ibm_qradar:
+            data = ibm_qradar._get_event_logs()
+            if data is None:
+                logger.error(
+                    "No data returned from IBM QRadar event log assets endpoint"
+                )
+                return
+
+            transformed_data = ibm_qradar._transform_event_logs(
+                data, integration_id=integration_id
+            )
+
+        if not isinstance(transformed_data, list):
+            logger.error("Invalid data format: Expected a list")
+            return
+
+        ibm_qradar._insert_event_logs(transformed_data)
+
+        logger.info(f"Successfully synced {len(transformed_data)} event log assets")
+        logger.info(
+            f"QRadarTasks.sync_event_log_assets() task took {time.time() - start} seconds"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in sync_event_log_assets: {str(e)}")
+
+
+@shared_task
+def sync_event_log_sources():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    for result in results:
+        sync_event_log_assets(
+            result.username,
+            result.password,
+            result.ip_address,
+            result.port,
+            result.integration.id,
+        )
+
+    print(results)

@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
+from tenant.ibm_qradar_tasks import sync_event_log_sources
 from tenant.models import (
     DuCortexSOARTenants,
     DuIbmQradarTenants,
@@ -150,3 +151,12 @@ class DuCortexSOARTenantsListView(APIView):
         tenants = DuCortexSOARTenants.objects.all()
         serializer = DuCortexSOARTenantsSerializer(tenants, many=True)
         return Response(serializer.data)
+
+
+class TestView(APIView):
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        sync_event_log_sources()
+        return Response({"message": "Hello, world!"})

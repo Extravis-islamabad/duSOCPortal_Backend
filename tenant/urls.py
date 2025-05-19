@@ -7,6 +7,7 @@ from tenant.views import (
     EventCollectorsListAPIView,
     PermissionChoicesAPIView,
     TenantAPIView,
+    TestView,
 )
 
 urlpatterns = [
@@ -32,4 +33,5 @@ urlpatterns = [
         DuCortexSOARTenantsListView.as_view(),
         name="get-cortex-soar-tenants",
     ),
+    path("test/", TestView.as_view(), name="test"),
 ]
