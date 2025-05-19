@@ -404,7 +404,7 @@ class IBMQradar:
         ]
         df.rename(columns={"id": "db_id", "status_value": "status"}, inplace=True)
         df.dropna(subset=["target_event_collector_id"], inplace=True)
-        df["event_collector_id_id"] = df["target_event_collector_id"].map(collector_map)
+        df["event_collector_id"] = df["target_event_collector_id"].map(collector_map)
         data = df.to_dict(orient="records")
 
         return data
