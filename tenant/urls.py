@@ -5,6 +5,7 @@ from tenant.views import (
     DuIbmQradarTenantsListView,
     DuITSMTenantsListView,
     EventCollectorsListAPIView,
+    GetTenantAssetsList,
     PermissionChoicesAPIView,
     TenantAPIView,
     TestView,
@@ -33,5 +34,5 @@ urlpatterns = [
         DuCortexSOARTenantsListView.as_view(),
         name="get-cortex-soar-tenants",
     ),
-    path("get_tenant_assets/", TestView.as_view(), name="get-tenant-assets"),
+    path("get_tenant_assets/", GetTenantAssetsList.as_view(), name="get-tenant-assets"),
 ]
