@@ -12,6 +12,7 @@ from tenant.models import (
     DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMTenants,
+    IBMQradarAssests,
     IBMQradarEventCollector,
     Tenant,
     TenantPermissionChoices,
@@ -21,6 +22,7 @@ from tenant.serializers import (
     DuCortexSOARTenantsSerializer,
     DuIbmQradarTenantsSerializer,
     DuITSMTenantsSerializer,
+    IBMQradarAssestsSerializer,
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
 )
@@ -160,3 +162,23 @@ class TestView(APIView):
     def get(self, request):
         sync_event_log_sources()
         return Response({"message": "Hello, world!"})
+
+
+class GetTenantAssetsList(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+
+            assets = IBMQradarAssests.objects.filter(
+                event_collector__in=tenant.event_collectors.all()
+            )
+            serializer = IBMQradarAssestsSerializer(assets, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception:
+            return Response(
+                {"detail": "Tenant not found"}, status=status.HTTP_404_NOT_FOUND
+            )

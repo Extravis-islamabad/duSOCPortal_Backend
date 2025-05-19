@@ -10,6 +10,7 @@ from .models import (
     DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMTenants,
+    IBMQradarAssests,
     IBMQradarEventCollector,
     Tenant,
     TenantPermissionChoices,
@@ -506,3 +507,9 @@ class DuCortexSOARTenantsSerializer(serializers.ModelSerializer):
     class Meta:
         model = DuCortexSOARTenants
         fields = ["id", "name"]
+
+
+class IBMQradarAssestsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IBMQradarAssests
+        fields = "__all__"

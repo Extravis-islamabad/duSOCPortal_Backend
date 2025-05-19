@@ -33,5 +33,5 @@ urlpatterns = [
         DuCortexSOARTenantsListView.as_view(),
         name="get-cortex-soar-tenants",
     ),
-    path("test/", TestView.as_view(), name="test"),
+    path("get_tenant_assets/", TestView.as_view(), name="get-tenant-assets"),
 ]
