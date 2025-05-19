@@ -158,6 +158,8 @@ class IntegrationCredentials(models.Model):
 
         if self.credential_type == CredentialTypes.USERNAME_PASSWORD and self.password:
             self._plaintext_password = self.password
-            self.password = make_password(self.password)
+
+            # TODO : Removed the password hashing
+            # self.password = make_password(self.password)
 
         super().save(*args, **kwargs)
