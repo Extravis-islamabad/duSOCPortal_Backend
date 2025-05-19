@@ -231,7 +231,7 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
             obj.integration_type == IntegrationTypes.SIEM_INTEGRATION
             and obj.siem_subtype == SiemSubTypes.IBM_QRADAR
         ):
-            return obj.ibm_qradar_assets.count()
+            return obj.du_ibm_qradar_assets.count()
         return 0
 
 
