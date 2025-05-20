@@ -11,6 +11,7 @@ from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import PaginationConstants
 from tenant.ibm_qradar_tasks import sync_event_log_sources
 from tenant.models import (
+    DUCortexSOARIncidentModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMTenants,
@@ -22,6 +23,7 @@ from tenant.models import (
     TenantRole,
 )
 from tenant.serializers import (
+    DUCortexSOARIncidentSerializer,
     DuCortexSOARTenantsSerializer,
     DuIbmQradarTenantsSerializer,
     DuITSMTenantsSerializer,
@@ -215,4 +217,25 @@ class TenantITSMTicketsView(APIView):
         paginated_tickets = paginator.paginate_queryset(tickets, request)
 
         serializer = DuITSMTicketsSerializer(paginated_tickets, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+
+class TenantCortexSOARIncidentsAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        soar_tenants = tenant.soar_tenants.all()
+        soar_db_ids = [t.db_id for t in soar_tenants]
+
+        incidents = DUCortexSOARIncidentModel.objects.filter(account_id__in=soar_db_ids)
+        paginator = PageNumberPagination()
+        paginator.page_size = PaginationConstants.PAGE_SIZE
+        paginated_incidents = paginator.paginate_queryset(incidents, request)
+        serializer = DUCortexSOARIncidentSerializer(paginated_incidents, many=True)
         return paginator.get_paginated_response(serializer.data)
