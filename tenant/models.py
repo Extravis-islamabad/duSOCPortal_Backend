@@ -97,23 +97,25 @@ class DuITSMTenants(models.Model):
         return self.name
 
 
-# class DuITSMTickets(models.Model):
-#     id = models.AutoField(primary_key=True)
-#     db_id = models.IntegerField(unique=True)
-#     short_description = models.TextField()
-#     subject = models.TextField()
-#     is_overdue = models.BooleanField(default=False)
-#     creation_date = models.CharField(max_length=255, blank=True, default=None)
-#     created_by_name = models.CharField(max_length=255, blank=True, default=None)
-#     status = models.CharField(max_length=100)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
+class DuITSMTickets(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True)
+    short_description = models.TextField()
+    subject = models.TextField()
+    is_overdue = models.BooleanField(default=False)
+    creation_date = models.CharField(max_length=255, blank=True, default=None)
+    created_by_name = models.CharField(max_length=255, blank=True, default=None)
+    account_name = models.CharField(max_length=255, blank=True, default=None)
+    account_id = models.IntegerField()
+    status = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-#     class Meta:
-#         db_table = "du_itsm_tickets"
+    class Meta:
+        db_table = "du_itsm_tickets"
 
-#     def __str__(self):
-#         return f"{self.short_description} ({self.external_id})"
+    def __str__(self):
+        return f"{self.short_description} ({self.external_id})"
 
 
 class DuCortexSOARTenants(models.Model):
@@ -136,6 +138,7 @@ class DuCortexSOARTenants(models.Model):
 
 
 class DUCortexSOARIncidentModel(models.Model):
+    id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True, null=True, blank=True)
     created = models.DateTimeField()
     modified = models.DateTimeField()
