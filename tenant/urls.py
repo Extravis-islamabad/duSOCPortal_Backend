@@ -8,6 +8,7 @@ from tenant.views import (
     GetTenantAssetsList,
     PermissionChoicesAPIView,
     TenantAPIView,
+    TenantITSMTicketsView,
     TestView,
 )
 
@@ -35,5 +36,6 @@ urlpatterns = [
         name="get-cortex-soar-tenants",
     ),
     path("get_tenant_assets/", GetTenantAssetsList.as_view(), name="get-tenant-assets"),
+    path("get_itsm_tickets/", TenantITSMTicketsView.as_view(), name="get-itsm-tickets"),
     path("test/", TestView.as_view(), name="test"),
 ]

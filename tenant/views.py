@@ -2,16 +2,19 @@ import time
 
 from loguru import logger
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
+from common.constants import PaginationConstants
 from tenant.ibm_qradar_tasks import sync_event_log_sources
 from tenant.models import (
     DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMTenants,
+    DuITSMTickets,
     IBMQradarAssests,
     IBMQradarEventCollector,
     Tenant,
@@ -22,6 +25,7 @@ from tenant.serializers import (
     DuCortexSOARTenantsSerializer,
     DuIbmQradarTenantsSerializer,
     DuITSMTenantsSerializer,
+    DuITSMTicketsSerializer,
     IBMQradarAssestsSerializer,
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
@@ -175,10 +179,40 @@ class GetTenantAssetsList(APIView):
             assets = IBMQradarAssests.objects.filter(
                 event_collector__in=tenant.event_collectors.all()
             )
-            serializer = IBMQradarAssestsSerializer(assets, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
 
-        except Exception:
+            paginator = PageNumberPagination()
+            paginator.page_size = PaginationConstants.PAGE_SIZE
+            result_page = paginator.paginate_queryset(assets, request)
+            serializer = IBMQradarAssestsSerializer(result_page, many=True)
+
+            return paginator.get_paginated_response(serializer.data)
+
+        except Tenant.DoesNotExist:
             return Response(
                 {"detail": "Tenant not found"}, status=status.HTTP_404_NOT_FOUND
             )
+
+
+class TenantITSMTicketsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        itsm_tenants = tenant.itsm_tenants.all()
+        itsm_tenant_db_ids = [t.db_id for t in itsm_tenants]
+
+        tickets = DuITSMTickets.objects.filter(account_id__in=itsm_tenant_db_ids)
+
+        paginator = PageNumberPagination()
+        paginator.page_size = PaginationConstants.PAGE_SIZE
+        paginated_tickets = paginator.paginate_queryset(tickets, request)
+
+        serializer = DuITSMTicketsSerializer(paginated_tickets, many=True)
+        return paginator.get_paginated_response(serializer.data)

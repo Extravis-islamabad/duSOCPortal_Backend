@@ -125,3 +125,7 @@ class CortexSOARConstants:
 
 class AdminWebsocketConstants:
     SYSTEM_METRICS_GROUP_NAME = "system_metrics_group"
+
+
+class PaginationConstants:
+    PAGE_SIZE = 10
