@@ -116,6 +116,7 @@ class ITSMConstants:
     STATUS_CODE = 2000
     SUCCESS = "success"
     ITSM_ACCOUNTS_ENDPOINT = "api/v3/accounts"
+    ITSM_REQUESTS_ENDPOINT = "api/v3/requests"
 
 
 class CortexSOARConstants:

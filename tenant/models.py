@@ -97,6 +97,25 @@ class DuITSMTenants(models.Model):
         return self.name
 
 
+# class DuITSMTickets(models.Model):
+#     id = models.AutoField(primary_key=True)
+#     db_id = models.IntegerField(unique=True)
+#     short_description = models.TextField()
+#     subject = models.TextField()
+#     is_overdue = models.BooleanField(default=False)
+#     creation_date = models.CharField(max_length=255, blank=True, default=None)
+#     created_by_name = models.CharField(max_length=255, blank=True, default=None)
+#     status = models.CharField(max_length=100)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     class Meta:
+#         db_table = "du_itsm_tickets"
+
+#     def __str__(self):
+#         return f"{self.short_description} ({self.external_id})"
+
+
 class DuCortexSOARTenants(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)
@@ -114,6 +133,48 @@ class DuCortexSOARTenants(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class DUCortexSOARIncidentModel(models.Model):
+    db_id = models.IntegerField(unique=True, null=True, blank=True)
+    created = models.DateTimeField()
+    modified = models.DateTimeField()
+    account = models.CharField(max_length=255, null=True, blank=True)
+    name = models.CharField(max_length=255, null=True, blank=True)
+    status = models.CharField(max_length=50, null=True, blank=True)
+    reason = models.TextField(null=True, blank=True)
+    occured = models.DateTimeField(null=True, blank=True)
+    closed = models.DateTimeField(null=True, blank=True)
+    sla = models.IntegerField(null=True, blank=True)
+    severity = models.IntegerField(null=True, blank=True)
+    investigated_id = models.IntegerField(null=True, blank=True)
+    closing_user_id = models.CharField(max_length=255, null=True, blank=True)
+    owner = models.CharField(max_length=255, null=True, blank=True)
+    playbook_id = models.CharField(max_length=255, null=True, blank=True)
+
+    # Custom fields
+    incident_phase = models.CharField(max_length=100, null=True, blank=True)
+    incidentpriority = models.CharField(max_length=50, blank=True, null=True)
+    incidenttta = models.DateTimeField(blank=True, null=True)
+    incidentttdn = models.DateTimeField(blank=True, null=True)
+    incidentttn = models.DateTimeField(blank=True, null=True)
+    initialnotification = models.BooleanField(null=True)
+
+    # JSON Fields
+    listofrulesoffense = models.JSONField(blank=True, null=True)
+    logsourcetype = models.JSONField(blank=True, null=True)
+    lowlevelcategoriesevents = models.JSONField(blank=True, null=True)
+    sourceips = models.JSONField(blank=True, null=True)
+
+    qradarcategory = models.CharField(max_length=100, blank=True, null=True)
+    qradarsubcategory = models.CharField(max_length=100, blank=True, null=True)
+    ttacalculation = models.CharField(max_length=50, blank=True, null=True)
+
+    class Meta:
+        db_table = "du_cortex_soar_incidents"
+
+    def __str__(self):
+        return f"{self.incident_id} - {self.name}"
 
 
 class Tenant(models.Model):
