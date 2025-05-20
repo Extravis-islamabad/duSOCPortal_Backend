@@ -154,7 +154,14 @@ class DUCortexSOARIncidentModel(models.Model):
     closing_user_id = models.CharField(max_length=255, null=True, blank=True)
     owner = models.CharField(max_length=255, null=True, blank=True)
     playbook_id = models.CharField(max_length=255, null=True, blank=True)
-
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_cortex_soar_incidents",
+        null=True,
+        blank=True,
+    )
+    account_id = models.IntegerField(null=True, blank=True)
     # Custom fields
     incident_phase = models.CharField(max_length=100, null=True, blank=True)
     incidentpriority = models.CharField(max_length=50, blank=True, null=True)
