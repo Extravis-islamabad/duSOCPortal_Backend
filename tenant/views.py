@@ -801,7 +801,8 @@ class IncidentsView(APIView):
                 account_id__in=soar_db_ids
             ).values(
                 "id",
-                "db_id" "account",
+                "db_id",
+                "account",
                 "name",
                 "status",
                 "severity",
