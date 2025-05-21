@@ -257,16 +257,24 @@ class TenantCortexSOARIncidentsAPIView(APIView):
 
 class SeverityDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsTenant]
 
-    def get(self, request, tenant_id):
-        # # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
-        # tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+    def get(self, request):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        soar_tenants = tenant.soar_tenants.all()
+        soar_db_ids = [t.db_id for t in soar_tenants]
+
+        if not soar_db_ids:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
         try:
             # Query severity distribution using Django ORM
             severity_data = (
-                DUCortexSOARIncidentModel.objects.filter(account_id=tenant_id)
+                DUCortexSOARIncidentModel.objects.filter(account_id__in=soar_db_ids)
                 .values("severity")
                 .annotate(count=Count("id"))
                 .order_by("severity")
@@ -291,16 +299,25 @@ class SeverityDistributionView(APIView):
 
 class TypeDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsTenant]
 
-    def get(self, request, tenant_id):
+    def get(self, request):
         # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
-        # tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        soar_tenants = tenant.soar_tenants.all()
+        soar_db_ids = [t.db_id for t in soar_tenants]
+
+        if not soar_db_ids:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
         try:
             # Query type distribution using Django ORM
             type_data = (
-                DUCortexSOARIncidentModel.objects.filter(account_id=tenant_id)
+                DUCortexSOARIncidentModel.objects.filter(account_id__in=soar_db_ids)
                 .values("qradarcategory")
                 .annotate(count=Count("id"))
                 .order_by("-count")
@@ -326,16 +343,24 @@ class TypeDistributionView(APIView):
 
 class SLAStatusView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsTenant]
 
-    def get(self, request, tenant_id):
-        # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
-        # tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+    def get(self, request):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        soar_tenants = tenant.soar_tenants.all()
+        soar_db_ids = [t.db_id for t in soar_tenants]
+
+        if not soar_db_ids:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
         try:
             # Query SLA compliance using Django ORM
             sla_stats = DUCortexSOARIncidentModel.objects.filter(
-                account_id=tenant_id, status__in=["Closed", "False Positive"]
+                account_id__in=soar_db_ids, status__in=["Closed", "False Positive"]
             ).aggregate(
                 total=Count("id", filter=Q(sla__isnull=False)),
                 within_sla=Count(
@@ -356,7 +381,7 @@ class SLAStatusView(APIView):
             # Query most at-risk incidents
             at_risk_qs = (
                 DUCortexSOARIncidentModel.objects.filter(
-                    account=tenant_id,
+                    account_id__in=soar_db_ids,
                     status__in=["Closed", "False Positive"],
                     sla__isnull=False,
                 )
@@ -397,7 +422,7 @@ class SLAStatusView(APIView):
 
                 at_risk.append(
                     {
-                        "id": f"INC-{tenant_id}-{incident.id}",
+                        "id": f"{incident.id}",
                         "name": incident.name,
                         "priority": priority,
                         "remaining": f"{days_remaining:.1f} days"
@@ -428,15 +453,24 @@ class SLAStatusView(APIView):
 
 class OwnerDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsTenant]
 
-    def get(self, request, tenant_id):
-        # tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+    def get(self, request):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        soar_tenants = tenant.soar_tenants.all()
+        soar_db_ids = [t.db_id for t in soar_tenants]
+
+        if not soar_db_ids:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
         try:
             # Fetch owner counts excluding null
             owner_counts = (
-                DUCortexSOARIncidentModel.objects.filter(account_id=tenant_id)
+                DUCortexSOARIncidentModel.objects.filter(account_id__in=soar_db_ids)
                 .exclude(owner__isnull=True)
                 .values("owner")
                 .annotate(count=Count("owner"))
@@ -449,7 +483,7 @@ class OwnerDistributionView(APIView):
 
             # Count unassigned
             unassigned_count = DUCortexSOARIncidentModel.objects.filter(
-                account=tenant_id, owner__isnull=True
+                account_id__in=soar_db_ids, owner__isnull=True
             ).count()
 
             if unassigned_count > 0:
@@ -467,13 +501,19 @@ class OwnerDistributionView(APIView):
 
 class DashboardView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsTenant]
 
-    def get(self, request, tenant_id):
-        # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
-        # tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+    def get(self, request):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
 
-        # Get filters from query parameters (e.g., ?filters=totalIncidents,unassigned)
+        soar_tenants = tenant.soar_tenants.all()
+        soar_db_ids = [t.db_id for t in soar_tenants]
+
+        if not soar_db_ids:
+            return Response({"error": "No SOAR tenants found."}, status=404)
         filters = request.query_params.get("filters", "")
         filter_list = (
             [f.strip() for f in filters.split(",") if f.strip()] if filters else []
@@ -490,15 +530,15 @@ class DashboardView(APIView):
             # Total Incidents
             if not filter_list or "totalIncidents" in filter_list:
                 total_incidents = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id
+                    account_id__in=soar_db_ids
                 ).count()
 
                 new_incidents = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, created__date=today
+                    account_id__in=soar_db_ids, created__date=today
                 ).count()
 
                 last_week_incidents = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, created__date__gte=last_week
+                    account_id__in=soar_db_ids, created__date__gte=last_week
                 ).count()
 
                 percent_change = (
@@ -521,15 +561,17 @@ class DashboardView(APIView):
             # Unassigned Incidents
             if not filter_list or "unassigned" in filter_list:
                 unassigned_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, owner__isnull=True
+                    account_id__in=soar_db_ids, owner__isnull=True
                 ).count()
 
                 critical_unassigned = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, owner__isnull=True, severity=1
+                    account_id__in=soar_db_ids, owner__isnull=True, severity=1
                 ).count()
 
                 yesterday_unassigned = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, owner__isnull=True, created__date=yesterday
+                    account_id__in=soar_db_ids,
+                    owner__isnull=True,
+                    created__date=yesterday,
                 ).count()
 
                 unassigned_change = (
@@ -550,17 +592,19 @@ class DashboardView(APIView):
             # Pending Incidents
             if not filter_list or "pending" in filter_list:
                 pending_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, status="Pending"
+                    account_id__in=soar_db_ids, status="Pending"
                 ).count()
 
                 awaiting_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id,
+                    account_id__in=soar_db_ids,
                     status="Pending",
                     incident_phase="Awaiting Response",
                 ).count()
 
                 yesterday_pending = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, status="Pending", created__date=yesterday
+                    account_id__in=soar_db_ids,
+                    status="Pending",
+                    created__date=yesterday,
                 ).count()
 
                 pending_change = (
@@ -582,17 +626,17 @@ class DashboardView(APIView):
             # False Positives
             if not filter_list or "falsePositives" in filter_list:
                 false_positive_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, status="False Positive"
+                    account_id__in=soar_db_ids, status="False Positive"
                 ).count()
 
                 review_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id,
+                    account_id__in=soar_db_ids,
                     status="False Positive",
                     incident_phase="Review Needed",
                 ).count()
 
                 last_week_false_positives = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id,
+                    account_id__in=soar_db_ids,
                     status="False Positive",
                     created__date__gte=last_week,
                 ).count()
@@ -618,18 +662,18 @@ class DashboardView(APIView):
             # Closed Incidents
             if not filter_list or "closed" in filter_list:
                 closed_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, status="Closed", closed__date=today
+                    account_id__in=soar_db_ids, status="Closed", closed__date=today
                 ).count()
 
                 critical_closed = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id,
+                    account_id__in=soar_db_ids,
                     status="Closed",
                     severity=1,
                     closed__date=today,
                 ).count()
 
                 yesterday_closed = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, status="Closed", closed__date=yesterday
+                    account_id__in=soar_db_ids, status="Closed", closed__date=yesterday
                 ).count()
 
                 closed_change = (
@@ -651,15 +695,17 @@ class DashboardView(APIView):
             # Error Incidents
             if not filter_list or "errors" in filter_list:
                 error_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, status="Error"
+                    account_id__in=soar_db_ids, status="Error"
                 ).count()
 
                 api_error_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, status="Error", qradarcategory="API Failure"
+                    account_id__in=soar_db_ids,
+                    status="Error",
+                    qradarcategory="API Failure",
                 ).count()
 
                 yesterday_errors = DUCortexSOARIncidentModel.objects.filter(
-                    account_id=tenant_id, status="Error", created__date=yesterday
+                    account_id__in=soar_db_ids, status="Error", created__date=yesterday
                 ).count()
 
                 error_change = error_count - yesterday_errors
@@ -679,7 +725,7 @@ class DashboardView(APIView):
             if not filter_list or "topClosers" in filter_list:
                 top_closers_qs = (
                     DUCortexSOARIncidentModel.objects.filter(
-                        account=tenant_id,
+                        account_id__in=soar_db_ids,
                         status="Closed",
                         closing_user_id__isnull=False,
                     )
@@ -698,7 +744,7 @@ class DashboardView(APIView):
             # Recent Activities
             if not filter_list or "recentActivities" in filter_list:
                 recent_qs = (
-                    DUCortexSOARIncidentModel.objects.filter(account=tenant_id)
+                    DUCortexSOARIncidentModel.objects.filter(account=soar_db_ids)
                     .order_by("-modified")[:5]
                     .values("id", "name", "modified", "owner", "status")
                 )
@@ -732,19 +778,30 @@ class DashboardView(APIView):
 
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsTenant]
 
-    def get(self, request, tenant_id):
+    def get(self, request):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        soar_tenants = tenant.soar_tenants.all()
+        soar_db_ids = [t.db_id for t in soar_tenants]
+
+        if not soar_db_ids:
+            return Response({"error": "No SOAR tenants found."}, status=404)
+
         # Get filter_type from query parameter, default to 'all'
         filter_type = request.query_params.get("filter", "all")
 
         try:
             # Base queryset
             queryset = DUCortexSOARIncidentModel.objects.filter(
-                account_id=tenant_id
+                account_id__in=soar_db_ids
             ).values(
                 "id",
-                "account",
+                "db_id" "account",
                 "name",
                 "status",
                 "severity",
@@ -795,7 +852,8 @@ class IncidentsView(APIView):
 
                 incidents.append(
                     {
-                        "id": f"INC-{tenant_id}-{row['id']}",
+                        "id": f"{row['id']}",
+                        "db_id": row["db_id"],
                         "account": row["account"],
                         "name": row["name"],
                         "status": row["status"],
@@ -819,17 +877,27 @@ class IncidentsView(APIView):
 
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsTenant]
 
-    def get(self, request, incident_id, tenant_id):
+    def get(self, request, incident_id):
         # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
         #   tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        soar_tenants = tenant.soar_tenants.all()
+        soar_db_ids = [t.db_id for t in soar_tenants]
+
+        if not soar_db_ids:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
         try:
             # Fetch incident using numeric incident_id
             incident = (
                 DUCortexSOARIncidentModel.objects.filter(
-                    db_id=incident_id, account_id=tenant_id
+                    db_id=incident_id, account_id__in=soar_db_ids
                 )
                 .values(
                     "id",
