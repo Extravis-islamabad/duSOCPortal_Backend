@@ -1,5 +1,19 @@
+import json
 import time
+from datetime import timedelta
 
+from django.db.models import (
+    Case,
+    Count,
+    ExpressionWrapper,
+    F,
+    FloatField,
+    IntegerField,
+    Q,
+    When,
+)
+from django.db.models.functions import Extract, ExtractSecond
+from django.utils import timezone
 from loguru import logger
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
@@ -239,3 +253,791 @@ class TenantCortexSOARIncidentsAPIView(APIView):
         paginated_incidents = paginator.paginate_queryset(incidents, request)
         serializer = DUCortexSOARIncidentSerializer(paginated_incidents, many=True)
         return paginator.get_paginated_response(serializer.data)
+
+
+class SeverityDistributionView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, tenant_id):
+        # # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
+        # tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+
+        try:
+            # Query severity distribution using Django ORM
+            severity_data = (
+                DUCortexSOARIncidentModel.objects.filter(account_id=tenant_id)
+                .values("severity")
+                .annotate(count=Count("id"))
+                .order_by("severity")
+                .exclude(severity__isnull=True)  # Exclude NULL severity values
+            )
+
+            # Transform data to match Flask output
+            result = []
+            for item in severity_data:
+                severity_value = item["severity"]
+                severity_label = f"P{severity_value}"  # Convert 1,2,3,4 to P1,P2,P3,P4
+                result.append({"name": severity_label, "value": item["count"]})
+
+            return Response({"severityDistribution": result}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error("Error in SeverityDistributionView: %s", str(e))
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class TypeDistributionView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, tenant_id):
+        # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
+        # tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+
+        try:
+            # Query type distribution using Django ORM
+            type_data = (
+                DUCortexSOARIncidentModel.objects.filter(account_id=tenant_id)
+                .values("qradarcategory")
+                .annotate(count=Count("id"))
+                .order_by("-count")
+                .exclude(
+                    qradarcategory__isnull=True
+                )  # Exclude NULL qradarcategory values
+            )
+
+            # Transform data to match Flask output
+            result = [
+                {"name": item["qradarcategory"], "value": item["count"]}
+                for item in type_data
+            ]
+
+            return Response({"typeDistribution": result}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error("Error in TypeDistributionView: %s", str(e))
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class SLAStatusView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, tenant_id):
+        # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
+        # tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+
+        try:
+            # Query SLA compliance using Django ORM
+            sla_stats = DUCortexSOARIncidentModel.objects.filter(
+                account_id=tenant_id, status__in=["Closed", "False Positive"]
+            ).aggregate(
+                total=Count("id", filter=Q(sla__isnull=False)),
+                within_sla=Count(
+                    "id",
+                    filter=Q(sla__isnull=False)
+                    & Q(
+                        created__gte=timezone.now()
+                        - F("sla") * timezone.timedelta(hours=1)
+                    ),
+                    output_field=IntegerField(),
+                ),
+            )
+
+            total = sla_stats["total"] or 0
+            within_sla = sla_stats["within_sla"] or 0
+            sla_percentage = (within_sla / total * 100) if total > 0 else 100
+
+            # Query most at-risk incidents
+            at_risk_qs = (
+                DUCortexSOARIncidentModel.objects.filter(
+                    account=tenant_id,
+                    status__in=["Closed", "False Positive"],
+                    sla__isnull=False,
+                )
+                .annotate(
+                    # Calculate hours_open as seconds difference / 3600
+                    hours_open=ExpressionWrapper(
+                        ExtractSecond(timezone.now() - F("created")) / 3600.0,
+                        output_field=FloatField(),
+                    ),
+                    # Calculate hours_remaining as sla - hours_open
+                    hours_remaining=ExpressionWrapper(
+                        F("sla")
+                        - (ExtractSecond(timezone.now() - F("created")) / 3600.0),
+                        output_field=FloatField(),
+                    ),
+                )
+                .order_by("hours_remaining")
+                .select_related("integration")[:5]  # Limit to 5
+            )
+
+            at_risk = []
+            severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
+            for incident in at_risk_qs:
+                hours_remaining = incident.hours_remaining
+                days_remaining = hours_remaining / 24.0  # Numeric division
+
+                # Determine status
+                status_flag = "OK"
+                if hours_remaining < 0:
+                    status_flag = "Overdue"
+                elif hours_remaining < 4:
+                    status_flag = "Critical"
+                elif hours_remaining < 24:
+                    status_flag = "Warning"
+
+                # Map severity to priority
+                priority = severity_map.get(incident.severity, "P4")
+
+                at_risk.append(
+                    {
+                        "id": f"INC-{tenant_id}-{incident.id}",
+                        "name": incident.name,
+                        "priority": priority,
+                        "remaining": f"{days_remaining:.1f} days"
+                        if hours_remaining > 0
+                        else "Overdue",
+                        "status": status_flag,
+                    }
+                )
+
+            return Response(
+                {
+                    "slaCompliance": {
+                        "percentage": round(sla_percentage, 1),
+                        "withinSla": within_sla,
+                        "total": total,
+                        "atRiskIncidents": at_risk,
+                    }
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error("Error in SLAStatusView: %s", str(e))
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class OwnerDistributionView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, tenant_id):
+        # tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+
+        try:
+            # Fetch owner counts excluding null
+            owner_counts = (
+                DUCortexSOARIncidentModel.objects.filter(account_id=tenant_id)
+                .exclude(owner__isnull=True)
+                .values("owner")
+                .annotate(count=Count("owner"))
+                .order_by("-count")
+            )
+
+            owner_data = [
+                {"name": item["owner"], "value": item["count"]} for item in owner_counts
+            ]
+
+            # Count unassigned
+            unassigned_count = DUCortexSOARIncidentModel.objects.filter(
+                account=tenant_id, owner__isnull=True
+            ).count()
+
+            if unassigned_count > 0:
+                owner_data.append({"name": "Unassigned", "value": unassigned_count})
+
+            return Response(
+                {"ownerDistribution": owner_data}, status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class DashboardView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, tenant_id):
+        # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
+        # tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+
+        # Get filters from query parameters (e.g., ?filters=totalIncidents,unassigned)
+        filters = request.query_params.get("filters", "")
+        filter_list = (
+            [f.strip() for f in filters.split(",") if f.strip()] if filters else []
+        )
+
+        try:
+            # Get current date for filtering
+            today = timezone.now().date()
+            yesterday = (timezone.now() - timedelta(days=1)).date()
+            last_week = (timezone.now() - timedelta(days=7)).date()
+
+            dashboard_data = {}
+
+            # Total Incidents
+            if not filter_list or "totalIncidents" in filter_list:
+                total_incidents = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id
+                ).count()
+
+                new_incidents = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, created__date=today
+                ).count()
+
+                last_week_incidents = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, created__date__gte=last_week
+                ).count()
+
+                percent_change = (
+                    ((total_incidents - last_week_incidents) / last_week_incidents)
+                    * 100
+                    if last_week_incidents > 0
+                    else 0
+                )
+                change_indicator = "↑" if percent_change >= 0 else "↓"
+                change_text = (
+                    f"{change_indicator} {abs(percent_change):.0f}% from last week"
+                )
+
+                dashboard_data["totalIncidents"] = {
+                    "count": total_incidents,
+                    "change": change_text,
+                    "new": new_incidents,
+                }
+
+            # Unassigned Incidents
+            if not filter_list or "unassigned" in filter_list:
+                unassigned_count = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, owner__isnull=True
+                ).count()
+
+                critical_unassigned = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, owner__isnull=True, severity=1
+                ).count()
+
+                yesterday_unassigned = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, owner__isnull=True, created__date=yesterday
+                ).count()
+
+                unassigned_change = (
+                    ((unassigned_count - yesterday_unassigned) / yesterday_unassigned)
+                    * 100
+                    if yesterday_unassigned > 0
+                    else 0
+                )
+                unassigned_indicator = "↑" if unassigned_change >= 0 else "↓"
+                unassigned_change_text = f"{unassigned_indicator} {abs(unassigned_change):.0f}% from yesterday"
+
+                dashboard_data["unassigned"] = {
+                    "count": unassigned_count,
+                    "change": unassigned_change_text,
+                    "critical": critical_unassigned,
+                }
+
+            # Pending Incidents
+            if not filter_list or "pending" in filter_list:
+                pending_count = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, status="Pending"
+                ).count()
+
+                awaiting_count = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id,
+                    status="Pending",
+                    incident_phase="Awaiting Response",
+                ).count()
+
+                yesterday_pending = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, status="Pending", created__date=yesterday
+                ).count()
+
+                pending_change = (
+                    ((pending_count - yesterday_pending) / yesterday_pending) * 100
+                    if yesterday_pending > 0
+                    else 0
+                )
+                pending_indicator = "↑" if pending_change >= 0 else "↓"
+                pending_change_text = (
+                    f"{pending_indicator} {abs(pending_change):.0f}% from yesterday"
+                )
+
+                dashboard_data["pending"] = {
+                    "count": pending_count,
+                    "change": pending_change_text,
+                    "awaiting": awaiting_count,
+                }
+
+            # False Positives
+            if not filter_list or "falsePositives" in filter_list:
+                false_positive_count = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, status="False Positive"
+                ).count()
+
+                review_count = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id,
+                    status="False Positive",
+                    incident_phase="Review Needed",
+                ).count()
+
+                last_week_false_positives = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id,
+                    status="False Positive",
+                    created__date__gte=last_week,
+                ).count()
+
+                fp_change = (
+                    (
+                        (false_positive_count - last_week_false_positives)
+                        / last_week_false_positives
+                    )
+                    * 100
+                    if last_week_false_positives > 0
+                    else 0
+                )
+                fp_indicator = "↑" if fp_change >= 0 else "↓"
+                fp_change_text = f"{fp_indicator} {abs(fp_change):.0f}% from last week"
+
+                dashboard_data["falsePositives"] = {
+                    "count": false_positive_count,
+                    "change": fp_change_text,
+                    "review": review_count,
+                }
+
+            # Closed Incidents
+            if not filter_list or "closed" in filter_list:
+                closed_count = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, status="Closed", closed__date=today
+                ).count()
+
+                critical_closed = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id,
+                    status="Closed",
+                    severity=1,
+                    closed__date=today,
+                ).count()
+
+                yesterday_closed = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, status="Closed", closed__date=yesterday
+                ).count()
+
+                closed_change = (
+                    ((closed_count - yesterday_closed) / yesterday_closed) * 100
+                    if yesterday_closed > 0
+                    else 0
+                )
+                closed_indicator = "↑" if closed_change >= 0 else "↓"
+                closed_change_text = (
+                    f"{closed_indicator} {abs(closed_change):.0f}% from yesterday"
+                )
+
+                dashboard_data["closed"] = {
+                    "count": closed_count,
+                    "change": closed_change_text,
+                    "critical": critical_closed,
+                }
+
+            # Error Incidents
+            if not filter_list or "errors" in filter_list:
+                error_count = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, status="Error"
+                ).count()
+
+                api_error_count = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, status="Error", qradarcategory="API Failure"
+                ).count()
+
+                yesterday_errors = DUCortexSOARIncidentModel.objects.filter(
+                    account_id=tenant_id, status="Error", created__date=yesterday
+                ).count()
+
+                error_change = error_count - yesterday_errors
+                error_change_text = (
+                    f"↑ {error_change} new since yesterday"
+                    if error_change >= 0
+                    else f"↓ {abs(error_change)} less than yesterday"
+                )
+
+                dashboard_data["errors"] = {
+                    "count": error_count,
+                    "change": error_change_text,
+                    "api": api_error_count,
+                }
+
+            # Top Closers
+            if not filter_list or "topClosers" in filter_list:
+                top_closers_qs = (
+                    DUCortexSOARIncidentModel.objects.filter(
+                        account=tenant_id,
+                        status="Closed",
+                        closing_user_id__isnull=False,
+                    )
+                    .values("closing_user_id")
+                    .annotate(count=Count("id"))
+                    .order_by("-count")[:5]
+                )
+
+                top_closers = [
+                    {"name": row["closing_user_id"], "count": row["count"]}
+                    for row in top_closers_qs
+                ]
+
+                dashboard_data["topClosers"] = top_closers
+
+            # Recent Activities
+            if not filter_list or "recentActivities" in filter_list:
+                recent_qs = (
+                    DUCortexSOARIncidentModel.objects.filter(account=tenant_id)
+                    .order_by("-modified")[:5]
+                    .values("id", "name", "modified", "owner", "status")
+                )
+
+                activities = []
+                for row in recent_qs:
+                    time_str = row["modified"].strftime("%I:%M %p")
+                    event = "Status update"
+                    user = row["owner"] or "System"
+                    details = f"INC-{row['id']} - {row['name']} ({row['status']})"
+
+                    activities.append(
+                        {
+                            "time": time_str,
+                            "event": event,
+                            "user": user,
+                            "details": details,
+                        }
+                    )
+
+                dashboard_data["recentActivities"] = activities
+
+            return Response(dashboard_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error("Error in DashboardView: %s", str(e))
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class IncidentsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, tenant_id):
+        # Get filter_type from query parameter, default to 'all'
+        filter_type = request.query_params.get("filter", "all")
+
+        try:
+            # Base queryset
+            queryset = DUCortexSOARIncidentModel.objects.filter(
+                account_id=tenant_id
+            ).values(
+                "id",
+                "account",
+                "name",
+                "status",
+                "severity",
+                "incidentpriority",
+                "created",
+                "owner",
+                "playbook_id",
+                "occured",
+                "sla",
+            )
+
+            # Apply filters
+            if filter_type != "all":
+                if filter_type == "unassigned":
+                    queryset = queryset.filter(owner__isnull=True)
+                elif filter_type == "pending":
+                    queryset = queryset.filter(status="Pending")
+                elif filter_type == "false-positive":
+                    queryset = queryset.filter(status="False Positive")
+                elif filter_type == "closed":
+                    queryset = queryset.filter(status="Closed")
+                elif filter_type == "error":
+                    queryset = queryset.filter(status="Error")
+
+            # Order by created DESC
+            queryset = queryset.order_by("-created")
+
+            # Transform data
+            incidents = []
+            severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
+            for row in queryset:
+                # Determine priority
+                priority = row["incidentpriority"] or severity_map.get(
+                    row["severity"], "P4"
+                )
+
+                # Format dates
+                created_date = (
+                    row["created"].strftime("%Y-%m-%d %I:%M %p")
+                    if row["created"]
+                    else "N/A"
+                )
+                occurred_date = (
+                    row["occured"].strftime("%Y-%m-%d %I:%M %p")
+                    if row["occured"]
+                    else "N/A"
+                )
+
+                incidents.append(
+                    {
+                        "id": f"INC-{tenant_id}-{row['id']}",
+                        "account": row["account"],
+                        "name": row["name"],
+                        "status": row["status"],
+                        "priority": priority,
+                        "created": created_date,
+                        "assignee": row["owner"],
+                        "playbook": row["playbook_id"],
+                        "occurred": occurred_date,
+                        "sla": row["sla"],
+                    }
+                )
+
+            return Response({"incidents": incidents}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error("Error in IncidentsView: %s", str(e))
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class IncidentDetailView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, incident_id, tenant_id):
+        # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
+        #   tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
+
+        try:
+            # Fetch incident using numeric incident_id
+            incident = (
+                DUCortexSOARIncidentModel.objects.filter(
+                    db_id=incident_id, account_id=tenant_id
+                )
+                .values(
+                    "id",
+                    "account",
+                    "name",
+                    "status",
+                    "severity",
+                    "incidentpriority",
+                    "created",
+                    "modified",
+                    "owner",
+                    "playbook_id",
+                    "occured",
+                    "sla",
+                    "closed",
+                    "closing_user_id",
+                    "reason",
+                    "incident_phase",
+                    "qradarcategory",
+                    "incidenttta",
+                    "ttacalculation",
+                    "sourceips",
+                    "logsourcetype",
+                    "listofrulesoffense",
+                )
+                .first()
+            )
+
+            if not incident:
+                return Response(
+                    {"error": "Incident not found"}, status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Build timeline
+            timeline = []
+            if incident["created"]:
+                timeline.append(
+                    {
+                        "icon": "add_alert",
+                        "title": "Incident created",
+                        "time": incident["created"].strftime("%I:%M %p"),
+                        "description": "System created the incident",
+                        "detail": f"Source: {incident['qradarcategory'] or 'SIEM Alert'}",
+                    }
+                )
+
+            if incident["owner"]:
+                timeline.append(
+                    {
+                        "icon": "person",
+                        "title": "Assigned",
+                        "time": incident["modified"].strftime("%I:%M %p"),
+                        "description": f"Incident assigned to {incident['owner']}",
+                        "detail": "Action: Changed assignee from Unassigned",
+                    }
+                )
+
+            if incident["status"] == "Closed" and incident["closed"]:
+                timeline.append(
+                    {
+                        "icon": "task_alt",
+                        "title": "Incident closed",
+                        "time": incident["closed"].strftime("%I:%M %p"),
+                        "description": f"Closed by {incident['closing_user_id'] or 'System'}",
+                        "detail": f"Reason: {incident['reason'] or 'Not specified'}",
+                    }
+                )
+
+            if incident["incidenttta"]:
+                timeline.append(
+                    {
+                        "icon": "schedule",
+                        "title": "Incident acknowledged",
+                        "time": incident["incidenttta"].strftime("%I:%M %p"),
+                        "description": "Time to acknowledge recorded",
+                        "detail": f"TTA: {incident['ttacalculation'] or 'Standard calculation'}",
+                    }
+                )
+
+            # Sort timeline by time (reverse chronological)
+            timeline.sort(key=lambda x: x["time"], reverse=True)
+
+            # Process JSON fields
+            source_ips = []
+            if incident["sourceips"]:
+                try:
+                    source_ips = (
+                        json.loads(incident["sourceips"])
+                        if isinstance(incident["sourceips"], str)
+                        else incident["sourceips"]
+                    )
+                except (json.JSONDecodeError, TypeError):
+                    source_ips = []
+
+            log_source_types = []
+            if incident["logsourcetype"]:
+                try:
+                    log_source_types = (
+                        json.loads(incident["logsourcetype"])
+                        if isinstance(incident["logsourcetype"], str)
+                        else incident["logsourcetype"]
+                    )
+                except (json.JSONDecodeError, TypeError):
+                    log_source_types = []
+
+            # Create related items
+            related_items = {"alerts": [], "users": [], "assets": []}
+
+            if incident["listofrulesoffense"]:
+                try:
+                    rules = (
+                        json.loads(incident["listofrulesoffense"])
+                        if isinstance(incident["listofrulesoffense"], str)
+                        else incident["listofrulesoffense"]
+                    )
+                    # Handle list of strings
+                    if isinstance(rules, list) and all(
+                        isinstance(rule, str) for rule in rules
+                    ):
+                        for rule in rules[:5]:  # Limit to first 5
+                            related_items["alerts"].append(
+                                {"title": "Rule", "subtitle": rule or "Unknown Rule"}
+                            )
+                    # Handle list of dictionaries
+                    elif isinstance(rules, list):
+                        for rule in rules[:5]:
+                            rule_id = (
+                                rule.get("id", "Unknown")
+                                if isinstance(rule, dict)
+                                else "Unknown"
+                            )
+                            rule_name = (
+                                rule.get("name", "Unknown Rule")
+                                if isinstance(rule, dict)
+                                else str(rule)
+                            )
+                            related_items["alerts"].append(
+                                {"title": f"Rule {rule_id}", "subtitle": rule_name}
+                            )
+                    else:
+                        related_items["alerts"].append(
+                            {
+                                "title": "Associated Rules",
+                                "subtitle": "See incident details",
+                            }
+                        )
+                except (json.JSONDecodeError, TypeError):
+                    related_items["alerts"].append(
+                        {
+                            "title": "Associated Rules",
+                            "subtitle": "See incident details",
+                        }
+                    )
+
+            # Determine priority
+            priority = incident["incidentpriority"] or (
+                {1: "P1", 2: "P2", 3: "P3", 4: "P4"}.get(incident["severity"], "P4")
+            )
+
+            # Format source IPs and log source types
+            source_ips_str = ", ".join(source_ips) if source_ips else "Unknown"
+            log_source_type_str = (
+                ", ".join(log_source_types) if log_source_types else "Unknown"
+            )
+
+            # Format response
+            response = {
+                "incident": {
+                    "id": f"{incident_id}",
+                    "account": incident["account"],
+                    "name": incident["name"],
+                    "status": incident["status"],
+                    "created": (
+                        incident["created"].strftime("%Y-%m-%d %I:%M %p")
+                        if incident["created"]
+                        else "Unknown"
+                    ),
+                    "modified": (
+                        incident["modified"].strftime("%Y-%m-%d %I:%M %p")
+                        if incident["modified"]
+                        else "Unknown"
+                    ),
+                    "creator": "System",  # No creator field in schema
+                    "assignee": incident["owner"],
+                    "description": incident["reason"] or "No description provided",
+                    "customFields": {
+                        "phase": incident["incident_phase"] or "Detection",
+                        "priority": priority,
+                        "sourceIPs": source_ips_str,
+                        "logSourceType": log_source_type_str,
+                        "category": incident["qradarcategory"] or "Unknown",
+                    },
+                    "timeline": timeline,
+                    "relatedItems": related_items,
+                    "sla": incident["sla"],
+                    "playbook": incident["playbook_id"],
+                    "occurred": (
+                        incident["occured"].strftime("%Y-%m-%d %I:%M %p")
+                        if incident["occured"]
+                        else "Unknown"
+                    ),
+                }
+            }
+
+            return Response(response, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error("Error in IncidentDetailView: %s", str(e))
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
