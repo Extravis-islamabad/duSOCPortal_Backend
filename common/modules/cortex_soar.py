@@ -1,14 +1,17 @@
 import json
 import os
+import re
 import time
 
 import pandas as pd
 import requests
 from django.db import transaction
+from django.utils.dateparse import parse_datetime
 from loguru import logger
 
 from common.constants import CortexSOARConstants, SSLConstants
-from tenant.models import DuCortexSOARTenants
+from integration.models import Integration
+from tenant.models import DUCortexSOARIncidentFinalModel, DuCortexSOARTenants
 
 
 class CortexSOAR:
@@ -144,4 +147,148 @@ class CortexSOAR:
             logger.error(
                 f"An error occurred in CortexSOAR._insert_accounts(): {str(e)}"
             )
+            transaction.rollback()
+
+    def _get_incidents(self, account_name: str):
+        """
+        Fetches the list of incidents from the CortexSOAR instance.
+
+        :return: A list of incidents.
+        """
+        start = time.time()
+        logger.info(f"CortexSOAR._get_incidents() started : {start}")
+        logger.info(f"CortexSOAR._get_incidents() fetching data for : {account_name}")
+        endpoint = f"{self.base_url}/{CortexSOARConstants.INCIDENT_ENDPOINT}"
+
+        body = {
+            "userFilter": False,
+            "filter": {
+                "page": 0,
+                "size": 1000,
+                "query": "",
+                "sort": [{"field": "id", "asc": False}],
+                "accounts": {account_name: {}},
+                "period": {"by": "month", "fromValue": 1},
+            },
+        }
+        try:
+            response = requests.post(
+                endpoint,
+                headers=self.headers,
+                json=body,
+                verify=SSLConstants.VERIFY,
+                timeout=SSLConstants.TIMEOUT,
+            )
+        except Exception as e:
+            logger.error(
+                f"CortexSOAR._get_incidents() failed with exception : {str(e)}"
+            )
+            return
+        if response.status_code != 200:
+            logger.warning(
+                f"CortexSOAR._get_incidents() return the status code {response.status_code}"
+            )
+            return
+
+        data = response.json()
+        print(data)
+        return data
+
+    def safe_parse_datetime(self, value):
+        if isinstance(value, str):
+            return parse_datetime(value)
+        return None
+
+    def extract_digits(self, value):
+        match = re.search(r"\d+", value)
+        return int(match.group()) if match else None
+
+    def _transform_incidents(self, data, integration_id, cortex_tenant):
+        data = data.get("data", [])
+        records = []
+
+        for entry in data:
+            custom = entry.get("CustomFields", {})
+
+            record = DUCortexSOARIncidentFinalModel(
+                db_id=self.extract_digits(entry.get("id")),
+                created=self.safe_parse_datetime(entry.get("created")),
+                modified=self.safe_parse_datetime(entry.get("modified")),
+                account=entry.get("account"),
+                name=entry.get("name"),
+                status=entry.get("status"),
+                reason=entry.get("qradarclosereason"),
+                occured=self.safe_parse_datetime(entry.get("occurred")),
+                closed=self.safe_parse_datetime(entry.get("closed")),
+                sla=entry.get("sla"),
+                severity=entry.get("severity"),
+                investigated_id=entry.get("investigationId"),
+                closing_user_id=entry.get("closingUserId"),
+                owner=entry.get("owner"),
+                playbook_id=entry.get("playbookId"),
+                incident_phase=custom.get("incidentphase"),
+                incident_priority=custom.get("incidentpriority"),
+                incident_tta=self.safe_parse_datetime(custom.get("incidenttta")),
+                incident_ttdn=self.safe_parse_datetime(custom.get("incidentttdn")),
+                incident_ttn=self.safe_parse_datetime(custom.get("incidentttn")),
+                initial_notification=custom.get("initialnotification"),
+                list_of_rules_offense=custom.get("listofrulesoffense"),
+                log_source_type=custom.get("logsourcetype"),
+                low_level_categories_events=custom.get("lowlevelcategoriesevents"),
+                qradar_category=custom.get("qradarcategory"),
+                qradar_sub_category=custom.get("qradarsubcategory"),
+                source_ips=custom.get("sourceips"),
+                tta_calculation=custom.get("ttacalculation"),
+                integration=integration_id,
+                cortex_soar_tenant=cortex_tenant,
+            )
+            records.append(record)
+        return records
+
+    def _insert_incidents(self, records):
+        start = time.time()
+        try:
+            with transaction.atomic():
+                DUCortexSOARIncidentFinalModel.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=[
+                        "created",
+                        "modified",
+                        "account",
+                        "name",
+                        "status",
+                        "reason",
+                        "occured",
+                        "closed",
+                        "sla",
+                        "severity",
+                        "investigated_id",
+                        "closing_user_id",
+                        "owner",
+                        "playbook_id",
+                        "incident_phase",
+                        "incident_priority",
+                        "incident_tta",
+                        "incident_ttdn",
+                        "incident_ttn",
+                        "initial_notification",
+                        "list_of_rules_offense",
+                        "log_source_type",
+                        "low_level_categories_events",
+                        "source_ips",
+                        "qradar_category",
+                        "qradar_sub_category",
+                        "tta_calculation",
+                        "integration",
+                        "cortex_soar_tenant",
+                    ],
+                    unique_fields=["db_id"],
+                )
+            logger.info(f"Inserted/Updated {len(records)} incidents successfully.")
+            logger.success(
+                f"import_incidents_from_file() took: {time.time() - start} seconds"
+            )
+        except Exception as e:
+            logger.error(f"An error occurred in import_incidents_from_file(): {str(e)}")
             transaction.rollback()

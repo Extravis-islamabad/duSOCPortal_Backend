@@ -44,7 +44,7 @@ class SSLConstants:
         VERIFY = True
     else:
         VERIFY = False
-    TIMEOUT = 20
+    TIMEOUT = 40
 
 
 class AllowedOriginsConstants:
@@ -121,6 +121,7 @@ class ITSMConstants:
 
 class CortexSOARConstants:
     TENANT_ENDPOINT = "accounts"
+    INCIDENT_ENDPOINT = "incidents/search"
 
 
 class AdminWebsocketConstants:

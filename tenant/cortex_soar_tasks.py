@@ -4,6 +4,14 @@ from celery import shared_task
 from loguru import logger
 
 from common.modules.cortex_soar import CortexSOAR
+from integration.models import (
+    CredentialTypes,
+    IntegrationCredentials,
+    IntegrationTypes,
+    SiemSubTypes,
+    SoarSubTypes,
+)
+from tenant.models import DuCortexSOARTenants
 
 
 @shared_task
@@ -46,6 +54,38 @@ def sync_cortex_soar_tenants(
             )
     except Exception as e:
         logger.error(f"Unexpected error in sync_itsm_tenants: {str(e)}")
+
+
+@shared_task
+def sync_requests_for_soar():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
+        integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
+        credential_type=CredentialTypes.API_KEY,
+    )
+
+    for integration in results:
+        cortex_tenants = DuCortexSOARTenants.objects.filter(
+            integration=integration.id
+        ).all()
+        with CortexSOAR(
+            ip_address=integration.ip_address,
+            port=integration.port,
+            token=integration.api_key,
+        ) as soar:
+            for cortex_tenant in cortex_tenants:
+                logger.info(
+                    f"Ingesting the Incident for the CortexSOAR tenant : {cortex_tenant.name}"
+                )
+                data = soar._get_incidents(account_name=cortex_tenant.name)
+                records = soar._transform_incidents(
+                    data=data,
+                    integration_id=integration.integration,
+                    cortex_tenant=cortex_tenant,
+                )
+                soar._insert_incidents(records=records)
+
+        print(cortex_tenants)
 
 
 # @shared_task

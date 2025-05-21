@@ -187,6 +187,62 @@ class DUCortexSOARIncidentModel(models.Model):
         return f"{self.incident_id} - {self.name}"
 
 
+class DUCortexSOARIncidentFinalModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True, null=True, blank=True)
+    created = models.DateTimeField()
+    modified = models.DateTimeField()
+    account = models.CharField(max_length=255, null=True, blank=True)
+    name = models.CharField(max_length=255, null=True, blank=True)
+    status = models.CharField(max_length=50, null=True, blank=True)
+    reason = models.TextField(null=True, blank=True)
+    occured = models.DateTimeField(null=True, blank=True)
+    closed = models.DateTimeField(null=True, blank=True)
+    sla = models.IntegerField(null=True, blank=True)
+    severity = models.IntegerField(null=True, blank=True)
+    investigated_id = models.IntegerField(null=True, blank=True)
+    closing_user_id = models.CharField(max_length=255, null=True, blank=True)
+    owner = models.CharField(max_length=255, null=True, blank=True)
+    playbook_id = models.CharField(max_length=255, null=True, blank=True)
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_cortex_soar_final_incidents",
+        null=True,
+        blank=True,
+    )
+    cortex_soar_tenant = models.ForeignKey(
+        DuCortexSOARTenants,
+        on_delete=models.CASCADE,
+        related_name="du_cortex_soar_final_incidents",
+        null=True,
+        blank=True,
+    )
+    # Custom fields
+    incident_phase = models.CharField(max_length=100, null=True, blank=True)
+    incident_priority = models.CharField(max_length=50, blank=True, null=True)
+    incident_tta = models.DateTimeField(blank=True, null=True)
+    incident_ttdn = models.DateTimeField(blank=True, null=True)
+    incident_ttn = models.DateTimeField(blank=True, null=True)
+    initial_notification = models.BooleanField(null=True)
+
+    # JSON Fields
+    list_of_rules_offense = models.JSONField(blank=True, null=True)
+    log_source_type = models.JSONField(blank=True, null=True)
+    low_level_categories_events = models.JSONField(blank=True, null=True)
+    source_ips = models.JSONField(blank=True, null=True)
+
+    qradar_category = models.CharField(max_length=100, blank=True, null=True)
+    qradar_sub_category = models.CharField(max_length=100, blank=True, null=True)
+    tta_calculation = models.CharField(max_length=50, blank=True, null=True)
+
+    class Meta:
+        db_table = "du_cortex_soar_final_incidents"
+
+    def __str__(self):
+        return f"{self.incident_id} - {self.name}"
+
+
 class Tenant(models.Model):
     tenant = models.ForeignKey(User, on_delete=models.CASCADE)
     created_by = models.ForeignKey(

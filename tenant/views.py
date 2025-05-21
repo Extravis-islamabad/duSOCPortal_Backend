@@ -23,6 +23,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import PaginationConstants
+from tenant.cortex_soar_tasks import sync_requests_for_soar
 from tenant.ibm_qradar_tasks import sync_event_log_sources
 from tenant.models import (
     DUCortexSOARIncidentModel,
@@ -180,7 +181,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_event_log_sources()
+        sync_requests_for_soar.delay()
         return Response({"message": "Hello, world!"})
 
 
