@@ -214,7 +214,13 @@ class CortexSOAR:
 
         for entry in data:
             custom = entry.get("CustomFields", {})
-
+            investigation_id = entry.get("investigationId")
+            if (
+                investigation_id == ""
+                or investigation_id is None
+                or investigation_id == " "
+            ):
+                continue
             record = DUCortexSOARIncidentFinalModel(
                 db_id=self.extract_digits(entry.get("id")),
                 created=self.safe_parse_datetime(entry.get("created")),
@@ -227,7 +233,7 @@ class CortexSOAR:
                 closed=self.safe_parse_datetime(entry.get("closed")),
                 sla=entry.get("sla"),
                 severity=entry.get("severity"),
-                investigated_id=entry.get("investigationId"),
+                investigated_id=investigation_id,
                 closing_user_id=entry.get("closingUserId"),
                 owner=entry.get("owner"),
                 playbook_id=entry.get("playbookId"),
