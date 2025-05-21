@@ -149,7 +149,7 @@ class CortexSOAR:
             )
             transaction.rollback()
 
-    def _get_incidents(self, account_name: str):
+    def _get_incidents(self, account_name: str, day_week_month: str):
         """
         Fetches the list of incidents from the CortexSOAR instance.
 
@@ -157,7 +157,9 @@ class CortexSOAR:
         """
         start = time.time()
         logger.info(f"CortexSOAR._get_incidents() started : {start}")
-        logger.info(f"CortexSOAR._get_incidents() fetching data for : {account_name}")
+        logger.info(
+            f"CortexSOAR._get_incidents() fetching data for : {account_name} for {day_week_month}"
+        )
         endpoint = f"{self.base_url}/{CortexSOARConstants.INCIDENT_ENDPOINT}"
 
         body = {
@@ -168,7 +170,7 @@ class CortexSOAR:
                 "query": "",
                 "sort": [{"field": "id", "asc": False}],
                 "accounts": {account_name: {}},
-                "period": {"by": "month", "fromValue": 1},
+                "period": {"by": day_week_month, "fromValue": 1},
             },
         }
         try:

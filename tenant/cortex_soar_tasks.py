@@ -58,6 +58,7 @@ def sync_cortex_soar_tenants(
 
 @shared_task
 def sync_requests_for_soar():
+    intervals = ["day", "week", "month"]
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
         integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
@@ -77,21 +78,25 @@ def sync_requests_for_soar():
                 logger.info(
                     f"Getting the Incident for the CortexSOAR tenant : {cortex_tenant.name}"
                 )
-                data = soar._get_incidents(account_name=cortex_tenant.name)
-                if not data:
-                    logger.warning(
-                        f"No data returned for the CortexSOAR tenant : {cortex_tenant.name}"
+                for interval in intervals:
+                    logger.info(f"Getting the Incident for the interval : {interval}")
+                    data = soar._get_incidents(
+                        account_name=cortex_tenant.name, day_week_month=interval
                     )
-                    continue
-                records = soar._transform_incidents(
-                    data=data,
-                    integration_id=integration.integration,
-                    cortex_tenant=cortex_tenant,
-                )
-                logger.info(
-                    f"Ingesting the Incident for the CortexSOAR tenant : {cortex_tenant.name}"
-                )
-                soar._insert_incidents(records=records)
+                    if not data:
+                        logger.warning(
+                            f"No data returned for the CortexSOAR tenant : {cortex_tenant.name}"
+                        )
+                        continue
+                    records = soar._transform_incidents(
+                        data=data,
+                        integration_id=integration.integration,
+                        cortex_tenant=cortex_tenant,
+                    )
+                    logger.info(
+                        f"Ingesting the Incident for the CortexSOAR tenant : {cortex_tenant.name}"
+                    )
+                    soar._insert_incidents(records=records)
 
         print(cortex_tenants)
 
