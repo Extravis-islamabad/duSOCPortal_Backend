@@ -194,15 +194,38 @@ class CortexSOAR:
         return data
 
     def safe_parse_datetime(self, value):
+        """
+        Safely parses a datetime string into a datetime object.
+
+        :param value: The value to parse, expected to be a string.
+        :return: A datetime object if the value is a valid datetime string, otherwise None.
+        """
+
         if isinstance(value, str):
             return parse_datetime(value)
         return None
 
     def extract_digits(self, value):
+        """
+        Extracts the first sequence of digits found in the input value.
+
+        :param value: A string potentially containing digits.
+        :return: An integer representing the first sequence of digits found, or None if no digits are present.
+        """
+
         match = re.search(r"\d+", value)
         return int(match.group()) if match else None
 
     def _transform_incidents(self, data, integration_id, cortex_tenant):
+        """
+        Transforms the CortexSOAR data into a format suitable for
+        insertion into the database.
+
+        :param data: The CortexSOAR data.
+        :param integration_id: The ID of the integration.
+        :param cortex_tenant: The CortexSOAR tenant.
+        :return: A list of DUCortexSOARIncidentFinalModel instances.
+        """
         data = data.get("data", None)
 
         if data is None:
@@ -257,7 +280,16 @@ class CortexSOAR:
         return records
 
     def _insert_incidents(self, records):
+        """
+        Inserts or updates the incidents in the DUCortexSOARIncidentFinalModel table.
+
+        :param records: A list of dictionaries containing incident information.
+        """
         start = time.time()
+        if not records:
+            return
+        logger.info(f"CortexSOAR._insert_incidents() started : {start}")
+        logger.info(f"Inserting the incidents records: {len(records)}")
         try:
             with transaction.atomic():
                 DUCortexSOARIncidentFinalModel.objects.bulk_create(
@@ -296,9 +328,9 @@ class CortexSOAR:
                     ],
                     unique_fields=["db_id"],
                 )
-            logger.info(f"Inserted/Updated {len(records)} incidents successfully.")
+            logger.info(f"Inserted the incidents records: {len(records)}")
             logger.success(
-                f"import_incidents_from_file() took: {time.time() - start} seconds"
+                f"CortexSOAR._insert_incidents() took: {time.time() - start} seconds"
             )
         except Exception as e:
             logger.error(f"An error occurred in import_incidents_from_file(): {str(e)}")
