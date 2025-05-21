@@ -42,6 +42,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_super_admin = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
     is_tenant = models.BooleanField(default=False)  # Needed for admin access
+    profile_picture = models.ImageField(
+        upload_to="profile_pictures/", blank=True, null=True
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
