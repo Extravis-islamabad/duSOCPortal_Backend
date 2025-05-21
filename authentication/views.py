@@ -12,7 +12,11 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
-from .serializers import UserCreateSerializer, UserDetailSerializer
+from .serializers import (
+    ProfilePictureUploadSerializer,
+    UserCreateSerializer,
+    UserDetailSerializer,
+)
 
 
 class UserCreateAPIView(APIView):
@@ -199,3 +203,24 @@ class UserLogoutAPIView(APIView):
                 {"message": "Successfully logged out"},
                 status=status.HTTP_200_OK,
             )
+
+
+class ProfilePictureUploadView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        profile = request.user  # direct user instance
+
+        serializer = ProfilePictureUploadSerializer(
+            profile, data=request.data, partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {
+                    "message": "Profile picture uploaded successfully",
+                    "data": serializer.data,
+                }
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

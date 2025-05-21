@@ -31,6 +31,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
             "username",
             "email",
             "name",
+            "profile_picture",
             "is_tenant",
             "is_admin",
             "created_at",
@@ -67,3 +68,9 @@ class UserDetailSerializer(serializers.ModelSerializer):
                 return []
         # For admins (or non-tenants), return an empty list
         return []
+
+
+class ProfilePictureUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["profile_picture"]
