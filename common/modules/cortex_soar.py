@@ -191,7 +191,6 @@ class CortexSOAR:
             return
 
         data = response.json()
-        print(data)
         return data
 
     def safe_parse_datetime(self, value):
@@ -204,7 +203,13 @@ class CortexSOAR:
         return int(match.group()) if match else None
 
     def _transform_incidents(self, data, integration_id, cortex_tenant):
-        data = data.get("data", [])
+        data = data.get("data", None)
+
+        if data is None:
+            logger.warning(
+                f"No data found for the CortexSOAR tenant : {cortex_tenant.name}"
+            )
+            return
         records = []
 
         for entry in data:
