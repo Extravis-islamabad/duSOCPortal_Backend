@@ -8,7 +8,12 @@ from requests.auth import HTTPBasicAuth
 
 from common.constants import IBMQradarConstants, SSLConstants
 from common.utils import DBMappings
-from tenant.models import DuIbmQradarTenants, IBMQradarAssests, IBMQradarEventCollector
+from tenant.models import (
+    DuIbmQradarTenants,
+    IBMQradarAssests,
+    IBMQradarEventCollector,
+    IBMQradarOffense,
+)
 
 
 class IBMQradar:
@@ -440,4 +445,204 @@ class IBMQradar:
             logger.error(
                 f"An error occurred in IBMQradar._insert_event_logs(): {str(e)}"
             )
+            transaction.rollback()
+
+    def _get_offenses(self):
+        start = time.time()
+        logger.info(f"IBMQRadar._get_offenses() started: {start}")
+        endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_OFFENSES_ENDPOINT}"
+        try:
+            response = requests.get(
+                endpoint,
+                auth=HTTPBasicAuth(
+                    self.username,
+                    self.password,
+                ),
+                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                timeout=SSLConstants.TIMEOUT,
+            )
+            if response.status_code != 200:
+                logger.warning(
+                    f"IBMQRadar._get_offenses() return the status code {response.status_code}"
+                )
+                return
+            response = response.json()
+            logger.success(
+                f"IBMQRadar._get_offenses() took: {time.time() - start} seconds"
+            )
+            return response
+        except Exception as e:
+            logger.error(f"An error occurred in IBMQradar._get_offenses(): {str(e)}")
+
+    def _transform_offenses(self, data, integration_id):
+        """
+        Transforms the list of offenses from the IBM QRadar endpoint into a list of IBMQradarOffense instances
+        suitable for insertion into the database.
+
+        :param data: A list of dictionaries containing offense information.
+        :param integration_id: The ID of the integration associated with the data.
+        :return: A tuple containing a list of (IBMQradarOffense instance, assest_ids) tuples and a dictionary mapping asset db_id to id.
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._transform_offenses() started: {start}")
+
+        if not data:
+            logger.warning("No offense data found for QRadar")
+            return [], {}
+
+        records = []
+        tenant_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        asset_map = DBMappings.get_db_id_to_id_mapping(IBMQradarAssests)
+
+        for entry in data:
+            domain_id = entry.get("domain_id")
+            if domain_id is None or domain_id == "" or domain_id == " ":
+                logger.warning(
+                    f"Skipping offense with invalid domain_id: {entry.get('id')}"
+                )
+                continue
+
+            # Map domain_id to tenant_id (primary key of DuIbmQradarTenants)
+            tenant_id = tenant_map.get(domain_id)
+            if tenant_id is None:
+                logger.warning(
+                    f"Skipping offense with db_id {entry.get('id')} due to missing tenant with domain_id {domain_id}"
+                )
+                continue
+
+            # Extract log_sources IDs for many-to-many relationship
+            log_sources = entry.get("log_sources", [])
+            assest_ids = [
+                asset_map.get(ls["id"])
+                for ls in log_sources
+                if ls.get("id") in asset_map
+            ]
+
+            record = IBMQradarOffense(
+                db_id=entry.get("id"),
+                qradar_tenant_domain_id=tenant_id,
+                description=entry.get("description"),
+                event_count=entry.get("event_count", 0),
+                flow_count=entry.get("flow_count", 0),
+                assigned_to=entry.get("assigned_to"),
+                integration_id=integration_id,
+                security_category_count=entry.get("security_category_count", 0),
+                follow_up=entry.get("follow_up", False),
+                source_address_ids=entry.get("source_address_ids", []),
+                source_count=entry.get("source_count", 0),
+                inactive=entry.get("inactive", False),
+                protected=entry.get("protected", False),
+                closing_user=entry.get("closing_user"),
+                destination_networks=entry.get("destination_networks", []),
+                source_network=entry.get("source_network"),
+                category_count=entry.get("category_count", 0),
+                close_time=entry.get("close_time"),
+                remote_destination_count=entry.get("remote_destination_count", 0),
+                start_time=entry.get("start_time"),
+                magnitude=entry.get("magnitude", 0),
+                last_updated_time=entry.get("last_updated_time"),
+                last_persisted_time=entry.get("last_persisted_time"),
+                first_persisted_time=entry.get("first_persisted_time"),
+                credibility=entry.get("credibility", 0),
+                severity=entry.get("severity", 0),
+                policy_category_count=entry.get("policy_category_count", 0),
+                closing_reason_id=entry.get("closing_reason_id"),
+                device_count=entry.get("device_count", 0),
+                offense_type=entry.get("offense_type", 0),
+                relevance=entry.get("relevance", 0),
+                offense_source=entry.get("offense_source"),
+                local_destination_address_ids=entry.get(
+                    "local_destination_address_ids", []
+                ),
+                local_destination_count=entry.get("local_destination_count", 0),
+                status=entry.get("status"),
+                categories=entry.get("categories", []),
+                rules=entry.get("rules", []),
+            )
+            records.append((record, assest_ids))
+
+        logger.success(
+            f"IBMQRadar._transform_offenses() took: {time.time() - start} seconds, transformed {len(records)} offenses"
+        )
+        return records, asset_map
+
+    def _insert_offenses(self, transformed_data):
+        """
+        Inserts or updates offense records in the IBMQradarOffense table and sets their assests relationships.
+
+        :param transformed_data: A list of tuples containing IBMQradarOffense instances and their assest_ids.
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._insert_offenses() started: {start}")
+
+        try:
+            records = [record for record, _ in transformed_data]
+            assest_mappings = [
+                (record.db_id, assest_ids) for record, assest_ids in transformed_data
+            ]
+
+            logger.info(f"Inserting offense records: {len(records)}")
+
+            with transaction.atomic():
+                # Bulk create or update offenses
+                IBMQradarOffense.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=[
+                        "qradar_tenant_domain",
+                        "description",
+                        "event_count",
+                        "flow_count",
+                        "assigned_to",
+                        "security_category_count",
+                        "follow_up",
+                        "source_address_ids",
+                        "source_count",
+                        "inactive",
+                        "protected",
+                        "closing_user",
+                        "destination_networks",
+                        "source_network",
+                        "category_count",
+                        "close_time",
+                        "remote_destination_count",
+                        "start_time",
+                        "magnitude",
+                        "last_updated_time",
+                        "last_persisted_time",
+                        "first_persisted_time",
+                        "credibility",
+                        "severity",
+                        "policy_category_count",
+                        "closing_reason_id",
+                        "device_count",
+                        "offense_type",
+                        "relevance",
+                        "offense_source",
+                        "local_destination_address_ids",
+                        "local_destination_count",
+                        "status",
+                        "categories",
+                        "rules",
+                    ],
+                    unique_fields=["db_id"],
+                )
+
+                # Set many-to-many relationships for assests
+                for db_id, assest_ids in assest_mappings:
+                    offense = IBMQradarOffense.objects.get(db_id=db_id)
+                    if assest_ids:
+                        offense.assests.set(assest_ids)
+                    else:
+                        logger.warning(
+                            f"No valid assets found for offense db_id: {db_id}"
+                        )
+
+            logger.info(f"Inserted/updated offense records: {len(records)}")
+            logger.success(
+                f"IBMQRadar._insert_offenses() took: {time.time() - start} seconds"
+            )
+
+        except Exception as e:
+            logger.error(f"An error occurred in IBMQradar._insert_offenses(): {str(e)}")
             transaction.rollback()
