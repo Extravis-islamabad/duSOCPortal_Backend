@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from django.db.models import (
     Case,
@@ -13,6 +13,7 @@ from django.db.models import (
     When,
 )
 from django.db.models.functions import ExtractSecond
+from django.utils import timezone
 from loguru import logger
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
@@ -1187,11 +1188,13 @@ class OffenseStatsAPIView(APIView):
                 )
 
             # Step 3: Calculate today's start timestamp (00:00 UTC, May 22, 2025)
-            today_start = datetime(2025, 5, 22, 0, 0, 0, tzinfo=timezone.utc)
-            today_start_timestamp = int(
-                today_start.timestamp() * 1000
-            )  # Convert to milliseconds
+            now = timezone.now()
 
+            # Start of today in Django timezone
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+            # Convert to milliseconds timestamp
+            today_start_timestamp = int(today_start.timestamp() * 1000)
             # Step 4: Compute statistics directly in the database
             stats = IBMQradarOffense.objects.filter(
                 Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
