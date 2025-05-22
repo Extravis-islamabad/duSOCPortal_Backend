@@ -1,5 +1,6 @@
 import json
 import time
+from collections import Counter
 from datetime import timedelta
 
 from django.db.models import (
@@ -1424,6 +1425,81 @@ class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
             }
 
             return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception:
+            return Response(
+                {"error": "Invalid tenant or related data not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class OffenseCategoriesAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
+            tenant = request.user
+            mappings = TenantQradarMapping.objects.filter(
+                tenant__tenant=tenant
+            ).values_list("event_collectors__id", "qradar_tenant__id")
+
+            if not mappings:
+                return Response(
+                    {"error": "No mappings found for the tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Extract collector IDs and tenant IDs
+            collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
+
+            # Step 2: Retrieve asset IDs based on collector IDs
+            assets = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).values_list("id", flat=True)
+
+            if not assets:
+                return Response(
+                    {"error": "No assets found for the given collectors."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 3: Retrieve offenses with categories field
+            offenses = IBMQradarOffense.objects.filter(
+                Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
+            ).values("categories")
+
+            # Step 4: Aggregate category counts
+            category_counts = Counter()
+            for offense in offenses:
+                categories = offense["categories"] or []  # Handle null/empty JSONField
+                if isinstance(categories, list):  # Ensure it's a list
+                    category_counts.update(
+                        category for category in categories if category
+                    )  # Skip empty strings
+
+            # Step 5: Format the response for graphing
+            response_data = [
+                {"category": category, "count": count}
+                for category, count in category_counts.items()
+            ]
+
+            if not response_data:
+                return Response(
+                    {
+                        "message": "No offense categories found for the given assets and tenant.",
+                        "categories": [],
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response({"categories": response_data}, status=status.HTTP_200_OK)
 
         except Exception:
             return Response(
