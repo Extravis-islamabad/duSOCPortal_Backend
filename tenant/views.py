@@ -26,6 +26,7 @@ from common.constants import PaginationConstants
 from tenant.cortex_soar_tasks import sync_requests_for_soar
 from tenant.ibm_qradar_tasks import sync_event_log_sources
 from tenant.models import (
+    DUCortexSOARIncidentFinalModel,
     DUCortexSOARIncidentModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
@@ -247,9 +248,11 @@ class TenantCortexSOARIncidentsAPIView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         soar_tenants = tenant.soar_tenants.all()
-        soar_db_ids = [t.db_id for t in soar_tenants]
+        soar_ids = [t.id for t in soar_tenants]
 
-        incidents = DUCortexSOARIncidentModel.objects.filter(account_id__in=soar_db_ids)
+        incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+            cortex_soar_tenant__in=soar_ids
+        )
         paginator = PageNumberPagination()
         paginator.page_size = PaginationConstants.PAGE_SIZE
         paginated_incidents = paginator.paginate_queryset(incidents, request)
@@ -268,15 +271,20 @@ class SeverityDistributionView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         soar_tenants = tenant.soar_tenants.all()
-        soar_db_ids = [t.db_id for t in soar_tenants]
+        if not soar_tenants:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
-        if not soar_db_ids:
+        soar_ids = [t.id for t in soar_tenants]
+
+        if not soar_ids:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
         try:
             # Query severity distribution using Django ORM
             severity_data = (
-                DUCortexSOARIncidentModel.objects.filter(account_id__in=soar_db_ids)
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids
+                )
                 .values("severity")
                 .annotate(count=Count("id"))
                 .order_by("severity")
@@ -311,26 +319,31 @@ class TypeDistributionView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         soar_tenants = tenant.soar_tenants.all()
-        soar_db_ids = [t.db_id for t in soar_tenants]
+        if not soar_tenants:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
-        if not soar_db_ids:
+        soar_ids = [t.id for t in soar_tenants]
+
+        if not soar_ids:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
         try:
             # Query type distribution using Django ORM
             type_data = (
-                DUCortexSOARIncidentModel.objects.filter(account_id__in=soar_db_ids)
-                .values("qradarcategory")
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids
+                )
+                .values("qradar_category")
                 .annotate(count=Count("id"))
                 .order_by("-count")
                 .exclude(
-                    qradarcategory__isnull=True
+                    qradar_category__isnull=True
                 )  # Exclude NULL qradarcategory values
             )
 
             # Transform data to match Flask output
             result = [
-                {"name": item["qradarcategory"], "value": item["count"]}
+                {"name": item["qradar_category"], "value": item["count"]}
                 for item in type_data
             ]
 
@@ -354,15 +367,18 @@ class SLAStatusView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         soar_tenants = tenant.soar_tenants.all()
-        soar_db_ids = [t.db_id for t in soar_tenants]
+        if not soar_tenants:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
-        if not soar_db_ids:
+        soar_ids = [t.id for t in soar_tenants]
+
+        if not soar_ids:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
         try:
             # Query SLA compliance using Django ORM
-            sla_stats = DUCortexSOARIncidentModel.objects.filter(
-                account_id__in=soar_db_ids, status__in=["Closed", "False Positive"]
+            sla_stats = DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_soar_tenant__in=soar_ids, status__in=["Closed", "False Positive"]
             ).aggregate(
                 total=Count("id", filter=Q(sla__isnull=False)),
                 within_sla=Count(
@@ -382,8 +398,8 @@ class SLAStatusView(APIView):
 
             # Query most at-risk incidents
             at_risk_qs = (
-                DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids,
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
                     status__in=["Closed", "False Positive"],
                     sla__isnull=False,
                 )
@@ -464,15 +480,20 @@ class OwnerDistributionView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         soar_tenants = tenant.soar_tenants.all()
-        soar_db_ids = [t.db_id for t in soar_tenants]
+        if not soar_tenants:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
-        if not soar_db_ids:
+        soar_ids = [t.id for t in soar_tenants]
+
+        if not soar_ids:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
         try:
             # Fetch owner counts excluding null
             owner_counts = (
-                DUCortexSOARIncidentModel.objects.filter(account_id__in=soar_db_ids)
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids
+                )
                 .exclude(owner__isnull=True)
                 .values("owner")
                 .annotate(count=Count("owner"))
@@ -484,8 +505,8 @@ class OwnerDistributionView(APIView):
             ]
 
             # Count unassigned
-            unassigned_count = DUCortexSOARIncidentModel.objects.filter(
-                account_id__in=soar_db_ids, owner__isnull=True
+            unassigned_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_soar_tenant__in=soar_ids, owner__isnull=True
             ).count()
 
             if unassigned_count > 0:
@@ -512,10 +533,14 @@ class DashboardView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         soar_tenants = tenant.soar_tenants.all()
-        soar_db_ids = [t.db_id for t in soar_tenants]
-
-        if not soar_db_ids:
+        if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
+
+        soar_ids = [t.id for t in soar_tenants]
+
+        if not soar_ids:
+            return Response({"error": "No SOAR tenants found."}, status=404)
+
         filters = request.query_params.get("filters", "")
         filter_list = (
             [f.strip() for f in filters.split(",") if f.strip()] if filters else []
@@ -531,16 +556,16 @@ class DashboardView(APIView):
 
             # Total Incidents
             if not filter_list or "totalIncidents" in filter_list:
-                total_incidents = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids
+                total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids
                 ).count()
 
-                new_incidents = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids, created__date=today
+                new_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids, created__date=today
                 ).count()
 
-                last_week_incidents = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids, created__date__gte=last_week
+                last_week_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids, created__date__gte=last_week
                 ).count()
 
                 percent_change = (
@@ -562,16 +587,16 @@ class DashboardView(APIView):
 
             # Unassigned Incidents
             if not filter_list or "unassigned" in filter_list:
-                unassigned_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids, owner__isnull=True
+                unassigned_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids, owner__isnull=True
                 ).count()
 
-                critical_unassigned = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids, owner__isnull=True, severity=1
+                critical_unassigned = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids, owner__isnull=True, severity=1
                 ).count()
 
-                yesterday_unassigned = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids,
+                yesterday_unassigned = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
                     owner__isnull=True,
                     created__date=yesterday,
                 ).count()
@@ -593,18 +618,18 @@ class DashboardView(APIView):
 
             # Pending Incidents
             if not filter_list or "pending" in filter_list:
-                pending_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids, status="Pending"
+                pending_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids, status="Pending"
                 ).count()
 
-                awaiting_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids,
+                awaiting_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
                     status="Pending",
                     incident_phase="Awaiting Response",
                 ).count()
 
-                yesterday_pending = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids,
+                yesterday_pending = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
                     status="Pending",
                     created__date=yesterday,
                 ).count()
@@ -627,21 +652,23 @@ class DashboardView(APIView):
 
             # False Positives
             if not filter_list or "falsePositives" in filter_list:
-                false_positive_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids, status="False Positive"
+                false_positive_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids, status="False Positive"
                 ).count()
 
-                review_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids,
+                review_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
                     status="False Positive",
                     incident_phase="Review Needed",
                 ).count()
 
-                last_week_false_positives = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids,
-                    status="False Positive",
-                    created__date__gte=last_week,
-                ).count()
+                last_week_false_positives = (
+                    DUCortexSOARIncidentFinalModel.objects.filter(
+                        cortex_soar_tenant__in=soar_ids,
+                        status="False Positive",
+                        created__date__gte=last_week,
+                    ).count()
+                )
 
                 fp_change = (
                     (
@@ -663,19 +690,21 @@ class DashboardView(APIView):
 
             # Closed Incidents
             if not filter_list or "closed" in filter_list:
-                closed_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids, status="Closed", closed__date=today
+                closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids, status="Closed", closed__date=today
                 ).count()
 
-                critical_closed = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids,
+                critical_closed = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
                     status="Closed",
                     severity=1,
                     closed__date=today,
                 ).count()
 
-                yesterday_closed = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids, status="Closed", closed__date=yesterday
+                yesterday_closed = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
+                    status="Closed",
+                    closed__date=yesterday,
                 ).count()
 
                 closed_change = (
@@ -696,18 +725,20 @@ class DashboardView(APIView):
 
             # Error Incidents
             if not filter_list or "errors" in filter_list:
-                error_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids, status="Error"
+                error_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids, status="Error"
                 ).count()
 
-                api_error_count = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids,
+                api_error_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
                     status="Error",
-                    qradarcategory="API Failure",
+                    qradar_category="API Failure",
                 ).count()
 
-                yesterday_errors = DUCortexSOARIncidentModel.objects.filter(
-                    account_id__in=soar_db_ids, status="Error", created__date=yesterday
+                yesterday_errors = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
+                    status="Error",
+                    created__date=yesterday,
                 ).count()
 
                 error_change = error_count - yesterday_errors
@@ -726,8 +757,8 @@ class DashboardView(APIView):
             # Top Closers
             if not filter_list or "topClosers" in filter_list:
                 top_closers_qs = (
-                    DUCortexSOARIncidentModel.objects.filter(
-                        account_id__in=soar_db_ids,
+                    DUCortexSOARIncidentFinalModel.objects.filter(
+                        cortex_soar_tenant__in=soar_ids,
                         status="Closed",
                         closing_user_id__isnull=False,
                     )
@@ -746,7 +777,9 @@ class DashboardView(APIView):
             # Recent Activities
             if not filter_list or "recentActivities" in filter_list:
                 recent_qs = (
-                    DUCortexSOARIncidentModel.objects.filter(account=soar_db_ids)
+                    DUCortexSOARIncidentFinalModel.objects.filter(
+                        cortex_soar_tenant__in=soar_ids
+                    )
                     .order_by("-modified")[:5]
                     .values("id", "name", "modified", "owner", "status")
                 )
@@ -789,9 +822,12 @@ class IncidentsView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         soar_tenants = tenant.soar_tenants.all()
-        soar_db_ids = [t.db_id for t in soar_tenants]
+        if not soar_tenants:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
-        if not soar_db_ids:
+        soar_ids = [t.id for t in soar_tenants]
+
+        if not soar_ids:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
         # Get filter_type from query parameter, default to 'all'
@@ -799,8 +835,8 @@ class IncidentsView(APIView):
 
         try:
             # Base queryset
-            queryset = DUCortexSOARIncidentModel.objects.filter(
-                account_id__in=soar_db_ids
+            queryset = DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_soar_tenant__in=soar_ids
             ).values(
                 "id",
                 "db_id",
@@ -808,7 +844,7 @@ class IncidentsView(APIView):
                 "name",
                 "status",
                 "severity",
-                "incidentpriority",
+                "incident_priority",
                 "created",
                 "owner",
                 "playbook_id",
@@ -837,7 +873,7 @@ class IncidentsView(APIView):
             severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
             for row in queryset:
                 # Determine priority
-                priority = row["incidentpriority"] or severity_map.get(
+                priority = row["incident_priority"] or severity_map.get(
                     row["severity"], "P4"
                 )
 
@@ -883,24 +919,25 @@ class IncidentDetailView(APIView):
     permission_classes = [IsTenant]
 
     def get(self, request, incident_id):
-        # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
-        #   tenant_id = request.headers.get('X-Tenant-ID', 'CDC-Mey-Tabreed')
         try:
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
         soar_tenants = tenant.soar_tenants.all()
-        soar_db_ids = [t.db_id for t in soar_tenants]
+        if not soar_tenants:
+            return Response({"error": "No SOAR tenants found."}, status=404)
 
-        if not soar_db_ids:
+        soar_ids = [t.id for t in soar_tenants]
+
+        if not soar_ids:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
         try:
             # Fetch incident using numeric incident_id
             incident = (
-                DUCortexSOARIncidentModel.objects.filter(
-                    db_id=incident_id, account_id__in=soar_db_ids
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    db_id=incident_id, cortex_soar_tenant__in=soar_ids
                 )
                 .values(
                     "id",
@@ -908,7 +945,7 @@ class IncidentDetailView(APIView):
                     "name",
                     "status",
                     "severity",
-                    "incidentpriority",
+                    "incident_priority",
                     "created",
                     "modified",
                     "owner",
@@ -919,12 +956,12 @@ class IncidentDetailView(APIView):
                     "closing_user_id",
                     "reason",
                     "incident_phase",
-                    "qradarcategory",
-                    "incidenttta",
-                    "ttacalculation",
-                    "sourceips",
-                    "logsourcetype",
-                    "listofrulesoffense",
+                    "qradar_category",
+                    "incident_tta",
+                    "tta_calculation",
+                    "source_ips",
+                    "log_source_type",
+                    "list_of_rules_offense",
                 )
                 .first()
             )
@@ -943,7 +980,7 @@ class IncidentDetailView(APIView):
                         "title": "Incident created",
                         "time": incident["created"].strftime("%I:%M %p"),
                         "description": "System created the incident",
-                        "detail": f"Source: {incident['qradarcategory'] or 'SIEM Alert'}",
+                        "detail": f"Source: {incident['qradar_category'] or 'SIEM Alert'}",
                     }
                 )
 
@@ -969,12 +1006,12 @@ class IncidentDetailView(APIView):
                     }
                 )
 
-            if incident["incidenttta"]:
+            if incident["incident_tta"]:
                 timeline.append(
                     {
                         "icon": "schedule",
                         "title": "Incident acknowledged",
-                        "time": incident["incidenttta"].strftime("%I:%M %p"),
+                        "time": incident["incident_tta"].strftime("%I:%M %p"),
                         "description": "Time to acknowledge recorded",
                         "detail": f"TTA: {incident['ttacalculation'] or 'Standard calculation'}",
                     }
@@ -985,23 +1022,23 @@ class IncidentDetailView(APIView):
 
             # Process JSON fields
             source_ips = []
-            if incident["sourceips"]:
+            if incident["source_ips"]:
                 try:
                     source_ips = (
-                        json.loads(incident["sourceips"])
-                        if isinstance(incident["sourceips"], str)
-                        else incident["sourceips"]
+                        json.loads(incident["source_ips"])
+                        if isinstance(incident["source_ips"], str)
+                        else incident["source_ips"]
                     )
                 except (json.JSONDecodeError, TypeError):
                     source_ips = []
 
             log_source_types = []
-            if incident["logsourcetype"]:
+            if incident["log_source_type"]:
                 try:
                     log_source_types = (
-                        json.loads(incident["logsourcetype"])
-                        if isinstance(incident["logsourcetype"], str)
-                        else incident["logsourcetype"]
+                        json.loads(incident["log_source_type"])
+                        if isinstance(incident["log_source_type"], str)
+                        else incident["log_source_type"]
                     )
                 except (json.JSONDecodeError, TypeError):
                     log_source_types = []
@@ -1009,12 +1046,12 @@ class IncidentDetailView(APIView):
             # Create related items
             related_items = {"alerts": [], "users": [], "assets": []}
 
-            if incident["listofrulesoffense"]:
+            if incident["list_of_rules_offense"]:
                 try:
                     rules = (
-                        json.loads(incident["listofrulesoffense"])
-                        if isinstance(incident["listofrulesoffense"], str)
-                        else incident["listofrulesoffense"]
+                        json.loads(incident["list_of_rules_offense"])
+                        if isinstance(incident["list_of_rules_offense"], str)
+                        else incident["list_of_rules_offense"]
                     )
                     # Handle list of strings
                     if isinstance(rules, list) and all(
@@ -1056,7 +1093,7 @@ class IncidentDetailView(APIView):
                     )
 
             # Determine priority
-            priority = incident["incidentpriority"] or (
+            priority = incident["incident_priority"] or (
                 {1: "P1", 2: "P2", 3: "P3", 4: "P4"}.get(incident["severity"], "P4")
             )
 
@@ -1091,7 +1128,7 @@ class IncidentDetailView(APIView):
                         "priority": priority,
                         "sourceIPs": source_ips_str,
                         "logSourceType": log_source_type_str,
-                        "category": incident["qradarcategory"] or "Unknown",
+                        "category": incident["qradar_category"] or "Unknown",
                     },
                     "timeline": timeline,
                     "relatedItems": related_items,
