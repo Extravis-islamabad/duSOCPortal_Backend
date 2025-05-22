@@ -1394,7 +1394,7 @@ class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
             # Step 4: Retrieve assets associated with the offense
             offense_assets = IBMQradarAssests.objects.filter(
                 du_ibm_qradar_offenses__id=offense_id
-            ).values("id", "name", "description")
+            ).values("id", "db_id", "name", "description")
 
             # Step 5: Format the response
             response_data = {
@@ -1411,6 +1411,7 @@ class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
                 "assets": [
                     {
                         "id": asset["id"],
+                        "db_id": asset["db_id"],
                         "name": asset["name"],
                         "description": asset["description"],
                     }
