@@ -24,20 +24,13 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import PaginationConstants
-from tenant.cortex_soar_tasks import sync_requests_for_soar
-from tenant.ibm_qradar_tasks import sync_event_log_sources
-from tenant.itsm_tasks import (
-    sync_itsm_tenants,
-    sync_itsm_tenants_cron,
-    sync_itsm_tenants_tickets,
-)
+from tenant.itsm_tasks import sync_itsm_tenants_tickets
 from tenant.models import (
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMFinalTickets,
     DuITSMTenants,
-    DuITSMTickets,
     IBMQradarAssests,
     IBMQradarEventCollector,
     IBMQradarOffense,
@@ -1583,6 +1576,46 @@ class TopLogSourcesAPIView(APIView):
                 )
 
             return Response({"log_sources": response_data}, status=status.HTTP_200_OK)
+
+        except Exception:
+            return Response(
+                {"error": "Invalid tenant or related data not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class TotalAssetsByTenantAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            # Step 1: Retrieve collector IDs from TenantQradarMapping
+            tenant = request.user
+            mappings = TenantQradarMapping.objects.filter(
+                tenant__tenant=tenant
+            ).values_list("event_collectors__id", flat=True)
+
+            if not mappings:
+                return Response(
+                    {"error": "No mappings found for the tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 2: Count assets based on collector IDs
+            asset_count = IBMQradarAssests.objects.filter(
+                event_collector__id__in=mappings
+            ).aggregate(totalAssets=Count("id"))
+
+            # Step 3: Format the response
+            response_data = {"total_assets": asset_count["totalAssets"] or 0}
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception:
             return Response(

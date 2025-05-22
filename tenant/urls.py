@@ -22,6 +22,7 @@ from tenant.views import (
     TenantITSMTicketsView,
     TestView,
     TopLogSourcesAPIView,
+    TotalAssetsByTenantAPIView,
     TypeDistributionView,
 )
 
@@ -100,6 +101,11 @@ urlpatterns = [
     ),
     path(
         "api/top-log-sources/", TopLogSourcesAPIView.as_view(), name="top-log-sources"
+    ),
+    path(
+        "api/total-assets-by-tenant/",
+        TotalAssetsByTenantAPIView.as_view(),
+        name="total-assets-by-tenant",
     ),
     path("test/", TestView.as_view(), name="test"),
 ]
