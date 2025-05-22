@@ -78,9 +78,71 @@ class IBMQradarAssests(models.Model):
         db_table = "du_ibm_qradar_assets"
 
 
+class IBMQradarOffense(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True)  # Maps to 'id' in JSON
+    qradar_tenant_domain = models.ForeignKey(
+        DuIbmQradarTenants,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_offenses",
+    )
+    assests = models.ManyToManyField(
+        IBMQradarAssests,
+        related_name="du_ibm_qradar_offenses",
+    )
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_offenses",
+        null=True,
+        blank=True,
+    )
+    description = models.TextField(blank=True, null=True)
+    event_count = models.IntegerField(default=0)
+    flow_count = models.IntegerField(default=0)
+    assigned_to = models.CharField(max_length=255, blank=True, null=True)
+    security_category_count = models.IntegerField(default=0)
+    follow_up = models.BooleanField(default=False)
+    source_address_ids = models.JSONField(default=list)  # Store as JSON array
+    source_count = models.IntegerField(default=0)
+    inactive = models.BooleanField(default=False)
+    protected = models.BooleanField(default=False)
+    closing_user = models.CharField(max_length=255, blank=True, null=True)
+    destination_networks = models.JSONField(default=list)  # Store as JSON array
+    source_network = models.CharField(max_length=255, blank=True, null=True)
+    category_count = models.IntegerField(default=0)
+    close_time = models.BigIntegerField(null=True, blank=True)
+    remote_destination_count = models.IntegerField(default=0)
+    start_time = models.BigIntegerField()
+    magnitude = models.IntegerField(default=0)
+    last_updated_time = models.BigIntegerField()
+    last_persisted_time = models.BigIntegerField()
+    first_persisted_time = models.BigIntegerField()
+    credibility = models.IntegerField(default=0)
+    severity = models.IntegerField(default=0)
+    policy_category_count = models.IntegerField(default=0)
+    closing_reason_id = models.IntegerField(null=True, blank=True)
+    device_count = models.IntegerField(default=0)
+    offense_type = models.IntegerField(default=0)
+    relevance = models.IntegerField(default=0)
+    offense_source = models.CharField(max_length=255, blank=True, null=True)
+    local_destination_address_ids = models.JSONField(
+        default=list
+    )  # Store as JSON array
+    local_destination_count = models.IntegerField(default=0)
+    status = models.CharField(max_length=50, blank=True, null=True)
+    categories = models.JSONField(default=list)  # Store as JSON array
+    rules = models.JSONField(default=list)  # Store as JSON array
+
+    class Meta:
+        db_table = "du_ibm_qradar_offenses"
+
+    def __str__(self):
+        return f"Offense {self.db_id} - {self.description}"
+
+
 class DuITSMTenants(models.Model):
     id = models.AutoField(primary_key=True)
-    db_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=255, blank=True, default=None)
     integration = models.ForeignKey(
         Integration,
