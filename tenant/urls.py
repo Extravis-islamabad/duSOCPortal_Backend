@@ -21,6 +21,7 @@ from tenant.views import (
     TenantCortexSOARIncidentsAPIView,
     TenantITSMTicketsView,
     TestView,
+    TopLogSourcesAPIView,
     TypeDistributionView,
 )
 
@@ -96,6 +97,9 @@ urlpatterns = [
         "api/offense-categories/",
         OffenseCategoriesAPIView.as_view(),
         name="offense-categories",
+    ),
+    path(
+        "api/top-log-sources/", TopLogSourcesAPIView.as_view(), name="top-log-sources"
     ),
     path("test/", TestView.as_view(), name="test"),
 ]

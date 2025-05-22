@@ -1511,3 +1511,80 @@ class OffenseCategoriesAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class TopLogSourcesAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
+            tenant = request.user
+            mappings = TenantQradarMapping.objects.filter(
+                tenant__tenant=tenant
+            ).values_list("event_collectors__id", "qradar_tenant__id")
+
+            if not mappings:
+                return Response(
+                    {"error": "No mappings found for the tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Extract collector IDs and tenant IDs
+            collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
+
+            # Step 2: Retrieve asset IDs based on collector IDs
+            assets = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).values_list("id", flat=True)
+
+            if not assets:
+                return Response(
+                    {"error": "No assets found for the given collectors."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 3: Get top 5 assets by offense count
+            top_assets = (
+                IBMQradarAssests.objects.filter(
+                    id__in=assets,
+                    du_ibm_qradar_offenses__qradar_tenant_domain__id__in=tenant_ids,
+                )
+                .annotate(offense_count=Count("du_ibm_qradar_offenses"))
+                .order_by("-offense_count")
+                .values("id", "name", "description", "offense_count")[:5]
+            )
+
+            # Step 4: Format the response
+            response_data = [
+                {
+                    "id": asset["id"],
+                    "name": asset["name"],
+                    "description": asset["description"],
+                    "offense_count": asset["offense_count"],
+                }
+                for asset in top_assets
+            ]
+
+            if not response_data:
+                return Response(
+                    {
+                        "message": "No assets with associated offenses found for the given tenant.",
+                        "log_sources": [],
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response({"log_sources": response_data}, status=status.HTTP_200_OK)
+
+        except Exception:
+            return Response(
+                {"error": "Invalid tenant or related data not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
