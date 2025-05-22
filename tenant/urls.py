@@ -23,6 +23,7 @@ from tenant.views import (
     TestView,
     TopLogSourcesAPIView,
     TotalAssetsByTenantAPIView,
+    TotalTicketsByTenantAPIView,
     TypeDistributionView,
 )
 
@@ -106,6 +107,11 @@ urlpatterns = [
         "api/total-assets-by-tenant/",
         TotalAssetsByTenantAPIView.as_view(),
         name="total-assets-by-tenant",
+    ),
+    path(
+        "api/total-tickets-by-tenant/",
+        TotalTicketsByTenantAPIView.as_view(),
+        name="total-tickets-by-tenant",
     ),
     path("test/", TestView.as_view(), name="test"),
 ]

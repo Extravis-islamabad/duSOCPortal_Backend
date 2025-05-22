@@ -1627,3 +1627,43 @@ class TotalAssetsByTenantAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class TotalTicketsByTenantAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            # Step 1: Retrieve ITSM tenant IDs from Tenant
+            tenant = request.user
+            itsm_tenant_ids = Tenant.objects.filter(tenant=tenant).values_list(
+                "itsm_tenants__id", flat=True
+            )
+
+            if not itsm_tenant_ids:
+                return Response(
+                    {"error": "No ITSM tenants found for the tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 2: Count tickets based on ITSM tenant IDs
+            ticket_count = DuITSMFinalTickets.objects.filter(
+                itsm_tenant__in=itsm_tenant_ids
+            ).aggregate(totalTickets=Count("id"))
+
+            # Step 3: Format the response
+            response_data = {"totalTickets": ticket_count["totalTickets"] or 0}
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception:
+            return Response(
+                {"error": "Invalid tenant or related data not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
