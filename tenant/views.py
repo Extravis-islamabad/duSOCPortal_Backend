@@ -1553,13 +1553,14 @@ class TopLogSourcesAPIView(APIView):
                 )
                 .annotate(offense_count=Count("du_ibm_qradar_offenses"))
                 .order_by("-offense_count")
-                .values("id", "name", "description", "offense_count")[:5]
+                .values("id", "db_id", "name", "description", "offense_count")[:5]
             )
 
             # Step 4: Format the response
             response_data = [
                 {
                     "id": asset["id"],
+                    "db_id": asset["db_id"],
                     "name": asset["name"],
                     "description": asset["description"],
                     "offense_count": asset["offense_count"],
