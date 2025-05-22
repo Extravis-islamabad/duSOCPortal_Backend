@@ -143,6 +143,7 @@ class IBMQradarOffense(models.Model):
 
 class DuITSMTenants(models.Model):
     id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True, default=None)
     name = models.CharField(max_length=255, blank=True, default=None)
     integration = models.ForeignKey(
         Integration,
@@ -178,6 +179,27 @@ class DuITSMTickets(models.Model):
 
     def __str__(self):
         return f"{self.short_description} ({self.external_id})"
+
+
+# class DuITSMFinalTickets(models.Model):
+#     id = models.AutoField(primary_key=True)
+#     db_id = models.IntegerField(unique=True)
+#     short_description = models.TextField()
+#     subject = models.TextField()
+#     is_overdue = models.BooleanField(default=False)
+#     creation_date = models.CharField(max_length=255, blank=True, default=None)
+#     created_by_name = models.CharField(max_length=255, blank=True, default=None)
+#     account_name = models.CharField(max_length=255, blank=True, default=None)
+#     itsm_tenant = models.ForeignKey(DuITSMTenants, on_delete=models.CASCADE)
+#     status = models.CharField(max_length=100)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     class Meta:
+#         db_table = "du_itsm_final_tickets"
+
+#     def __str__(self):
+#         return f"{self.short_description} ({self.external_id})"
 
 
 class DuCortexSOARTenants(models.Model):
