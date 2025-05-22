@@ -10,8 +10,8 @@ from .models import (
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
+    DuITSMFinalTickets,
     DuITSMTenants,
-    DuITSMTickets,
     IBMQradarAssests,
     IBMQradarEventCollector,
     Tenant,
@@ -482,6 +482,168 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             return tenant
 
 
+# class TenantUpdateSerializer(serializers.ModelSerializer):
+#     qradar_tenants = QradarTenantInputSerializer(many=True, required=False)
+#     integration_ids = serializers.ListField(
+#         child=serializers.IntegerField(), required=False
+#     )
+#     itsm_tenant_ids = serializers.ListField(
+#         child=serializers.IntegerField(), required=False
+#     )
+#     soar_tenant_ids = serializers.ListField(
+#         child=serializers.IntegerField(), required=False
+#     )
+#     role_permissions = serializers.ListField(
+#         child=serializers.IntegerField(), required=False
+#     )
+
+#     class Meta:
+#         model = Tenant
+#         fields = [
+#             "qradar_tenants",
+#             "integration_ids",
+#             "itsm_tenant_ids",
+#             "soar_tenant_ids",
+#             "role_permissions",
+#         ]
+
+#     def validate(self, data):
+#         integration_ids = data.get("integration_ids", [])
+#         if integration_ids:
+#             integrations = Integration.objects.filter(id__in=integration_ids)
+#             if integrations.count() != len(integration_ids):
+#                 invalid = set(integration_ids) - set(
+#                     integrations.values_list("id", flat=True)
+#                 )
+#                 raise serializers.ValidationError(
+#                     {"integration_ids": f"Invalid ids: {invalid}"}
+#                 )
+
+#         tenant_id = self.instance.id
+
+#         if "itsm_tenant_ids" in data:
+#             itsm_qs = DuITSMTenants.objects.filter(
+#                 id__in=data["itsm_tenant_ids"]
+#             ).select_related("integration")
+#             if itsm_qs.count() != len(data["itsm_tenant_ids"]):
+#                 raise serializers.ValidationError(
+#                     {"itsm_tenant_ids": "One or more invalid IDs"}
+#                 )
+#             for item in itsm_qs:
+#                 if item.integration and item.integration.id not in integration_ids:
+#                     raise serializers.ValidationError(
+#                         {
+#                             "itsm_tenant_ids": f"ITSM tenant {item.id} linked to integration {item.integration.id} not in integration_ids"
+#                         }
+#                     )
+#                 if item.tenant_set.exclude(id=tenant_id).exists():
+#                     raise serializers.ValidationError(
+#                         {
+#                             "itsm_tenant_ids": f"ITSM tenant {item.id} is already assigned to another tenant"
+#                         }
+#                     )
+
+#         if "soar_tenant_ids" in data:
+#             soar_qs = DuCortexSOARTenants.objects.filter(
+#                 id__in=data["soar_tenant_ids"]
+#             ).select_related("integration")
+#             if soar_qs.count() != len(data["soar_tenant_ids"]):
+#                 raise serializers.ValidationError(
+#                     {"soar_tenant_ids": "One or more invalid IDs"}
+#                 )
+#             for item in soar_qs:
+#                 if item.integration and item.integration.id not in integration_ids:
+#                     raise serializers.ValidationError(
+#                         {
+#                             "soar_tenant_ids": f"SOAR tenant {item.id} linked to integration {item.integration.id} not in integration_ids"
+#                         }
+#                     )
+#                 if item.tenant_set.exclude(id=tenant_id).exists():
+#                     raise serializers.ValidationError(
+#                         {
+#                             "soar_tenant_ids": f"SOAR tenant {item.id} is already assigned to another tenant"
+#                         }
+#                     )
+
+#         if "qradar_tenants" in data:
+#             all_ec_ids = []
+#             for qt in data["qradar_tenants"]:
+#                 qtid = qt["qradar_tenant_id"]
+#                 if (
+#                     DuIbmQradarTenants.objects.filter(id=qtid, tenant__isnull=False)
+#                     .exclude(tenant__id=tenant_id)
+#                     .exists()
+#                 ):
+#                     raise serializers.ValidationError(
+#                         {"qradar_tenants": f"QRadar tenant {qtid} already assigned"}
+#                     )
+#                 ecs = qt.get("event_collector_ids", [])
+#                 ec_qs = IBMQradarEventCollector.objects.filter(id__in=ecs)
+#                 if ec_qs.count() != len(ecs):
+#                     raise serializers.ValidationError(
+#                         {
+#                             "qradar_tenants": f"Invalid event_collector_ids: {set(ecs) - set(ec_qs.values_list('id', flat=True))}"
+#                         }
+#                     )
+#                 all_ec_ids.extend(ecs)
+#             if len(all_ec_ids) != len(set(all_ec_ids)):
+#                 raise serializers.ValidationError(
+#                     {"qradar_tenants": "Duplicate event collector ids across tenants"}
+#                 )
+
+#         return data
+
+#     def update(self, instance, validated_data):
+#         with transaction.atomic():
+#             integration_ids = validated_data.pop("integration_ids", None)
+#             if integration_ids is not None:
+#                 instance.integrations.set(
+#                     Integration.objects.filter(id__in=integration_ids)
+#                 )
+
+#             if "itsm_tenant_ids" in validated_data:
+#                 instance.itsm_tenants.set(
+#                     DuITSMTenants.objects.filter(
+#                         id__in=validated_data["itsm_tenant_ids"]
+#                     )
+#                 )
+
+#             if "soar_tenant_ids" in validated_data:
+#                 instance.soar_tenants.set(
+#                     DuCortexSOARTenants.objects.filter(
+#                         id__in=validated_data["soar_tenant_ids"]
+#                     )
+#                 )
+
+#             if "qradar_tenants" in validated_data:
+#                 # Clear existing mappings
+#                 TenantQradarMapping.objects.filter(tenant=instance).delete()
+#                 all_ecs = []
+#                 for qt in validated_data["qradar_tenants"]:
+#                     qradar = DuIbmQradarTenants.objects.get(id=qt["qradar_tenant_id"])
+#                     mapping = TenantQradarMapping.objects.create(
+#                         tenant=instance, qradar_tenant=qradar
+#                     )
+#                     ecs = IBMQradarEventCollector.objects.filter(
+#                         id__in=qt["event_collector_ids"]
+#                     )
+#                     mapping.event_collectors.set(ecs)
+#                     all_ecs.extend(ecs)
+#                 instance.event_collectors.set(all_ecs)
+
+#             if "role_permissions" in validated_data:
+#                 role = instance.roles.filter(
+#                     role_type=TenantRole.TenantRoleChoices.TENANT_ADMIN
+#                 ).first()
+#                 if role:
+#                     role.permissions.all().delete()
+#                     for perm in validated_data["role_permissions"]:
+#                         TenantRolePermissions.objects.create(role=role, permission=perm)
+
+#             instance.save()
+#             return instance
+
+
 class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
     class Meta:
         model = DuIbmQradarTenants
@@ -519,7 +681,7 @@ class IBMQradarAssestsSerializer(serializers.ModelSerializer):
 
 class DuITSMTicketsSerializer(serializers.ModelSerializer):
     class Meta:
-        model = DuITSMTickets
+        model = DuITSMFinalTickets
         fields = "__all__"
 
 
