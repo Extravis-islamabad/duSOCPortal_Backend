@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from django.db.models import (
     Case,
@@ -12,8 +12,7 @@ from django.db.models import (
     Q,
     When,
 )
-from django.db.models.functions import Extract, ExtractSecond
-from django.utils import timezone
+from django.db.models.functions import ExtractSecond
 from loguru import logger
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
@@ -33,8 +32,10 @@ from tenant.models import (
     DuITSMTickets,
     IBMQradarAssests,
     IBMQradarEventCollector,
+    IBMQradarOffense,
     Tenant,
     TenantPermissionChoices,
+    TenantQradarMapping,
     TenantRole,
 )
 from tenant.serializers import (
@@ -532,6 +533,8 @@ class DashboardView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         soar_tenants = tenant.soar_tenants.all()
+        # Assuming 'request.user.tenant' gives you the logged-in tenant instance
+
         if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
@@ -1147,4 +1150,283 @@ class IncidentDetailView(APIView):
             logger.error("Error in IncidentDetailView: %s", str(e))
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class OffenseStatsAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
+            tenant = request.user
+            mappings = TenantQradarMapping.objects.filter(
+                tenant__tenant=tenant
+            ).values_list("event_collectors__id", "qradar_tenant__id")
+
+            if not mappings:
+                return Response(
+                    {"error": "No mappings found for the tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Extract collector IDs and tenant IDs
+            collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
+
+            # Step 2: Retrieve asset IDs based on collector IDs
+            assets = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).values_list("id", flat=True)
+
+            if not assets:
+                return Response(
+                    {"error": "No assets found for the given collectors."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 3: Calculate today's start timestamp (00:00 UTC, May 22, 2025)
+            today_start = datetime(2025, 5, 22, 0, 0, 0, tzinfo=timezone.utc)
+            today_start_timestamp = int(
+                today_start.timestamp() * 1000
+            )  # Convert to milliseconds
+
+            # Step 4: Compute statistics directly in the database
+            stats = IBMQradarOffense.objects.filter(
+                Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
+            ).aggregate(
+                total_offenses=Count("id"),
+                open_offenses=Count(
+                    Case(When(~Q(status="CLOSED"), then=1), output_field=IntegerField())
+                ),
+                high_severity=Count(
+                    Case(When(severity__gte=7, then=1), output_field=IntegerField())
+                ),
+                low_severity=Count(
+                    Case(When(severity__lt=4, then=1), output_field=IntegerField())
+                ),
+                todays_offenses=Count(
+                    Case(
+                        When(start_time__gt=today_start_timestamp, then=1),
+                        output_field=IntegerField(),
+                    )
+                ),
+            )
+
+            # Step 5: Format the response
+            response_data = {
+                "statistics": {
+                    "total_offenses": stats["total_offenses"] or 0,
+                    "open_offenses": stats["open_offenses"] or 0,
+                    "high_severity": stats["high_severity"] or 0,
+                    "low_severity": stats["low_severity"] or 0,
+                    "todays_offenses": stats["todays_offenses"] or 0,
+                }
+            }
+
+            if stats["total_offenses"] == 0:
+                response_data[
+                    "message"
+                ] = "No offenses found for the given assets and tenant."
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception:
+            return Response(
+                {"error": "Invalid tenant or related data not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class OffenseDetailsByTenantAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
+            tenant = request.user
+            mappings = TenantQradarMapping.objects.filter(
+                tenant__tenant=tenant
+            ).values_list("event_collectors__id", "qradar_tenant__id")
+
+            if not mappings:
+                return Response(
+                    {"error": "No mappings found for the tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Extract collector IDs and tenant IDs
+            collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
+
+            # Step 2: Retrieve asset IDs based on collector IDs
+            assets = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).values_list("id", flat=True)
+
+            if not assets:
+                return Response(
+                    {"error": "No assets found for the given collectors."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 3: Retrieve offenses with specific fields
+            offenses = IBMQradarOffense.objects.filter(
+                Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
+            ).values(
+                "id",
+                "db_id",
+                "description",
+                "severity",
+                "status",
+                "source_address_ids",
+                "start_time",
+            )
+
+            # Step 4: Format the response
+            response_data = [
+                {
+                    "id": offense["id"],
+                    "db_id": offense["db_id"],
+                    "description": offense["description"],
+                    "severity": offense["severity"],
+                    "status": offense["status"],
+                    "source_address_ids": offense["source_address_ids"],
+                    "start_time": offense["start_time"],
+                }
+                for offense in offenses
+            ]
+
+            if not response_data:
+                return Response(
+                    {
+                        "message": "No offenses found for the given assets and tenant.",
+                        "offenses": [],
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response({"offenses": response_data}, status=status.HTTP_200_OK)
+
+        except Exception:
+            return Response(
+                {"error": "Invalid tenant or related data not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request, offense_id):
+        try:
+            # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
+            tenant = request.user
+            mappings = TenantQradarMapping.objects.filter(
+                tenant__tenant=tenant
+            ).values_list("event_collectors__id", "qradar_tenant__id")
+
+            if not mappings:
+                return Response(
+                    {"error": "No mappings found for the tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Extract collector IDs and tenant IDs
+            collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
+
+            # Step 2: Retrieve asset IDs based on collector IDs
+            assets = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).values_list("id", flat=True)
+
+            if not assets:
+                return Response(
+                    {"error": "No assets found for the given collectors."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 3: Retrieve the specific offense
+            try:
+                offense = (
+                    IBMQradarOffense.objects.filter(
+                        Q(id=offense_id)
+                        & Q(assests__id__in=assets)
+                        & Q(qradar_tenant_domain__id__in=tenant_ids)
+                    )
+                    .values(
+                        "id",
+                        "db_id",
+                        "description",
+                        "severity",
+                        "status",
+                        "source_address_ids",
+                        "start_time",
+                        "flow_count",
+                    )
+                    .first()
+                )
+
+                if not offense:
+                    return Response(
+                        {
+                            "error": "Offense not found or not associated with the tenant's assets/tenant domain."
+                        },
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+
+            except IBMQradarOffense.DoesNotExist:
+                return Response(
+                    {"error": "Offense not found."}, status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Step 4: Retrieve assets associated with the offense
+            offense_assets = IBMQradarAssests.objects.filter(
+                du_ibm_qradar_offenses__id=offense_id
+            ).values("id", "name", "description")
+
+            # Step 5: Format the response
+            response_data = {
+                "offense": {
+                    "id": offense["id"],
+                    "db_id": offense["db_id"],
+                    "description": offense["description"],
+                    "severity": offense["severity"],
+                    "status": offense["status"],
+                    "source_address_ids": offense["source_address_ids"],
+                    "start_time": offense["start_time"],
+                },
+                "flows": offense["flow_count"],
+                "assets": [
+                    {
+                        "id": asset["id"],
+                        "name": asset["name"],
+                        "description": asset["description"],
+                    }
+                    for asset in offense_assets
+                ],
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception:
+            return Response(
+                {"error": "Invalid tenant or related data not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
