@@ -24,6 +24,7 @@ from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import PaginationConstants
 from tenant.cortex_soar_tasks import sync_requests_for_soar
 from tenant.ibm_qradar_tasks import sync_event_log_sources
+from tenant.itsm_tasks import sync_itsm_tenants, sync_itsm_tenants_cron
 from tenant.models import (
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
@@ -183,7 +184,7 @@ class TestView(APIView):
 
     def get(self, request):
         # sync_requests_for_soar.delay()
-        sync_event_log_sources.delay()
+        sync_itsm_tenants_cron()
         return Response({"message": "Hello, world!"})
 
 
