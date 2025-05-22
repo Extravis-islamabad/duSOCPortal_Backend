@@ -302,7 +302,7 @@ class ITSM:
         logger.info(f"ITSM.transform_tickets() took: {time.time() - start} seconds")
         return records
 
-    def insert_tickets(tickets):
+    def insert_tickets(self, tickets):
         """
         Inserts or updates DuITSMFinalTickets in the database using bulk operations.
         :param tickets: List of DuITSMFinalTickets instances
