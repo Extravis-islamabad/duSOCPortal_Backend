@@ -181,7 +181,8 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_requests_for_soar.delay()
+        # sync_requests_for_soar.delay()
+        sync_event_log_sources.delay()
         return Response({"message": "Hello, world!"})
 
 
