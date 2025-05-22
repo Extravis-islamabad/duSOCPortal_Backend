@@ -8,7 +8,8 @@ from django.db import transaction
 from loguru import logger
 
 from common.constants import ITSMConstants, SSLConstants
-from tenant.models import DuITSMTenants
+from common.utils import DBMappings
+from tenant.models import DuITSMFinalTickets, DuITSMTenants
 
 
 class ITSM:
@@ -201,3 +202,141 @@ class ITSM:
         except Exception as e:
             logger.error(f"An error occurred in ITSM._insert_accounts(): {str(e)}")
             transaction.rollback()
+
+    def _get_requests(self, account_id: int):
+        start = time.time()
+        logger.info(f"ITSM._get_requests() started : {start}")
+        logger.info(f"Fetching requests for account id: {account_id}")
+
+        endpoint = f"{self.base_url}/{ITSMConstants.ITSM_REQUESTS_ENDPOINT}?ACCOUNTID={account_id}"
+        row_count = 1000
+        start_index = 1
+        all_requests = []
+        has_more_rows = True
+
+        while has_more_rows:
+            input_data = {
+                "list_info": {
+                    "row_count": str(row_count),
+                    "start_index": str(start_index),
+                    "sort_order": "asc",
+                }
+            }
+
+            params = {"input_data": json.dumps(input_data)}
+
+            try:
+                response = requests.get(
+                    endpoint,
+                    headers=self.headers,
+                    params=params,
+                    verify=SSLConstants.VERIFY,  # self-signed cert assumed
+                    timeout=SSLConstants.TIMEOUT,
+                )
+            except Exception as e:
+                logger.error(f"ITSM._get_requests() failed with exception: {str(e)}")
+                return
+
+            if response.status_code != 200:
+                logger.warning(
+                    f"ITSM._get_requests() return the status code {response.status_code}"
+                )
+                break
+
+            data = response.json()
+
+            # Append current batch of requests
+            requests_batch = data.get("requests", [])
+            all_requests.extend(requests_batch)
+
+            # Pagination control
+            list_info = data.get("list_info", {})
+            has_more_rows = list_info.get("has_more_rows", False)
+            start_index = list_info.get("start_index", start_index) + row_count
+
+        logger.info(f"ITSM._get_requests() took: {time.time() - start} seconds")
+        return all_requests
+
+    def transform_tickets(self, data: list, integration_id: int, tenant_id: int):
+        """
+        Transforms raw ticket data into DuITSMFinalTickets instances.
+        :param data: List of raw ticket dictionaries
+        :param integration_id: Foreign key ID for the integration
+        :return: List of DuITSMFinalTickets instances
+        """
+        start = time.time()
+        logger.info(f"ITSM.transform_tickets() started : {start}")
+
+        if not data:
+            logger.warning("No ticket data to transform")
+            return []
+
+        records = []
+        logger.info(
+            f"Transforming tickets of ITSM for integration id: {integration_id} and tenant id: {tenant_id}"
+        )
+        for entry in data:
+            db_id = int(entry.get("id"))
+            short_description = entry.get("short_description", "")
+            subject = entry.get("subject", "")
+            is_overdue = entry.get("is_overdue", False)
+            creation_date = entry.get("created_time", {}).get("display_value", "")
+            created_by_name = entry.get("created_by", {}).get("name", "")
+            account_name = entry.get("account", {}).get("name", "")
+            status = entry.get("status", {}).get("name", "Unknown")
+
+            record = DuITSMFinalTickets(
+                db_id=db_id,
+                short_description=short_description,
+                subject=subject,
+                is_overdue=is_overdue,
+                creation_date=creation_date,
+                created_by_name=created_by_name,
+                account_name=account_name,
+                itsm_tenant_id=tenant_id,
+                integration_id=integration_id,
+                status=status,
+            )
+            records.append(record)
+
+        logger.info(f"ITSM.transform_tickets() took: {time.time() - start} seconds")
+        return records
+
+    def insert_tickets(tickets):
+        """
+        Inserts or updates DuITSMFinalTickets in the database using bulk operations.
+        :param tickets: List of DuITSMFinalTickets instances
+        """
+        start = time.time()
+        logger.info(f"ITSM.insert_tickets() started : {start}")
+
+        if not tickets:
+            logger.warning("No tickets to insert")
+            return
+
+        logger.info(f"Inserting/Updating ITSM {len(tickets)} tickets")
+        try:
+            with transaction.atomic():
+                DuITSMFinalTickets.objects.bulk_create(
+                    tickets,
+                    update_conflicts=True,
+                    update_fields=[
+                        "short_description",
+                        "subject",
+                        "is_overdue",
+                        "creation_date",
+                        "created_by_name",
+                        "account_name",
+                        "itsm_tenant",
+                        "integration",
+                        "status",
+                        "updated_at",
+                    ],
+                    unique_fields=["db_id"],
+                )
+            logger.info(
+                f"Inserted/Updated {len(tickets)} tickets in {time.time() - start:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to insert tickets: {str(e)}")

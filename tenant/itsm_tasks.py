@@ -10,6 +10,7 @@ from integration.models import (
     IntegrationTypes,
     ItsmSubTypes,
 )
+from tenant.models import DuITSMFinalTickets, DuITSMTenants
 
 
 @shared_task
@@ -73,3 +74,30 @@ def sync_itsm_tenants_cron():
                 accounts=data, integration_id=result.integration.id
             )
             itsm._insert_accounts(transformed_data)
+
+
+@shared_task
+def sync_itsm_tenants_tickets():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.ITSM_INTEGRATION,
+        integration__itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
+        credential_type=CredentialTypes.API_KEY,
+    )
+
+    for result in results:
+        with ITSM(
+            ip_address=result.ip_address, port=result.port, token=result.api_key
+        ) as itsm:
+            itsm_tenants = DuITSMTenants.objects.filter(
+                integration=result.integration
+            ).all()
+            for tenant in itsm_tenants:
+                data = itsm._get_requests(account_id=tenant.db_id)
+                if not data:
+                    logger.warning(
+                        f"No data returned from ITSM accounts endpoint for integration {result.integration.id}"
+                    )
+                transformed_data = itsm.transform_tickets(
+                    data=data, integration_id=result.integration.id, tenant_id=tenant.id
+                )
+                itsm.insert_tickets(tickets=transformed_data)
