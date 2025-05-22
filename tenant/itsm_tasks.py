@@ -10,7 +10,7 @@ from integration.models import (
     IntegrationTypes,
     ItsmSubTypes,
 )
-from tenant.models import DuITSMFinalTickets, DuITSMTenants
+from tenant.models import DuITSMTenants
 
 
 @shared_task

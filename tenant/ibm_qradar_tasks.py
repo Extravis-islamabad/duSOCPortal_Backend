@@ -6,7 +6,6 @@ from loguru import logger
 from common.modules.ibm_qradar import IBMQradar
 from integration.models import (
     CredentialTypes,
-    Integration,
     IntegrationCredentials,
     IntegrationTypes,
     SiemSubTypes,
@@ -138,10 +137,6 @@ def sync_event_log_assets(
         )
     except Exception as e:
         logger.error(f"Unexpected error in sync_event_log_assets: {str(e)}")
-
-
-# @shared_task
-# def sync_offenses():
 
 
 @shared_task

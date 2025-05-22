@@ -8,7 +8,6 @@ from integration.models import (
     CredentialTypes,
     IntegrationCredentials,
     IntegrationTypes,
-    SiemSubTypes,
     SoarSubTypes,
 )
 from tenant.models import DuCortexSOARTenants

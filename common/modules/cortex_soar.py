@@ -10,7 +10,6 @@ from django.utils.dateparse import parse_datetime
 from loguru import logger
 
 from common.constants import CortexSOARConstants, SSLConstants
-from integration.models import Integration
 from tenant.models import DUCortexSOARIncidentFinalModel, DuCortexSOARTenants
 
 

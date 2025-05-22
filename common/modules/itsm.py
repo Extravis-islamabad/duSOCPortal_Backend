@@ -8,7 +8,6 @@ from django.db import transaction
 from loguru import logger
 
 from common.constants import ITSMConstants, SSLConstants
-from common.utils import DBMappings
 from tenant.models import DuITSMFinalTickets, DuITSMTenants
 
 
