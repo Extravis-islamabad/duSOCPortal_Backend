@@ -27,7 +27,6 @@ from tenant.cortex_soar_tasks import sync_requests_for_soar
 from tenant.ibm_qradar_tasks import sync_event_log_sources
 from tenant.models import (
     DUCortexSOARIncidentFinalModel,
-    DUCortexSOARIncidentModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMTenants,
