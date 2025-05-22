@@ -35,6 +35,7 @@ from tenant.models import (
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
+    DuITSMFinalTickets,
     DuITSMTenants,
     DuITSMTickets,
     IBMQradarAssests,
@@ -232,9 +233,9 @@ class TenantITSMTicketsView(APIView):
             )
 
         itsm_tenants = tenant.itsm_tenants.all()
-        itsm_tenant_db_ids = [t.db_id for t in itsm_tenants]
+        itsm_tenant_ids = [t.id for t in itsm_tenants]
 
-        tickets = DuITSMTickets.objects.filter(account_id__in=itsm_tenant_db_ids)
+        tickets = DuITSMFinalTickets.objects.filter(itsm_tenant__in=itsm_tenant_ids)
 
         paginator = PageNumberPagination()
         paginator.page_size = PaginationConstants.PAGE_SIZE
