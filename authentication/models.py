@@ -45,6 +45,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     profile_picture = models.ImageField(
         upload_to="profile_pictures/", blank=True, null=True
     )
+    company_name = models.CharField(max_length=100, blank=True, null=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
