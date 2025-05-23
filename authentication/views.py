@@ -11,6 +11,9 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from authentication.permissions import IsAdminUser
+from tenant.models import Tenant
+
 from .models import User
 from .serializers import (
     ProfilePictureUploadSerializer,
@@ -205,22 +208,50 @@ class UserLogoutAPIView(APIView):
             )
 
 
-class ProfilePictureUploadView(APIView):
+class TenantProfileUpdateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
-    def post(self, request):
-        profile = request.user  # direct user instance
+    def patch(self, request, tenant_id):
+        try:
+            tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
+            if not tenant:
+                return Response(
+                    {
+                        "error": "You are not authorized to update this tenant's profile."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
-        serializer = ProfilePictureUploadSerializer(
-            profile, data=request.data, partial=True
-        )
-        if serializer.is_valid():
-            serializer.save()
-            return Response(
-                {
-                    "message": "Profile picture uploaded successfully",
-                    "data": serializer.data,
-                }
+            # Step 2: Get the associated User
+            user = tenant.tenant
+            if not user:
+                return Response(
+                    {"error": "Associated user not found for this tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 3: Validate and update company_name and profile_picture
+            serializer = ProfilePictureUploadSerializer(
+                user, data=request.data, partial=True
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(
+                    {
+                        "message": "Profile updated successfully",
+                        "data": serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Tenant.DoesNotExist:
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

@@ -36,6 +36,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
             "is_admin",
             "created_at",
             "updated_at",
+            "company_name",
             "permissions",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
@@ -73,4 +74,4 @@ class UserDetailSerializer(serializers.ModelSerializer):
 class ProfilePictureUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["profile_picture"]
+        fields = ["profile_picture", "company_name"]
