@@ -1,7 +1,7 @@
 import json
 import time
 from collections import Counter
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.db.models import (
     Case,
@@ -830,32 +830,48 @@ class IncidentsView(APIView):
 
         soar_ids = [t.id for t in soar_tenants]
 
-        if not soar_ids:
-            return Response({"error": "No SOAR tenants found."}, status=404)
-
-        # Get filter_type from query parameter, default to 'all'
         filter_type = request.query_params.get("filter", "all")
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
 
         try:
-            # Base queryset
             queryset = DUCortexSOARIncidentFinalModel.objects.filter(
                 cortex_soar_tenant__in=soar_ids
-            ).values(
-                "id",
-                "db_id",
-                "account",
-                "name",
-                "status",
-                "severity",
-                "incident_priority",
-                "created",
-                "owner",
-                "playbook_id",
-                "occured",
-                "sla",
             )
 
-            # Apply filters
+            # Apply date range filter with validation
+            start_date = None
+            end_date = None
+            date_format = "%Y-%m-%d"
+            if start_date_str:
+                try:
+                    start_date = datetime.strptime(start_date_str, date_format)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid start_date format. Use YYYY-MM-DD."},
+                        status=400,
+                    )
+
+            if end_date_str:
+                try:
+                    end_date = datetime.strptime(end_date_str, date_format)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid end_date format. Use YYYY-MM-DD."},
+                        status=400,
+                    )
+
+            if start_date and end_date and start_date > end_date:
+                return Response(
+                    {"error": "start_date cannot be greater than end_date."}, status=400
+                )
+
+            if start_date:
+                queryset = queryset.filter(created__gte=start_date)
+
+            if end_date:
+                queryset = queryset.filter(created__lte=end_date)
+
             if filter_type != "all":
                 if filter_type == "unassigned":
                     queryset = queryset.filter(owner__isnull=True)
@@ -868,19 +884,27 @@ class IncidentsView(APIView):
                 elif filter_type == "error":
                     queryset = queryset.filter(status="Error")
 
-            # Order by created DESC
-            queryset = queryset.order_by("-created")
+            queryset = queryset.values(
+                "id",
+                "db_id",
+                "account",
+                "name",
+                "status",
+                "severity",
+                "incident_priority",
+                "created",
+                "owner",
+                "playbook_id",
+                "occured",
+                "sla",
+            ).order_by("-created")
 
-            # Transform data
             incidents = []
             severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
             for row in queryset:
-                # Determine priority
                 priority = row["incident_priority"] or severity_map.get(
                     row["severity"], "P4"
                 )
-
-                # Format dates
                 created_date = (
                     row["created"].strftime("%Y-%m-%d %I:%M %p")
                     if row["created"]
@@ -915,6 +939,109 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+# class IncidentsView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+
+#         soar_tenants = tenant.soar_tenants.all()
+#         if not soar_tenants:
+#             return Response({"error": "No SOAR tenants found."}, status=404)
+
+#         soar_ids = [t.id for t in soar_tenants]
+
+#         if not soar_ids:
+#             return Response({"error": "No SOAR tenants found."}, status=404)
+
+#         # Get filter_type from query parameter, default to 'all'
+#         filter_type = request.query_params.get("filter", "all")
+
+#         try:
+#             # Base queryset
+#             queryset = DUCortexSOARIncidentFinalModel.objects.filter(
+#                 cortex_soar_tenant__in=soar_ids
+#             ).values(
+#                 "id",
+#                 "db_id",
+#                 "account",
+#                 "name",
+#                 "status",
+#                 "severity",
+#                 "incident_priority",
+#                 "created",
+#                 "owner",
+#                 "playbook_id",
+#                 "occured",
+#                 "sla",
+#             )
+
+#             # Apply filters
+#             if filter_type != "all":
+#                 if filter_type == "unassigned":
+#                     queryset = queryset.filter(owner__isnull=True)
+#                 elif filter_type == "pending":
+#                     queryset = queryset.filter(status="Pending")
+#                 elif filter_type == "false-positive":
+#                     queryset = queryset.filter(status="False Positive")
+#                 elif filter_type == "closed":
+#                     queryset = queryset.filter(status="Closed")
+#                 elif filter_type == "error":
+#                     queryset = queryset.filter(status="Error")
+
+#             # Order by created DESC
+#             queryset = queryset.order_by("-created")
+
+#             # Transform data
+#             incidents = []
+#             severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
+#             for row in queryset:
+#                 # Determine priority
+#                 priority = row["incident_priority"] or severity_map.get(
+#                     row["severity"], "P4"
+#                 )
+
+#                 # Format dates
+#                 created_date = (
+#                     row["created"].strftime("%Y-%m-%d %I:%M %p")
+#                     if row["created"]
+#                     else "N/A"
+#                 )
+#                 occurred_date = (
+#                     row["occured"].strftime("%Y-%m-%d %I:%M %p")
+#                     if row["occured"]
+#                     else "N/A"
+#                 )
+
+#                 incidents.append(
+#                     {
+#                         "id": f"{row['id']}",
+#                         "db_id": row["db_id"],
+#                         "account": row["account"],
+#                         "name": row["name"],
+#                         "status": row["status"],
+#                         "priority": priority,
+#                         "created": created_date,
+#                         "assignee": row["owner"],
+#                         "playbook": row["playbook_id"],
+#                         "occurred": occurred_date,
+#                         "sla": row["sla"],
+#                     }
+#                 )
+
+#             return Response({"incidents": incidents}, status=status.HTTP_200_OK)
+
+#         except Exception as e:
+#             logger.error("Error in IncidentsView: %s", str(e))
+#             return Response(
+#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
 
 
 class IncidentDetailView(APIView):
