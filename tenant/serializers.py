@@ -1,5 +1,6 @@
 # tenant/serializers.py
 from django.db import transaction
+from django.db.models import Count
 from loguru import logger
 from rest_framework import serializers
 
@@ -81,11 +82,12 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source="tenant.email", read_only=True)
     permissions = serializers.SerializerMethodField()
     tenant_admin = serializers.SerializerMethodField()
-    asset_count = serializers.SerializerMethodField()
+    # asset_count = serializers.SerializerMethodField()
     total_incidents = serializers.SerializerMethodField()
     active_incidents = serializers.SerializerMethodField()
     tickets_count = serializers.SerializerMethodField()
     sla = serializers.SerializerMethodField()
+    asset_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Tenant
@@ -123,9 +125,21 @@ class TenantDetailSerializer(serializers.ModelSerializer):
 
     def get_asset_count(self, obj):
         try:
-            return obj.asset_set.count()
+            # Get all event collector IDs for the tenant
+            collector_ids = TenantQradarMapping.objects.filter(tenant=obj).values_list(
+                "event_collectors__id", flat=True
+            )
+
+            # Count assets for these collectors
+            asset_count = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).aggregate(totalAssets=Count("id"))
+
+            return asset_count["totalAssets"] or 0
         except Exception:
-            return 2
+            return 0
+
+        return asset_count["totalAssets"] or 0
 
     def get_total_incidents(self, obj):
         try:
