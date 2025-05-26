@@ -292,23 +292,6 @@ class IBMQradar:
                 f"An error occurred in IBMQradar._get_log_sources_types(): {str(e)}"
             )
 
-    def _transform_log_sources_types(self, log_sources_types, integration_id: int):
-        """
-        Transforms the list of log sources types fetched from the IBM QRadar endpoint into a pandas DataFrame,
-        renames the columns to match the IBMQradarLogSourceTypes model, adds an integration_id column and
-        converts it back to a list of dictionaries.
-
-        :param log_sources_types: List of log sources types fetched from the IBM QRadar endpoint.
-        :param integration_id: The ID of the integration that this data is associated with.
-        :return: A list of dictionaries where each dictionary represents a log source type.
-        """
-        df = pd.DataFrame(data=log_sources_types)
-        df = df[["id", "name", "version"]]
-        df.rename(columns={"id": "db_id"}, inplace=True)
-        df["integration_id"] = integration_id
-        data = df.to_dict(orient="records")
-        return data
-
     def _get_event_logs(self):
         """
         Fetches the list of event logs from the IBM QRadar endpoint.
@@ -347,6 +330,23 @@ class IBMQradar:
 
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar.__get_event_logs(): {str(e)}")
+
+    def _transform_log_sources_types(self, log_sources_types, integration_id: int):
+        """
+        Transforms the list of log sources types fetched from the IBM QRadar endpoint into a pandas DataFrame,
+        renames the columns to match the IBMQradarLogSourceTypes model, adds an integration_id column and
+        converts it back to a list of dictionaries.
+
+        :param log_sources_types: List of log sources types fetched from the IBM QRadar endpoint.
+        :param integration_id: The ID of the integration that this data is associated with.
+        :return: A list of dictionaries where each dictionary represents a log source type.
+        """
+        df = pd.DataFrame(data=log_sources_types)
+        df = df[["id", "name", "version"]]
+        df.rename(columns={"id": "db_id"}, inplace=True)
+        df["integration_id"] = integration_id
+        data = df.to_dict(orient="records")
+        return data
 
     def _transform_domains(self, data, integration_id):
         """
@@ -446,6 +446,9 @@ class IBMQradar:
         :return: A list of dictionaries containing the transformed event log information.
         """
         collector_map = DBMappings.get_db_id_to_id_mapping(IBMQradarEventCollector)
+        log_sources_types_map = DBMappings.get_db_id_to_id_mapping(
+            IBMQradarLogSourceTypes
+        )
 
         df = pd.DataFrame(data=data)
         df["integration_id"] = integration_id
@@ -464,6 +467,7 @@ class IBMQradar:
                 "average_eps",
                 "target_event_collector_id",
                 "creation_date",
+                "type_id",
                 "modified_date",
                 "last_event_time",
                 "integration_id",
@@ -472,6 +476,7 @@ class IBMQradar:
         df.rename(columns={"id": "db_id", "status_value": "status"}, inplace=True)
         df.dropna(subset=["target_event_collector_id"], inplace=True)
         df["event_collector_id"] = df["target_event_collector_id"].map(collector_map)
+        df["log_source_type_id"] = df["type_id"].map(log_sources_types_map)
         data = df.to_dict(orient="records")
 
         return data
@@ -510,6 +515,18 @@ class IBMQradar:
             transaction.rollback()
 
     def _get_offenses(self):
+        """
+        Fetches the list of offenses from the IBM QRadar endpoint.
+
+        This method sends an HTTP GET request to the IBM QRadar offenses API endpoint
+        to retrieve the list of offenses. It uses HTTP basic authentication with the credentials
+        set in the IBMQradarConstants. If the request is successful, it returns the parsed JSON
+        response. If the request fails or an exception occurs, it logs an error and returns an
+        empty dictionary.
+
+        :return: A dictionary containing offense information if the request is successful, otherwise an empty dictionary.
+        :raises: Logs any exceptions that occur during the request.
+        """
         start = time.time()
         logger.info(f"IBMQRadar._get_offenses() started: {start}")
         endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_OFFENSES_ENDPOINT}"

@@ -184,28 +184,26 @@ def sync_event_log_sources():
     )
 
     for result in results:
-        with IBMQradar(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-        ) as ibm_qradar:
-            data = ibm_qradar._get_log_sources_types()
-            if not data:
-                logger.warning(
-                    f"No data returned from IBM QRadar Log SOurces types endpoint for integration {result.integration.id}"
-                )
-            transformed_data = ibm_qradar._transform_log_sources_types(
-                log_sources_types=data, integration_id=result.integration.id
-            )
-            if transformed_data:
-                ibm_qradar._insert_log_sources_types(transformed_data)
-        # sync_event_log_assets(
-        #     result.username,
-        #     result.password,
-        #     result.ip_address,
-        #     result.port,
-        #     result.integration.id,
-        # )
-
-    print(results)
+        # with IBMQradar(
+        #     username=result.username,
+        #     password=result.password,
+        #     ip_address=result.ip_address,
+        #     port=result.port,
+        # ) as ibm_qradar:
+        #     data = ibm_qradar._get_log_sources_types()
+        #     if not data:
+        #         logger.warning(
+        #             f"No data returned from IBM QRadar Log SOurces types endpoint for integration {result.integration.id}"
+        #         )
+        #     transformed_data = ibm_qradar._transform_log_sources_types(
+        #         log_sources_types=data, integration_id=result.integration.id
+        #     )
+        #     if transformed_data:
+        #         ibm_qradar._insert_log_sources_types(transformed_data)
+        sync_event_log_assets(
+            result.username,
+            result.password,
+            result.ip_address,
+            result.port,
+            result.integration.id,
+        )
