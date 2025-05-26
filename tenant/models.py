@@ -87,7 +87,14 @@ class IBMQradarAssests(models.Model):
         blank=False,
         default=None,
     )
-    type_id = models.IntegerField(null=True, blank=True)
+    log_source_type = models.ForeignKey(
+        IBMQradarLogSourceTypes,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        default=None,
+    )
+
     average_eps = models.IntegerField(default=0)
     creation_date = models.CharField(max_length=255, blank=True, default=None)
     modified_date = models.CharField(max_length=255, blank=True, default=None)
