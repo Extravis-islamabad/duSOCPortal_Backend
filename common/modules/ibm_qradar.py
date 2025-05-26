@@ -724,7 +724,7 @@ class IBMQradar:
                 IBMQradarLogSourceTypes.objects.bulk_create(
                     records,
                     update_conflicts=True,
-                    update_fields=["name"],
+                    update_fields=["name", "version"],
                     unique_fields=["db_id"],
                 )
                 logger.info(f"Inserted the domains records: {len(records)}")
