@@ -477,6 +477,7 @@ class IBMQradar:
         df.dropna(subset=["target_event_collector_id"], inplace=True)
         df["event_collector_id"] = df["target_event_collector_id"].map(collector_map)
         df["log_source_type_id"] = df["type_id"].map(log_sources_types_map)
+        df.drop(columns=["type_id"], inplace=True)
         data = df.to_dict(orient="records")
 
         return data
