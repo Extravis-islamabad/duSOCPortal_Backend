@@ -44,6 +44,26 @@ class IBMQradarEventCollector(models.Model):
         return self.name
 
 
+class IBMQradarLogSourceTypes(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=255)
+    version = models.CharField(max_length=50)
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_log_source_types",
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ibm_qradar_log_source_types"
+        ordering = ["-created_at"]
+
+
 class IBMQradarAssests(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)
@@ -67,6 +87,7 @@ class IBMQradarAssests(models.Model):
         blank=False,
         default=None,
     )
+    type_id = models.IntegerField(null=True, blank=True)
     average_eps = models.IntegerField(default=0)
     creation_date = models.CharField(max_length=255, blank=True, default=None)
     modified_date = models.CharField(max_length=255, blank=True, default=None)
