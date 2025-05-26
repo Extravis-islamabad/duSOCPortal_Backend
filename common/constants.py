@@ -108,6 +108,9 @@ class IBMQradarConstants:
     IBM_EVENT_LOGS_ENDPOINT = (
         "api/config/event_sources/log_source_management/log_sources"
     )
+    IBM_LOG_SOURCES_TYPES_ENDPOINT = (
+        "api/config/event_sources/log_source_management/log_source_types"
+    )
     IBM_OFFENSES_ENDPOINT = "api/siem/offenses"
 
 

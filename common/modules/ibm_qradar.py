@@ -12,6 +12,7 @@ from tenant.models import (
     DuIbmQradarTenants,
     IBMQradarAssests,
     IBMQradarEventCollector,
+    IBMQradarLogSourceTypes,
     IBMQradarOffense,
 )
 
@@ -246,6 +247,67 @@ class IBMQradar:
             logger.error(
                 f"An error occurred in IBMQradar._get_event_collectors(): {str(e)}"
             )
+
+    def _get_log_sources_types(self):
+        """
+        Fetches the list of log source types from the IBM QRadar endpoint.
+
+        This method sends an HTTP GET request to the IBM QRadar log source types API endpoint
+        to retrieve the list of log source types. It uses HTTP basic authentication with the credentials
+        set in the IBMQradarConstants. If the request is successful, it returns the parsed JSON
+        response. If the request fails or an exception occurs, it logs an error and returns None.
+
+        :return: A dictionary containing log source type information if the request is successful, otherwise None.
+        :raises: Logs any exceptions that occur during the request.
+        """
+
+        start = time.time()
+        endpoint = (
+            f"{self.base_url}/{IBMQradarConstants.IBM_LOG_SOURCES_TYPES_ENDPOINT}"
+        )
+        try:
+            response = requests.get(
+                endpoint,
+                auth=HTTPBasicAuth(
+                    self.username,
+                    self.password,
+                ),
+                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                timeout=SSLConstants.TIMEOUT,
+            )
+            if response.status_code != 200:
+                logger.warning(
+                    f"IBMQRadar._get_log_sources_types() return the status code {response.status_code}"
+                )
+                return
+
+            log_sources_types = response.json()
+            logger.success(
+                f"IBMQRadar._get_log_sources_types() took: {time.time() - start} seconds"
+            )
+            return log_sources_types
+
+        except Exception as e:
+            logger.error(
+                f"An error occurred in IBMQradar._get_log_sources_types(): {str(e)}"
+            )
+
+    def _transform_log_sources_types(self, log_sources_types, integration_id: int):
+        """
+        Transforms the list of log sources types fetched from the IBM QRadar endpoint into a pandas DataFrame,
+        renames the columns to match the IBMQradarLogSourceTypes model, adds an integration_id column and
+        converts it back to a list of dictionaries.
+
+        :param log_sources_types: List of log sources types fetched from the IBM QRadar endpoint.
+        :param integration_id: The ID of the integration that this data is associated with.
+        :return: A list of dictionaries where each dictionary represents a log source type.
+        """
+        df = pd.DataFrame(data=log_sources_types)
+        df = df[["id", "name", "version"]]
+        df.rename(columns={"id": "db_id"}, inplace=True)
+        df["integration_id"] = integration_id
+        data = df.to_dict(orient="records")
+        return data
 
     def _get_event_logs(self):
         """
@@ -645,4 +707,32 @@ class IBMQradar:
 
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._insert_offenses(): {str(e)}")
+            transaction.rollback()
+
+    def _insert_log_sources_types(self, data):
+        """
+        Inserts or updates log source types in the IBMQradarLogSourceTypes table.
+
+        :param data: A list of dictionaries containing log source type information.
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._insert_log_sources_types() started : {start}")
+        records = [IBMQradarLogSourceTypes(**item) for item in data]
+        logger.info(f"Inserting the log sources types records: {len(records)}")
+        try:
+            with transaction.atomic():
+                IBMQradarLogSourceTypes.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=["name"],
+                    unique_fields=["db_id"],
+                )
+                logger.info(f"Inserted the domains records: {len(records)}")
+                logger.success(
+                    f"IBMQRadar._insert_log_sources_types() took: {time.time() - start} seconds"
+                )
+        except Exception as e:
+            logger.error(
+                f"An error occurred in IBMQradar._insert_log_sources_types(): {str(e)}"
+            )
             transaction.rollback()
