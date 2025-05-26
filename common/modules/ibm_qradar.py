@@ -501,6 +501,13 @@ class IBMQradar:
                         "description",
                         "average_eps",
                         "event_collector_id",
+                        "log_source_type_id",
+                        "sending_ip",
+                        "enabled",
+                        "status",
+                        "creation_date",
+                        "modified_date",
+                        "last_event_time",
                     ],
                     unique_fields=["db_id"],
                 )
