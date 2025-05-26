@@ -196,7 +196,7 @@ def sync_event_log_sources():
                     f"No data returned from IBM QRadar Log SOurces types endpoint for integration {result.integration.id}"
                 )
             transformed_data = ibm_qradar._transform_log_sources_types(
-                data=data, integration_id=result.integration.id
+                log_sources_types=data, integration_id=result.integration.id
             )
             if transformed_data:
                 ibm_qradar._insert_log_sources_types(transformed_data)
