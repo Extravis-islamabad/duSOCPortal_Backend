@@ -688,9 +688,14 @@ class DuCortexSOARTenantsSerializer(serializers.ModelSerializer):
 
 
 class IBMQradarAssestsSerializer(serializers.ModelSerializer):
+    log_source_type_name = serializers.CharField(
+        source="log_source_type.name", read_only=True
+    )
+
     class Meta:
         model = IBMQradarAssests
         fields = "__all__"
+        extra_fields = ["log_source_type_name"]
 
 
 class DuITSMTicketsSerializer(serializers.ModelSerializer):
