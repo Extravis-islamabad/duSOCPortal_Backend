@@ -48,7 +48,7 @@ class IBMQradarLogSourceTypes(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=255)
-    version = models.CharField(max_length=50)
+    version = models.CharField(max_length=50, blank=True, default=None, null=True)
     integration = models.ForeignKey(
         Integration,
         on_delete=models.CASCADE,
