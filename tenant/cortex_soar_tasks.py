@@ -100,43 +100,20 @@ def sync_requests_for_soar():
         print(cortex_tenants)
 
 
-# @shared_task
-# def sync_cortex_soar_tenants_test(
-#     token: str, ip_address: str, port: int, integration_id: int
-# ):
-#     """
-#     Syncs the CortexSOAR tenants with the database.
+@shared_task
+def sync_soar_data():
+    logger.info("Running sync_soar_data() task")
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
+        integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
+        credential_type=CredentialTypes.API_KEY,
+    )
 
-#     This task fetches the accounts from the CortexSOAR instance and
-#     inserts them into the database.
-
-#     :param token: The authentication token to use when logging into the CortexSOAR.
-#     :param ip_address: The IP address of the CortexSOAR instance.
-#     :param port: The port to use when connecting to the CortexSOAR instance.
-#     :param integration_id: The ID of the integration for which to sync the tenants.
-#     """
-#     start = time.time()
-#     try:
-#         with CortexSOAR(ip_address=ip_address, port=port, token=token) as soar:
-#             accounts = soar._get_accounts_test()
-#             if accounts is None:
-#                 logger.error("No data returned from CortexSOAR accounts endpoint")
-#                 return
-
-#             transformed_data = soar._transform_accounts(
-#                 accounts=accounts, integration_id=integration_id
-#             )
-#             if not isinstance(transformed_data, list):
-#                 logger.error("Invalid data format: Expected a list")
-#                 return
-
-#             soar._insert_accounts(transformed_data)
-
-#             logger.info(
-#                 f"Successfully synced {len(transformed_data)} CortexSOAR tenants"
-#             )
-#             logger.info(
-#                 f"CortexSOAR.sync_itsm_tenants() task took {time.time() - start} seconds"
-#             )
-#     except Exception as e:
-#         logger.error(f"Unexpected error in sync_itsm_tenants: {str(e)}")
+    for result in results:
+        sync_cortex_soar_tenants.delay(
+            token=result.api_key,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+    sync_requests_for_soar.delay()
