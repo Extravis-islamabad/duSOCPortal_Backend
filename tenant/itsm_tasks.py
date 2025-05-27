@@ -101,3 +101,12 @@ def sync_itsm_tenants_tickets():
                     data=data, integration_id=result.integration.id, tenant_id=tenant.id
                 )
                 itsm.insert_tickets(tickets=transformed_data)
+
+
+@shared_task
+def sync_itsm():
+    logger.info("Running ITSMTasks.sync_itsm() task")
+    logger.info("Running sync_itsm_tenants_cron() task")
+    sync_itsm_tenants_cron.delay()
+    logger.info("Running sync_itsm_tenants_tickets() task")
+    sync_itsm_tenants_tickets.delay()
