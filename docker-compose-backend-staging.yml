@@ -19,23 +19,23 @@ services:
     volumes:
       - .:/app  # Optional: for live sync with host
 
-  db:
-    container_name: duSOC_Postgres_Container
-    image: postgres:16
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - dusocportal_backend_dusocportal_backend_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
-      interval: 10s
-      retries: 5
-      start_period: 10s
-      timeout: 5s
+  # db:
+  #   container_name: duSOC_Postgres_Container
+  #   image: postgres:16
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_DB: ${DB_NAME}
+  #     POSTGRES_USER: ${DB_USER}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #   volumes:
+  #     - dusocportal_backend_dusocportal_backend_postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+  #     interval: 10s
+  #     retries: 5
+  #     start_period: 10s
+  #     timeout: 5s
 
   redis:
     container_name: duSOC_Redis_Container
@@ -108,6 +108,6 @@ services:
       - C_FORCE_ROOT=true
 
 volumes:
-  dusocportal_backend_dusocportal_backend_postgres_data:
+  # dusocportal_backend_dusocportal_backend_postgres_data:
   redis_data:
   rabbitmq_data:
