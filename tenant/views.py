@@ -1406,16 +1406,21 @@ class OffenseDetailsByTenantAPIView(APIView):
                 )
 
             # Step 3: Retrieve offenses with specific fields
-            offenses = IBMQradarOffense.objects.filter(
-                Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
-            ).values(
-                "id",
-                "db_id",
-                "description",
-                "severity",
-                "status",
-                "source_address_ids",
-                "start_time",
+            offenses = (
+                IBMQradarOffense.objects.filter(
+                    Q(assests__id__in=assets)
+                    & Q(qradar_tenant_domain__id__in=tenant_ids)
+                )
+                .values(
+                    "id",
+                    "db_id",
+                    "description",
+                    "severity",
+                    "status",
+                    "source_address_ids",
+                    "start_time",
+                )
+                .distinct()
             )
 
             # Step 4: Format the response
@@ -1789,6 +1794,61 @@ class TotalTicketsByTenantAPIView(APIView):
                 {"error": "Invalid tenant or related data not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class TenantAssetsEPSAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            tenant = request.user
+
+            # Step 1: Get collector IDs linked to the tenant
+            mappings = TenantQradarMapping.objects.filter(
+                tenant__tenant=tenant
+            ).values_list("event_collectors__id", flat=True)
+
+            if not mappings:
+                return Response(
+                    {"error": "No event collectors found for the tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            collector_ids = list(mappings)
+
+            # Step 2: Query assets related to those collectors, including average_eps
+            assets = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).values("name", "average_eps")
+
+            if not assets:
+                return Response(
+                    {"error": "No assets found for the tenant's event collectors."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 3: Prepare response data
+            response_data = {
+                "assets_eps": [
+                    {
+                        # "id": asset["id"],
+                        # "db_id": asset["db_id"],
+                        "name": asset["name"],
+                        # "description": asset["description"],
+                        "average_eps": asset["average_eps"],
+                    }
+                    for asset in assets
+                ],
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
         except Exception as e:
             return Response(
                 {"error": f"An error occurred: {str(e)}"},
