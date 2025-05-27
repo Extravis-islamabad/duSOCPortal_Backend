@@ -87,6 +87,26 @@ services:
     environment:
       - C_FORCE_ROOT=true  # Allows Celery to run as root in the container (optional, use with caution)
 
+  celery-beat:
+    container_name: duSOC_Celery_Beat_Container
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["celery", "-A", "sockportal__backend",  "beat", "--loglevel=info"]
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      - C_FORCE_ROOT=true
+
 volumes:
   dusocportal_backend_dusocportal_backend_postgres_data:
   redis_data:
