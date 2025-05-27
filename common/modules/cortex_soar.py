@@ -334,5 +334,7 @@ class CortexSOAR:
                 f"CortexSOAR._insert_incidents() took: {time.time() - start} seconds"
             )
         except Exception as e:
-            logger.error(f"An error occurred in import_incidents_from_file(): {str(e)}")
+            logger.error(
+                f"An error occurred in CortexSOAR._insert_incidents(): {str(e)}"
+            )
             transaction.rollback()
