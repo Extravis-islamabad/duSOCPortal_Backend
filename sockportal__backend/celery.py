@@ -15,12 +15,12 @@ app.conf.beat_schedule = {
     #     "task": "tenant.itsm_tasks.sync_itsm",
     #     "schedule": crontab(minute="*/30"),
     # },
-    # "cortex-sync-tasks": {
-    #     "task": "tenant.cortex_soar_tasks.sync_soar_data",
-    #     "schedule": crontab(minute="*/35"),
-    # },
-    "qradar-sync-tasks": {
-        "task": "tenant.ibm_qradar_tasks.sync_ibm_qradar_data",
+    "cortex-sync-tasks": {
+        "task": "tenant.cortex_soar_tasks.sync_soar_data",
         "schedule": crontab(minute="*/2"),
     },
+    # "qradar-sync-tasks": {
+    #     "task": "tenant.ibm_qradar_tasks.sync_ibm_qradar_data",
+    #     "schedule": crontab(minute="*/2"),
+    # },
 }
