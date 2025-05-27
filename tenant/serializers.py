@@ -82,7 +82,6 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source="tenant.email", read_only=True)
     permissions = serializers.SerializerMethodField()
     tenant_admin = serializers.SerializerMethodField()
-    # asset_count = serializers.SerializerMethodField()
     total_incidents = serializers.SerializerMethodField()
     active_incidents = serializers.SerializerMethodField()
     tickets_count = serializers.SerializerMethodField()
@@ -139,29 +138,30 @@ class TenantDetailSerializer(serializers.ModelSerializer):
         except Exception:
             return 0
 
-        return asset_count["totalAssets"] or 0
+    def get_active_incidents(self, obj):
+        return self.get_total_incidents(obj)
 
-    def get_total_incidents(self, obj):
+    def get_sla(self, obj):
         try:
-            return obj.incident_set.count()
+            return obj.sla.name
         except Exception:
             return 0
 
-    def get_active_incidents(self, obj):
+    def get_total_incidents(self, obj):
         try:
-            return obj.incident_set.filter(status="active").count()
+            soar_tenants = obj.soar_tenants.all()
+            return DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_soar_tenant__in=soar_tenants
+            ).count()
         except Exception:
             return 0
 
     def get_tickets_count(self, obj):
         try:
-            return obj.ticket_set.count()
-        except Exception:
-            return 0
-
-    def get_sla(self, obj):
-        try:
-            return obj.sla.name
+            itsm_tenants = obj.itsm_tenants.all()
+            return DuITSMFinalTickets.objects.filter(
+                itsm_tenant__in=itsm_tenants
+            ).count()
         except Exception:
             return 0
 
