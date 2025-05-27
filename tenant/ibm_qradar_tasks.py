@@ -194,7 +194,7 @@ def sync_event_log_sources_types():
 
 
 @shared_task
-def _sync_ibm_qradar_data():
+def sync_ibm_qradar_data():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
