@@ -139,44 +139,8 @@ def sync_event_log_assets(
         logger.error(f"Unexpected error in sync_event_log_assets: {str(e)}")
 
 
-# @shared_task
-# def sync_event_log_sources():
-#     results = IntegrationCredentials.objects.filter(
-#         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
-#         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
-#         credential_type=CredentialTypes.USERNAME_PASSWORD,
-#     )
-
-#     for result in results:
-#         with IBMQradar(
-#             username=result.username,
-#             password=result.password,
-#             ip_address=result.ip_address,
-#             port=result.port,
-#         ) as ibm_qradar:
-#             data = ibm_qradar._get_offenses()
-#             if not data:
-#                 logger.warning(
-#                     f"No data returned from IBM QRadar offenses endpoint for integration {result.integration.id}"
-#                 )
-#             transformed_data, _ = ibm_qradar._transform_offenses(
-#                 data=data, integration_id=result.integration.id
-#             )
-#             if transformed_data:
-#                 ibm_qradar._insert_offenses(transformed_data)
-#         # sync_event_log_assets(
-#         #     result.username,
-#         #     result.password,
-#         #     result.ip_address,
-#         #     result.port,
-#         #     result.integration.id,
-#         # )
-
-#     print(results)
-
-
 @shared_task
-def sync_event_log_sources():
+def sync_offenses():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
@@ -184,26 +148,80 @@ def sync_event_log_sources():
     )
 
     for result in results:
-        # with IBMQradar(
-        #     username=result.username,
-        #     password=result.password,
-        #     ip_address=result.ip_address,
-        #     port=result.port,
-        # ) as ibm_qradar:
-        #     data = ibm_qradar._get_log_sources_types()
-        #     if not data:
-        #         logger.warning(
-        #             f"No data returned from IBM QRadar Log SOurces types endpoint for integration {result.integration.id}"
-        #         )
-        #     transformed_data = ibm_qradar._transform_log_sources_types(
-        #         log_sources_types=data, integration_id=result.integration.id
-        #     )
-        #     if transformed_data:
-        #         ibm_qradar._insert_log_sources_types(transformed_data)
-        sync_event_log_assets(
-            result.username,
-            result.password,
-            result.ip_address,
-            result.port,
-            result.integration.id,
+        with IBMQradar(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+        ) as ibm_qradar:
+            data = ibm_qradar._get_offenses()
+            if not data:
+                logger.warning(
+                    f"No data returned from IBM QRadar offenses endpoint for integration {result.integration.id}"
+                )
+            transformed_data, _ = ibm_qradar._transform_offenses(
+                data=data, integration_id=result.integration.id
+            )
+            if transformed_data:
+                ibm_qradar._insert_offenses(transformed_data)
+
+
+@shared_task
+def sync_event_log_sources_types():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    for result in results:
+        with IBMQradar(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+        ) as ibm_qradar:
+            data = ibm_qradar._get_log_sources_types()
+            if not data:
+                logger.warning(
+                    f"No data returned from IBM QRadar Log SOurces types endpoint for integration {result.integration.id}"
+                )
+            transformed_data = ibm_qradar._transform_log_sources_types(
+                log_sources_types=data, integration_id=result.integration.id
+            )
+            if transformed_data:
+                ibm_qradar._insert_log_sources_types(transformed_data)
+
+
+@shared_task
+def _sync_ibm_qradar_data():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    for result in results:
+        sync_qradar_tenants.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
         )
+        sync_event_collectors.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+        sync_event_log_assets.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+        sync_event_log_sources_types.delay()
+        sync_offenses.delay()
