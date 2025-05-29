@@ -1,6 +1,7 @@
 # Create your views here.
 import time
 
+from django.contrib.auth import authenticate
 from django.db.models import Q
 from django.utils import timezone
 from loguru import logger
@@ -110,6 +111,12 @@ class UserLoginAPIView(APIView):
 
             user.last_login = timezone.now()
             user.save(update_fields=["last_login"])
+            user = authenticate(request, username=username, password=password)
+            if user is None:
+                return Response(
+                    {"error": "Invalid password or username"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             refresh = RefreshToken.for_user(user)
             logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
             return Response(
