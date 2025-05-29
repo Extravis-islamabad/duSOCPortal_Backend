@@ -145,7 +145,7 @@ class UserDetailsAPIView(APIView):
         start = time.time()
         try:
             user = request.user
-            serializer = UserDetailSerializer(user)
+            serializer = UserDetailSerializer(user, context={"request": request})
             logger.info(f"UserDetailsAPIView.get took {time.time() - start} seconds")
             return Response(
                 {
