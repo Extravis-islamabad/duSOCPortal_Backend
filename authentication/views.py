@@ -2,7 +2,6 @@
 import time
 
 from django.contrib.auth import authenticate
-from django.db.models import Q
 from django.utils import timezone
 from loguru import logger
 from rest_framework import status
@@ -15,7 +14,6 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from authentication.permissions import IsAdminUser
 from tenant.models import Tenant
 
-from .models import User
 from .serializers import (
     ProfilePictureUploadSerializer,
     UserCreateSerializer,
@@ -62,63 +60,109 @@ class UserCreateAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# class UserLoginAPIView(APIView):
+#     def post(self, request):
+#         # Extract credentials from request
+#         """
+#         Authenticates a user and returns JWT tokens.
+
+#         Accepts POST requests with the following data:
+#         - username: string (can be either username or email)
+#         - password: string
+
+#         Returns a JSON response with the following data on success:
+#         - refresh: string (refresh token)
+#         - access: string (access token)
+
+#         Returns HTTP 200 status code on successful authentication,
+#         HTTP 400 for missing credentials,
+#         HTTP 401 for invalid password,
+#         HTTP 404 if the user does not exist,
+#         or HTTP 500 for any other server error.
+#         """
+#         start = time.time()
+#         username = request.data.get("username")
+#         password = request.data.get("password")
+
+#         # Validate input
+#         if not username or not password:
+#             logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
+#             return Response(
+#                 {"error": "Please provide both username and password"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         try:
+#             user = User.objects.filter(Q(username=username) | Q(email=username)).first()
+
+#             if user is None:
+#                 return Response(
+#                     {"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND
+#                 )
+
+#             if not user.check_password(password):
+#                 logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
+#                 return Response(
+#                     {"error": "Invalid password or username"},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             user.last_login = timezone.now()
+#             user.save(update_fields=["last_login"])
+#             user = authenticate(request, username=username, password=password)
+#             if user is None:
+#                 return Response(
+#                     {"error": "Invalid password or username"},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+#             refresh = RefreshToken.for_user(user)
+#             logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
+#             return Response(
+#                 {
+#                     "refresh": str(refresh),
+#                     "access": str(refresh.access_token),
+#                 },
+#                 status=status.HTTP_200_OK,
+#             )
+
+#         except Exception as e:
+#             logger.error(f"An error occurred UserLoginAPIView.post: {str(e)}")
+#             return Response(
+#                 {"error": f"An error occurred: {str(e)}"},
+#                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
+#             )
+
+
 class UserLoginAPIView(APIView):
     def post(self, request):
-        # Extract credentials from request
-        """
-        Authenticates a user and returns JWT tokens.
-
-        Accepts POST requests with the following data:
-        - username: string (can be either username or email)
-        - password: string
-
-        Returns a JSON response with the following data on success:
-        - refresh: string (refresh token)
-        - access: string (access token)
-
-        Returns HTTP 200 status code on successful authentication,
-        HTTP 400 for missing credentials,
-        HTTP 401 for invalid password,
-        HTTP 404 if the user does not exist,
-        or HTTP 500 for any other server error.
-        """
         start = time.time()
         username = request.data.get("username")
         password = request.data.get("password")
 
-        # Validate input
         if not username or not password:
-            logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
             return Response(
                 {"error": "Please provide both username and password"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-            user = User.objects.filter(Q(username=username) | Q(email=username)).first()
+            # Try LDAP authentication
+            user = authenticate(request, username=username, password=password)
 
             if user is None:
                 return Response(
-                    {"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND
+                    {"error": "Invalid username or password"},
+                    status=status.HTTP_401_UNAUTHORIZED,
                 )
 
-            if not user.check_password(password):
-                logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
-                return Response(
-                    {"error": "Invalid password or username"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
+            # Update last login timestamp
             user.last_login = timezone.now()
             user.save(update_fields=["last_login"])
-            user = authenticate(request, username=username, password=password)
-            if user is None:
-                return Response(
-                    {"error": "Invalid password or username"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+
+            # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
-            logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
+            logger.info(f"UserLoginAPIView.post took {time.time() - start:.2f} seconds")
+
             return Response(
                 {
                     "refresh": str(refresh),
@@ -128,10 +172,10 @@ class UserLoginAPIView(APIView):
             )
 
         except Exception as e:
-            logger.error(f"An error occurred UserLoginAPIView.post: {str(e)}")
+            logger.error(f"UserLoginAPIView.post: {str(e)}")
             return Response(
                 {"error": f"An error occurred: {str(e)}"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
