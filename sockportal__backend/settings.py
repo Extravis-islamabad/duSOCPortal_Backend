@@ -236,7 +236,7 @@ MEDIA_URL = "/media/"
 
 
 import ldap
-from django_auth_ldap.config import LDAPSearch, PosixGroupType
+from django_auth_ldap.config import LDAPSearch
 
 # AUTH_LDAP_SERVER_URI = f'ldap://{LDAPConstants.LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}'
 # AUTH_LDAP_BIND_DN = LDAPConstants.BASE_DN
@@ -282,54 +282,44 @@ from django_auth_ldap.config import LDAPSearch, PosixGroupType
 #         'django.contrib.auth.backends.ModelBackend',
 # )
 
-AUTHENTICATION_BACKENDS = [
-    "django_auth_ldap.backend.LDAPBackend",
-    "django.contrib.auth.backends.ModelBackend",  # Fallback for local users
-]
+# LDAP constants
+LDAP_PORT = LDAPConstants.LDAP_PORT
+BASE_DN = LDAPConstants.BASE_DN
+BIND_DOMAIN = "mscloudinfra.com"
+LDAP_SERVERS = LDAPConstants.LDAP_SERVERS
 
-# LDAP Configuration
-AUTH_LDAP_SERVER_URI = [
-    f"ldap://{server}:{LDAPConstants.LDAP_PORT}"
-    for server in LDAPConstants.LDAP_SERVERS
-]
-AUTH_LDAP_BIND_DN = LDAPConstants.BASE_DN  # Replace with actual bind user DN
-# AUTH_LDAP_BIND_PASSWORD = "bind_user_password"  # Replace with actual password
+# Choose one of the servers to start (failover happens automatically)
+AUTH_LDAP_SERVER_URI = f"ldap://{LDAP_SERVERS[0]}:{LDAP_PORT}"
 
-# User search configuration
+
+# Authentication with full domain login (e.g., username@domain)
+AUTH_LDAP_USER_DN_TEMPLATE = f"%(user)s@{BIND_DOMAIN}"
+
+# Base search DN for user lookup
 AUTH_LDAP_USER_SEARCH = LDAPSearch(
-    LDAPConstants.BASE_DN, ldap.SCOPE_SUBTREE, "(sAMAccountName=%(user)s)"
+    BASE_DN, ldap.SCOPE_SUBTREE, "(sAMAccountName=%(user)s)"
 )
 
-# Map LDAP attributes to Django user model
+# Populate user fields from LDAP
 AUTH_LDAP_USER_ATTR_MAP = {
     "first_name": "givenName",
     "last_name": "sn",
     "email": "mail",
 }
 
-# Optional: Group-based permissions
-AUTH_LDAP_GROUP_SEARCH = LDAPSearch(
-    LDAPConstants.BASE_DN, ldap.SCOPE_SUBTREE, "(objectClass=group)"
-)
-AUTH_LDAP_GROUP_TYPE = PosixGroupType()
-AUTH_LDAP_USER_FLAGS_BY_GROUP = {
-    "is_active": "CN=ActiveUsers,OU=Groups,OU=Wipro_CSOC,OU=ICT Managed Services Platform,DC=mscloudinfra,DC=com",
-    "is_staff": "CN=StaffUsers,OU=Groups,OU=Wipro_CSOC,OU=ICT Managed Services Platform,DC=mscloudinfra,DC=com",
-    "is_superuser": "CN=Admins,OU=Groups,OU=Wipro_CSOC,OU=ICT Managed Services Platform,DC=mscloudinfra,DC=com",
-}
+# Optional - create Django user if authenticated through LDAP
+AUTH_LDAP_ALWAYS_UPDATE_USER = True
+AUTH_LDAP_CREATE_USERS = True
 
-# LDAP connection options
-AUTH_LDAP_CONNECTION_OPTIONS = {
-    ldap.OPT_REFERRALS: 0,  # Disable referrals for Active Directory
-}
+# Fallback to default Django auth if LDAP fails
+AUTHENTICATION_BACKENDS = [
+    "django_auth_ldap.backend.LDAPBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
 
-# DRF settings
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",  # Token-based authentication
-        "rest_framework.authentication.SessionAuthentication",  # Optional for browsable API
-    ],
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",  # Require authentication for API access
-    ],
-}
+# Optional: logging for LDAP debugging
+import logging
+
+logger = logging.getLogger("django_auth_ldap")
+logger.addHandler(logging.StreamHandler())
+logger.setLevel(logging.DEBUG)
