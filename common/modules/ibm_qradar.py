@@ -11,6 +11,7 @@ from common.utils import DBMappings
 from tenant.models import (
     DuIbmQradarTenants,
     IBMQradarAssests,
+    IBMQradarEPS,
     IBMQradarEventCollector,
     IBMQradarLogSourceTypes,
     IBMQradarOffense,
@@ -874,3 +875,51 @@ class IBMQradar:
             return
         results = response.json().get("events", [])
         return results
+
+    def _transform_eps_data(self, data_list, integration):
+        """
+        Transforms the list of eps data from the IBM QRadar endpoint into a list of IBMQradarEPS objects.
+
+        :param data_list: A list of dictionaries containing eps data.
+        :param integration: The integration object associated with the data.
+        :return: A list of IBMQradarEPS objects.
+        """
+        domain_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        log_source_map = DBMappings.get_db_id_to_id_mapping(IBMQradarAssests)
+        eps_objects = []
+        for data in data_list:
+            domain = domain_map.get(data["domainid"])
+            log_source = log_source_map.get(data["logsourceid"])
+            try:
+                eps_obj = IBMQradarEPS(
+                    domain_id=domain,
+                    log_source_id=log_source,
+                    eps=data["eps"],
+                    integration_id=integration,
+                )
+                eps_objects.append(eps_obj)
+            except Exception as e:
+                logger.error(
+                    f"An error occurred in IBMQRadar._transform_eps_data(): {str(e)}"
+                )
+        return eps_objects
+
+    def _insert_eps(self, data):
+        """
+        Inserts or updates EPS records in the IBMQradarEPS table.
+
+        :param data: A list of IBMQradarEPS objects.
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._insert_eps() started : {start}")
+
+        try:
+            with transaction.atomic():
+                IBMQradarEPS.objects.bulk_create(
+                    data,
+                    update_conflicts=True,
+                    update_fields=["eps", "created_at", "updated_at"],
+                )
+        except Exception as e:
+            logger.error(f"An error occurred in IBMQradar._insert_eps(): {str(e)}")
+            transaction.rollback()
