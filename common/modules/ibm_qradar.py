@@ -912,7 +912,7 @@ class IBMQradar:
         """
         start = time.time()
         logger.info(f"IBMQRadar._insert_eps() started : {start}")
-
+        IBMQradarEPS.objects.all().delete()
         try:
             with transaction.atomic():
                 IBMQradarEPS.objects.bulk_create(
