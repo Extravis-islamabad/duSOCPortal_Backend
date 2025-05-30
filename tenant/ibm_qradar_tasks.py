@@ -10,7 +10,7 @@ from integration.models import (
     IntegrationTypes,
     SiemSubTypes,
 )
-from tenant.models import DuIbmQradarTenants
+from tenant.models import DuIbmQradarTenants, IBMQradarEPS
 
 
 @shared_task
@@ -269,7 +269,7 @@ def sync_ibm():
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
-
+    IBMQradarEPS.objects.all().delete()
     for result in results:
         sync_eps_for_domain.delay(
             username=result.username,
