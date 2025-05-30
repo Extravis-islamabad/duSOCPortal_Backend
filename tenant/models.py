@@ -117,9 +117,19 @@ class IBMQradarEPS(models.Model):
         on_delete=models.CASCADE,
         related_name="du_ibm_qradar_eps",
     )
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_eps",
+        null=True,
+        blank=True,
+    )
     eps = models.FloatField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "du_ibm_qradar_eps"
 
 
 class IBMQradarOffense(models.Model):
