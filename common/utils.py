@@ -1,6 +1,11 @@
 import hashlib
 import os
 
+import ldap
+from loguru import logger
+
+from common.constants import LDAPConstants
+
 
 class PasswordCreation:
     @staticmethod
@@ -58,3 +63,50 @@ class DBMappings:
         :return: Dictionary {db_id: id}
         """
         return dict(model_class.objects.values_list("db_id", "id"))
+
+
+class LDAP:
+    @staticmethod
+    def _check_ldap(username: str, password: str):
+        try:
+            connect = ldap.initialize(
+                f"ldap://{LDAPConstants.LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
+            )
+            connect.set_option(ldap.OPT_REFERRALS, 0)
+            connect.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
+
+            # Bind as the user
+            bind_dn = f"{username}@{LDAPConstants.BIND_DOMAIN}"
+            connect.simple_bind_s(bind_dn, password)
+
+            # Search for the user DN
+            search_filter = f"(sAMAccountName={username})"
+            result = connect.search_s(
+                LDAPConstants.BASE_DN,
+                ldap.SCOPE_SUBTREE,
+                search_filter,
+                ["memberOf", "distinguishedName"],
+            )
+
+            if not result:
+                logger.error(f"User {username} not found in LDAP directory.")
+                return False
+            else:
+                dn, attributes = result[0]
+                logger.info(f"Successfully authenticated: {username}")
+                return True
+                print(f"Distinguished Name: {dn}")
+
+                groups = attributes.get("memberOf", [])
+                if groups:
+                    print(f"Groups for {username}:")
+                    for group in groups:
+                        print(f"  - {group.decode()}")
+                else:
+                    print(f"No group memberships found for {username}")
+
+            connect.unbind()
+
+        except Exception as e:
+            logger.error(f"The exception LDAP occurred: {str(e)}")
+            return False
