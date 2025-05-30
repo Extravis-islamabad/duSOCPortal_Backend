@@ -271,7 +271,7 @@ def sync_ibm():
     )
     IBMQradarEPS.objects.all().delete()
     for result in results:
-        sync_eps_for_domain.delay(
+        sync_eps_for_domain(
             username=result.username,
             password=result.password,
             ip_address=result.ip_address,
