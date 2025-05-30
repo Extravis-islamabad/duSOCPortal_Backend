@@ -5,6 +5,7 @@ from tenant.views import (
     DuCortexSOARTenantsListView,
     DuIbmQradarTenantsListView,
     DuITSMTenantsListView,
+    EPSCountValuesByDomainAPIView,
     EventCollectorsListAPIView,
     GetTenantAssetsList,
     IncidentDetailView,
@@ -113,5 +114,6 @@ urlpatterns = [
         TotalTicketsByTenantAPIView.as_view(),
         name="total-tickets-by-tenant",
     ),
+    path("api/eps/", EPSCountValuesByDomainAPIView.as_view(), name="tenant"),
     path("test/", TestView.as_view(), name="test"),
 ]

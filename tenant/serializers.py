@@ -14,6 +14,7 @@ from .models import (
     DuITSMFinalTickets,
     DuITSMTenants,
     IBMQradarAssests,
+    IBMQradarEPS,
     IBMQradarEventCollector,
     Tenant,
     TenantPermissionChoices,
@@ -708,3 +709,9 @@ class DUCortexSOARIncidentSerializer(serializers.ModelSerializer):
     class Meta:
         model = DUCortexSOARIncidentFinalModel
         fields = "__all__"
+
+
+class IBMQradarEPSSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IBMQradarEPS
+        fields = ["log_source", "domain", "eps"]

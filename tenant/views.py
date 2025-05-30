@@ -32,6 +32,7 @@ from tenant.models import (
     DuITSMFinalTickets,
     DuITSMTenants,
     IBMQradarAssests,
+    IBMQradarEPS,
     IBMQradarEventCollector,
     IBMQradarOffense,
     Tenant,
@@ -46,6 +47,7 @@ from tenant.serializers import (
     DuITSMTenantsSerializer,
     DuITSMTicketsSerializer,
     IBMQradarAssestsSerializer,
+    IBMQradarEPSSerializer,
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
 )
@@ -1851,6 +1853,39 @@ class TenantAssetsEPSAPIView(APIView):
 
             return Response(response_data, status=status.HTTP_200_OK)
 
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class EPSCountValuesByDomainAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            # Step 1: Retrieve collector IDs from TenantQradarMapping
+            tenant = request.user
+            qradar_tenant_ids = TenantQradarMapping.objects.filter(
+                tenant__tenant=tenant
+            ).values_list("qradar_tenant__id", flat=True)
+
+            if not qradar_tenant_ids:
+                return Response(
+                    {"error": "No mappings found for the tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            eps_entries = IBMQradarEPS.objects.filter(domain__in=qradar_tenant_ids)
+            serializer = IBMQradarEPSSerializer(eps_entries, many=True)
+            return Response(serializer.data, status=200)
+        except Exception:
+            return Response(
+                {"error": "Invalid tenant or related data not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         except Exception as e:
             return Response(
                 {"error": f"An error occurred: {str(e)}"},
