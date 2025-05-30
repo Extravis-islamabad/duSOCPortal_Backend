@@ -106,6 +106,22 @@ class IBMQradarAssests(models.Model):
         db_table = "du_ibm_qradar_assets"
 
 
+class IBMQradarEPS(models.Model):
+    log_source = models.ForeignKey(
+        IBMQradarAssests,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_eps",
+    )
+    domain = models.ForeignKey(
+        DuIbmQradarTenants,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_eps",
+    )
+    eps = models.FloatField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class IBMQradarOffense(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)  # Maps to 'id' in JSON
