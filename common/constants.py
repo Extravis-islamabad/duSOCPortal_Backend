@@ -112,6 +112,7 @@ class IBMQradarConstants:
         "api/config/event_sources/log_source_management/log_source_types"
     )
     IBM_OFFENSES_ENDPOINT = "api/siem/offenses"
+    IBM_EPS_ENDPOINT = "api/ariel/searches"
 
 
 class ITSMConstants:

@@ -761,3 +761,116 @@ class IBMQradar:
                 f"An error occurred in IBMQradar._insert_log_sources_types(): {str(e)}"
             )
             transaction.rollback()
+
+    def _get_eps_domain(self, domain_id: int):
+        """
+        Execute an AQL query to get the EPS by domain ID.
+
+        The query will be executed against the IBM QRadar API and the results will be
+        returned as a search ID which can be used to retrieve the results.
+
+        :param domain_id: The domain ID to query.
+        :return: The search ID which can be used to retrieve the results.
+        """
+        AQL_QUERY = f'SELECT "domainid", logsourceid, COUNT(*) / 300 AS eps FROM events WHERE starttime > NOW() - 300000 AND "domainid" = {domain_id} GROUP BY "domainid", logsourceid ORDER BY eps DESC'  # nosec
+        endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_EPS_ENDPOINT}"
+        try:
+            response = requests.post(
+                endpoint,
+                auth=HTTPBasicAuth(
+                    self.username,
+                    self.password,
+                ),
+                data={"query_expression": AQL_QUERY},
+                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                timeout=SSLConstants.TIMEOUT,
+            )
+        except Exception as e:
+            logger.error(f"An error occurred in IBMQRadar._get_eps_domain(): {str(e)}")
+            return
+
+        if response.status_code not in [200, 201]:
+            logger.warning(
+                f"IBMQRadar._get_eps_domain() return the status code {response.status_code}"
+            )
+            return
+
+        search_id = response.json().get("search_id")
+        return search_id
+
+    def _check_eps_results_by_search_id(self, search_id: int):
+        """
+        Returns the results for a given search ID.
+
+        :param search_id: The ID of the search.
+        :return: The results.
+        """
+        while True:
+            endpoint = (
+                f"{self.base_url}/{IBMQradarConstants.IBM_EPS_ENDPOINT}/{search_id}"
+            )
+            try:
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                )
+            except Exception as e:
+                logger.error(
+                    f"An error occurred in IBMQRadar._check_eps_results_by_search_id(): {str(e)}"
+                )
+                return
+
+            if response.status_code != 200:
+                logger.warning(
+                    f"IBMQRadar._check_eps_results_by_search_id() return the status code {response.status_code}"
+                )
+                return
+
+            status = response.json().get("status")
+
+            if status == "COMPLETED":
+                break
+            elif status in ["ERROR", "CANCELLED"]:
+                logger.info(
+                    f"IBMQRadar._check_eps_results_by_search_id() status: {status}"
+                )
+
+            time.sleep(2)
+        return True
+
+    def _get_eps_results_by_search_id(self, search_id: int):
+        """
+        Returns the results for a given search ID.
+
+        :param search_id: The ID of the search.
+        :return: The results.
+        """
+        endpoint = (
+            f"{self.base_url}/{IBMQradarConstants.IBM_EPS_ENDPOINT}/{search_id}/results"
+        )
+        try:
+            response = requests.get(
+                endpoint,
+                auth=HTTPBasicAuth(
+                    self.username,
+                    self.password,
+                ),
+                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                timeout=SSLConstants.TIMEOUT,
+            )
+        except Exception as e:
+            logger.error(
+                f"An error occurred in IBMQRadar._get_eps_results_by_search_id(): {str(e)}"
+            )
+        if response.status_code != 200:
+            logger.warning(
+                f"IBMQRadar._get_eps_results_by_search_id() return the status code {response.status_code}"
+            )
+            return
+        results = response.json().get("events", [])
+        return results
