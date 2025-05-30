@@ -24,6 +24,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import PaginationConstants
+from tenant.ibm_qradar_tasks import sync_ibm
 from tenant.models import (
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
@@ -182,6 +183,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
+        sync_ibm.delay()
         # sync_requests_for_soar.delay()
         # sync_itsm_tenants_tickets.delay()
         # sync_event_log_sources.delay()

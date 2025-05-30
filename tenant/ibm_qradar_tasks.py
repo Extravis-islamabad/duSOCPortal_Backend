@@ -10,6 +10,7 @@ from integration.models import (
     IntegrationTypes,
     SiemSubTypes,
 )
+from tenant.models import DuIbmQradarTenants
 
 
 @shared_task
@@ -194,6 +195,33 @@ def sync_event_log_sources_types():
 
 
 @shared_task
+def sync_eps_for_domain(
+    username: str, password: str, ip_address: str, port: int, integration_id: int
+):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_eps_for_domain() task")
+        for domain_id in db_ids:
+            logger.info(f"Syncing EPS for domain {domain_id}")
+            search_id = ibm_qradar._get_eps_domain(domain_id=domain_id)
+            flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
+            if not flag:
+                logger.warning(
+                    f"IBM QRadar EPS sync failed for domain {domain_id} for integration {integration_id}"
+                )
+                continue
+            data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+            transformed_data = ibm_qradar._transform_eps_data(
+                data_list=data, integration=integration_id
+            )
+            if transformed_data:
+                ibm_qradar._insert_eps(transformed_data)
+
+
+@shared_task
 def sync_ibm_qradar_data():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
@@ -202,6 +230,13 @@ def sync_ibm_qradar_data():
     )
 
     for result in results:
+        sync_eps_for_domain.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
         sync_qradar_tenants.delay(
             username=result.username,
             password=result.password,
@@ -225,3 +260,21 @@ def sync_ibm_qradar_data():
         )
         sync_event_log_sources_types.delay()
         sync_offenses.delay()
+
+
+@shared_task
+def sync_ibm():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    for result in results:
+        sync_eps_for_domain.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
