@@ -890,6 +890,11 @@ class IBMQradar:
         for data in data_list:
             domain = domain_map.get(data["domainid"])
             log_source = log_source_map.get(data["logsourceid"])
+            if domain is None or log_source is None:
+                logger.warning(
+                    f"Skipping eps with invalid domain or log_source: {data.get('id')}"
+                )
+                continue
             try:
                 eps_obj = IBMQradarEPS(
                     domain_id=domain,
