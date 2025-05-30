@@ -917,9 +917,6 @@ class IBMQradar:
             with transaction.atomic():
                 IBMQradarEPS.objects.bulk_create(
                     data,
-                    update_conflicts=True,
-                    update_fields=["eps", "created_at", "updated_at"],
-                    unique_fields=["log_source", "domain"],
                 )
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._insert_eps(): {str(e)}")
