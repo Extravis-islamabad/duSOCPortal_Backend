@@ -264,3 +264,16 @@ class TenantProfileUpdateAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class LDAPUsersAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        data = LDAP.fetch_all_ldap_users()
+        if not data:
+            return Response(
+                {"message": "No users found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        return Response({"data": data}, status=status.HTTP_200_OK)

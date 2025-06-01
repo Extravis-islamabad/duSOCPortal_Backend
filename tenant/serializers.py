@@ -712,6 +712,8 @@ class DUCortexSOARIncidentSerializer(serializers.ModelSerializer):
 
 
 class IBMQradarEPSSerializer(serializers.ModelSerializer):
+    log_source = serializers.CharField(source="log_source.name", read_only=True)
+
     class Meta:
         model = IBMQradarEPS
         fields = ["log_source", "domain", "eps"]

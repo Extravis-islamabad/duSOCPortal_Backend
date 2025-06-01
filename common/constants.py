@@ -142,3 +142,5 @@ class LDAPConstants:
     BASE_DN = "OU=Wipro_CSOC,OU=ICT Managed Services Platform,DC=mscloudinfra,DC=com"
     BIND_DOMAIN = "mscloudinfra.com"
     LDAP_SERVERS = ["10.225.128.135", "10.225.128.136"]
+    LDAP_BIND_USER = "svc.soc.portal"  # nosec
+    LDAP_BIND_PASSWORD = "SeonRx##0@55555"  # nosec

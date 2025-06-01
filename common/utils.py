@@ -1,5 +1,6 @@
 import hashlib
 import os
+import time
 
 import ldap
 from loguru import logger
@@ -110,3 +111,43 @@ class LDAP:
         except Exception as e:
             logger.error(f"The exception LDAP occurred: {str(e)}")
             return False
+
+    @staticmethod
+    def fetch_all_ldap_users():
+        start = time.time()
+        logger.info(f"LDAP.fetch_all_ldap_users() started : {start}")
+        try:
+            connect = ldap.initialize(
+                f"ldap://{LDAPConstants.LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
+            )
+            connect.set_option(ldap.OPT_REFERRALS, 0)
+            connect.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
+
+            bind_dn = f"{LDAPConstants.LDAP_BIND_USER}@{LDAPConstants.BIND_DOMAIN}"
+            connect.simple_bind_s(bind_dn, LDAPConstants.LDAP_BIND_PASSWORD)
+
+            # Search filter to get all user accounts
+            search_filter = "(&(objectClass=user)(sAMAccountName=*))"
+            attributes = ["sAMAccountName", "distinguishedName", "mail", "displayName"]
+
+            result = connect.search_s(
+                LDAPConstants.BASE_DN, ldap.SCOPE_SUBTREE, search_filter, attributes
+            )
+            result_list = []
+            for dn, attrs in result:
+                username = attrs.get("sAMAccountName", [b"N/A"])[0].decode()
+                display_name = attrs.get("displayName", [b"N/A"])[0].decode()
+                email = attrs.get("mail", [b"N/A"])[0].decode()
+                result_list.append(
+                    {"user": username, "name": display_name, "email": email, "dn": dn}
+                )
+            connect.unbind()
+            logger.info(
+                f"LDAP.fetch_all_ldap_users() took: {time.time() - start} seconds"
+            )
+            return result_list
+        except Exception as e:
+            logger.exception(
+                f"An error occurred in LDAP.fetch_all_ldap_users(): {str(e)}"
+            )
+            return []
