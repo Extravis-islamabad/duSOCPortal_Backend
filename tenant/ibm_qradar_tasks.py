@@ -253,6 +253,7 @@ def sync_ibm_qradar_data():
         )
         sync_event_log_sources_types.delay()
         sync_offenses.delay()
+        IBMQradarEPS.objects.all().delete()
         sync_eps_for_domain.delay(
             username=result.username,
             password=result.password,
