@@ -8,6 +8,7 @@ class IntegrationTypes(models.IntegerChoices):
     SIEM_INTEGRATION = 1, "SIEM Integration"
     SOAR_INTEGRATION = 2, "SOAR Integration"
     ITSM_INTEGRATION = 3, "ITSM Integration"
+    THREAT_INTELLIGENCE = 4, "Threat Intelligence"
 
 
 class SiemSubTypes(models.IntegerChoices):
@@ -28,9 +29,14 @@ class ItsmSubTypes(models.IntegerChoices):
     OTHER = 3, "Other"
 
 
+class ThreatIntelligenceSubTypes(models.IntegerChoices):
+    CYWARE = 1, "CYWARE"
+
+
 class CredentialTypes(models.IntegerChoices):
     API_KEY = 1, "API Key"
     USERNAME_PASSWORD = 2, "Username and Password"
+    SECRET_KEY_ACCESS_KEY = 3, "Secret Key and Access Key"
 
 
 class Integration(models.Model):
