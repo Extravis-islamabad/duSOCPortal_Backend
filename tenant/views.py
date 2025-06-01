@@ -1071,7 +1071,7 @@ class IncidentDetailView(APIView):
             # Fetch incident using numeric incident_id
             incident = (
                 DUCortexSOARIncidentFinalModel.objects.filter(
-                    db_id=incident_id, cortex_soar_tenant__in=soar_ids
+                    id=incident_id, cortex_soar_tenant__in=soar_ids
                 )
                 .values(
                     "id",
@@ -1147,7 +1147,7 @@ class IncidentDetailView(APIView):
                         "title": "Incident acknowledged",
                         "time": incident["incident_tta"].strftime("%I:%M %p"),
                         "description": "Time to acknowledge recorded",
-                        "detail": f"TTA: {incident['ttacalculation'] or 'Standard calculation'}",
+                        "detail": f"TTA: {incident['tta_calculation'] or 'Standard calculation'}",
                     }
                 )
 
