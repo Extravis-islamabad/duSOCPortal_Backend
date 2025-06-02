@@ -99,23 +99,25 @@ class UserLoginAPIView(APIView):
                     {"error": "Invalid password or username"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            # if flag:
-            #     username = "admin@gmail.com"  # nosec
-            #     password = "123456@We"  # nosec
-        try:
-            user = User.objects.filter(Q(username=username) | Q(email=username)).first()
 
+        try:
+            # user = User.objects.filter(Q(username=username) | Q(email=username)).first()
+            user = User.objects.filter(
+                Q(username__iexact=username) | Q(email__iexact=username)
+            ).first()
             if user is None:
                 return Response(
                     {"error": "User does not exist"}, status=status.HTTP_404_NOT_FOUND
                 )
-
-            if not user.check_password(password):
-                logger.info(f"UserLoginAPIView.post took {time.time() - start} seconds")
-                return Response(
-                    {"error": "Invalid password or username"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            if user.is_admin:
+                if not user.check_password(password):
+                    logger.info(
+                        f"UserLoginAPIView.post took {time.time() - start} seconds"
+                    )
+                    return Response(
+                        {"error": "Invalid password or username"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             user.last_login = timezone.now()
             user.save(update_fields=["last_login"])
