@@ -139,7 +139,12 @@ class LDAP:
                 display_name = attrs.get("displayName", [b"N/A"])[0].decode()
                 email = attrs.get("mail", [b"N/A"])[0].decode()
                 result_list.append(
-                    {"user": username, "name": display_name, "email": email, "dn": dn}
+                    {
+                        "username": username,
+                        "name": display_name,
+                        "email": email,
+                        "dn": dn,
+                    }
                 )
             connect.unbind()
             logger.info(
