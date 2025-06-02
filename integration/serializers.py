@@ -2,6 +2,7 @@ from django.core.validators import validate_ipv46_address
 from rest_framework import serializers
 
 from common.modules.cortex_soar import CortexSOAR
+from common.modules.cyware import Cyware
 from common.modules.ibm_qradar import IBMQradar
 from common.modules.itsm import ITSM
 
@@ -68,6 +69,7 @@ class IntegrationSerializer(serializers.ModelSerializer):
             "siem_subtype",
             "soar_subtype",
             "itsm_subtype",
+            "threat_intelligence_subtype",
             "instance_name",
             "credentials",
         ]
@@ -157,7 +159,16 @@ class IntegrationSerializer(serializers.ModelSerializer):
             and threat_intelligence_subtype == ThreatIntelligenceSubTypes.CYWARE
         ):
             if credentials_type == CredentialTypes.SECRET_KEY_ACCESS_KEY:
-                pass
+                with Cyware(
+                    base_url=credentials.get("base_url"),
+                    secret_key=credentials.get("secret_key"),
+                    access_key=credentials.get("access_key"),
+                ) as cyware:
+                    respomse = cyware.get_alert_list()
+                    if respomse.status_code != 200:
+                        raise serializers.ValidationError(
+                            "Cyware integration is not accessible."
+                        )
 
             else:
                 raise serializers.ValidationError(

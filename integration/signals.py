@@ -11,6 +11,7 @@ from tenant.ibm_qradar_tasks import (
     sync_qradar_tenants,
 )
 from tenant.itsm_tasks import sync_itsm, sync_itsm_tenants
+from tenant.threat_intelligence import sync_threat_intel_with_signal
 
 from .models import (
     CredentialTypes,
@@ -19,6 +20,7 @@ from .models import (
     ItsmSubTypes,
     SiemSubTypes,
     SoarSubTypes,
+    ThreatIntelligenceSubTypes,
 )
 
 
@@ -82,3 +84,16 @@ def trigger_integration_tasks(
 
                     sync_cortex_soar_tenants.delay(**kwargs)
                     sync_soar_data.delay()
+
+        elif (
+            instance.integration.integration_type
+            == IntegrationTypes.THREAT_INTELLIGENCE
+        ):
+            if instance.integration.siem_subtype == ThreatIntelligenceSubTypes.CYWARE:
+                if instance.credential_type == CredentialTypes.SECRET_KEY_ACCESS_KEY:
+                    sync_threat_intel_with_signal.delay(
+                        access_key=instance.access_key,
+                        secret_key=instance.secret_key,
+                        base_url=instance.base_url,
+                        integration_id=instance.integration.id,
+                    )
