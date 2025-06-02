@@ -21,5 +21,5 @@ urlpatterns = [
         TenantProfileUpdateAPIView.as_view(),
         name="upload-profile-picture",
     ),
-    path("get_ldap_users", LDAPUsersAPIView.as_view(), name="get-ldap-users"),
+    path("get_ldap_users/", LDAPUsersAPIView.as_view(), name="get-ldap-users"),
 ]
