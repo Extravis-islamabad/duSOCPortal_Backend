@@ -279,3 +279,27 @@ class LDAPUsersAPIView(APIView):
                 {"message": "No users found"}, status=status.HTTP_404_NOT_FOUND
             )
         return Response({"data": data}, status=status.HTTP_200_OK)
+
+
+class LDAPGroupListView(APIView):
+    def get(self, request):
+        try:
+            groups = LDAP.fetch_all_groups()
+            return Response({"groups": groups}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class LDAPGroupUsersView(APIView):
+    def get(self, request, group_name):
+        try:
+            users = LDAP.fetch_users_in_group(group_name)
+            return Response(
+                {"group": group_name, "users": users}, status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

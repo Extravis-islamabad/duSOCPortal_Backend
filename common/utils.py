@@ -68,6 +68,71 @@ class DBMappings:
 
 class LDAP:
     @staticmethod
+    def get_connection():
+        connect = ldap.initialize(
+            f"ldap://{LDAPConstants.LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
+        )
+        connect.set_option(ldap.OPT_REFERRALS, 0)
+        connect.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
+        bind_dn = f"{LDAPConstants.LDAP_BIND_USER}@{LDAPConstants.BIND_DOMAIN}"
+        connect.simple_bind_s(bind_dn, LDAPConstants.LDAP_BIND_PASSWORD)
+        return connect
+
+    @staticmethod
+    def fetch_all_groups():
+        connect = LDAP.get_connection()
+        search_filter = "(objectClass=group)"
+        attributes = ["cn"]
+        result = connect.search_s(
+            LDAPConstants.BASE_DN, ldap.SCOPE_SUBTREE, search_filter, attributes
+        )
+        groups = [attrs["cn"][0].decode() for dn, attrs in result if "cn" in attrs]
+        connect.unbind()
+        return groups
+
+    @staticmethod
+    def fetch_users_in_group(group_name):
+        connect = LDAP.get_connection()
+        # Find group DN first
+        group_filter = f"(&(objectClass=group)(cn={group_name}))"
+        group_result = connect.search_s(
+            LDAPConstants.BASE_DN, ldap.SCOPE_SUBTREE, group_filter, ["member"]
+        )
+        if not group_result:
+            return []
+
+        _, group_attrs = group_result[0]
+        members = group_attrs.get("member", [])
+        users = []
+
+        for member_dn in members:
+            try:
+                user_result = connect.search_s(
+                    member_dn.decode(),
+                    ldap.SCOPE_BASE,
+                    "(objectClass=person)",
+                    ["sAMAccountName", "mail", "displayName"],
+                )
+                if user_result:
+                    _, user_attrs = user_result[0]
+                    users.append(
+                        {
+                            "username": user_attrs.get("sAMAccountName", [b""])[
+                                0
+                            ].decode(),
+                            "email": user_attrs.get("mail", [b""])[0].decode(),
+                            "name": user_attrs.get("displayName", [b""])[0].decode(),
+                        }
+                    )
+            except Exception as e:
+                logger.error(
+                    f"LDAP.fetch_users_in_group(): Error fetching user details: {e}"
+                )
+                return []
+        connect.unbind()
+        return users
+
+    @staticmethod
     def _check_ldap(username: str, password: str):
         try:
             connect = ldap.initialize(
