@@ -144,3 +144,9 @@ class LDAPConstants:
     LDAP_SERVERS = ["10.225.128.135", "10.225.128.136"]
     LDAP_BIND_USER = "svc.soc.portal"  # nosec
     LDAP_BIND_PASSWORD = "SeonRx##0@55555"  # nosec
+
+
+class CywareConstants:
+    EXPIRATION_MARGIN_TIME = 20
+    EXPIRATION_MARGIN_TIME = 20
+    LIST_ALERT_ENDPOINT = "csap/v1/list_alert/"

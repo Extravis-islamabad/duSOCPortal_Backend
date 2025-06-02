@@ -387,3 +387,22 @@ class TenantRolePermissions(models.Model):
     def save(self, *args, **kwargs):
         self.permission_text = TenantPermissionChoices(self.permission).label
         super().save(*args, **kwargs)
+
+
+class Alert(models.Model):
+    db_id = models.CharField(max_length=64, unique=True)
+    title = models.TextField()
+    status = models.TextField()
+    published_time = models.DateTimeField(null=True, blank=True)
+    integration = models.ForeignKey(
+        Integration, on_delete=models.CASCADE, related_name="alerts"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["db_id"])]
+        db_table = "threat_intelligence_alerts"
+
+    def __str__(self):
+        return f"{self.title} ({self.db_id})"
