@@ -401,10 +401,11 @@ class TenantCreateSerializer(serializers.ModelSerializer):
 
             # Create User
             logger.debug("Checking for existing user")
-            if User.objects.filter(email=user_data["email"]).exists():
-                raise serializers.ValidationError(
-                    {"email": "User with this email already exists"}
-                )
+            if user_data.get("email", None):
+                if User.objects.filter(email=user_data["email"]).exists():
+                    raise serializers.ValidationError(
+                        {"email": "User with this email already exists"}
+                    )
             if User.objects.filter(username=user_data["username"]).exists():
                 raise serializers.ValidationError(
                     {"username": "User with this username already exists"}
