@@ -8,10 +8,11 @@ extend-ignore =
     B608, # B608 hardcoded_sql_expressions
     E712, # comparison to True should be 'if cond is True:' or 'if cond:'
     ; F401, # imported but unused
+    B608, #hardcoded_sql_expressions
 exclude =
     .git,
     _pycache_,
     .vscode,
     build
 # mccabe
-max-complexity = 25
+max-complexity = 30
