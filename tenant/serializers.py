@@ -192,10 +192,15 @@ class QradarTenantInputSerializer(serializers.Serializer):
 
 
 class TenantCreateSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(write_only=True)
-    username = serializers.CharField(write_only=True)
-    name = serializers.CharField(write_only=True)
-    password = serializers.CharField(write_only=True, style={"input_type": "password"})
+    email = serializers.EmailField(write_only=True, required=False, allow_null=True)
+    username = serializers.CharField(write_only=True, required=False, allow_null=True)
+    name = serializers.CharField(write_only=True, required=False, allow_null=True)
+    password = serializers.CharField(
+        write_only=True,
+        style={"input_type": "password"},
+        required=False,
+        allow_null=True,
+    )
     qradar_tenants = QradarTenantInputSerializer(
         many=True, required=False, write_only=True
     )
@@ -234,6 +239,14 @@ class TenantCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         logger.debug("Starting validation with data: %s", data)
+        is_admin = self.context["request"].user.is_admin
+        if not is_admin and not (data.get("email") or data.get("username")):
+            raise serializers.ValidationError(
+                {
+                    "error": "At least one of email or username must be provided for tenants"
+                }
+            )
+
         if "integration_ids" in data and len(data["integration_ids"]) == 0:
             raise serializers.ValidationError(
                 {"integration_ids": "At least one integration is required"}
@@ -375,10 +388,10 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         with transaction.atomic():
             # Extract user data
             user_data = {
-                "email": validated_data.pop("email"),
-                "username": validated_data.pop("username"),
-                "name": validated_data.pop("name"),
-                "password": validated_data.pop("password"),
+                "email": validated_data.pop("email", None),
+                "username": validated_data.pop("username", None),
+                "name": validated_data.pop("name", None),
+                "password": validated_data.pop("password", None),
             }
             role_permissions = validated_data.pop("role_permissions", [])
             integration_ids = validated_data.pop("integration_ids", [])
