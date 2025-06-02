@@ -10,14 +10,14 @@ from common.utils import PasswordCreation  # your custom password hashing class
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, username, password=None, **extra_fields):
-        if not email:
-            raise ValueError("The Email field must be set")
-        if not username:
-            raise ValueError("The Username field must be set")
+        if not email and not username:
+            raise ValueError("At least one of email or username must be provided")
 
-        email = self.normalize_email(email)
+        if email:
+            email = self.normalize_email(email)
         user = self.model(email=email, username=username, **extra_fields)
-        user.set_password(password)
+        if password:
+            user.set_password(password)
         user.save(using=self._db)
         return user
 
@@ -35,10 +35,10 @@ class CustomUserManager(BaseUserManager):
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    name = models.CharField(max_length=100)
-    email = models.EmailField(unique=True)
+    name = models.CharField(max_length=100, blank=True, null=True)
+    email = models.EmailField(unique=True, null=True, blank=True)
     username = models.CharField(max_length=100, unique=True)
-    hashed_password = models.CharField(max_length=255)
+    hashed_password = models.CharField(max_length=255, blank=True, null=True)
     is_super_admin = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
     is_tenant = models.BooleanField(default=False)  # Needed for admin access
@@ -52,14 +52,18 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = CustomUserManager()
 
-    USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["username"]
+    USERNAME_FIELD = "username"
+    EMAIL_FIELD = "email"
+    REQUIRED_FIELDS = []
 
     def __str__(self):
-        return self.name
+        return self.username
 
     def set_password(self, raw_password):
-        self.hashed_password = PasswordCreation._make_password(raw_password)
+        if raw_password:
+            self.hashed_password = PasswordCreation._make_password(raw_password)
+        else:
+            self.hashed_password = None
 
     def check_password(self, raw_password):
         return PasswordCreation._check_password(raw_password, self.hashed_password)
