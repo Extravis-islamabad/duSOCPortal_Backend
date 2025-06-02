@@ -128,9 +128,10 @@ class IntegrationCredentials(models.Model):
     username = models.CharField(max_length=100, null=True, blank=True)
     password = models.CharField(max_length=100, null=True, blank=True)
     api_key = models.CharField(max_length=100, null=True, blank=True)
+    base_url = models.CharField(max_length=100, null=True, blank=True, unique=True)
     access_key = models.CharField(max_length=100, null=True, blank=True)
     secret_key = models.CharField(max_length=100, null=True, blank=True)
-    ip_address = models.GenericIPAddressField(unique=True)
+    ip_address = models.GenericIPAddressField(unique=True, null=True, blank=True)
     port = models.IntegerField(default=80)
 
     created_at = models.DateTimeField(auto_now_add=True)
