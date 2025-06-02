@@ -22,6 +22,7 @@ from .models import (
     ItsmSubTypes,
     SiemSubTypes,
     SoarSubTypes,
+    ThreatIntelligenceSubTypes,
 )
 
 
@@ -39,21 +40,28 @@ class IntegrationTypesView(APIView):
         itsm_subtypes = [
             {"id": choice[0], "name": choice[1]} for choice in ItsmSubTypes.choices
         ]
-
-        integration_types = [
-            {
-                "id": choice[0],
-                "name": choice[1],
-                "sub_types": (
-                    siem_subtypes
-                    if choice[0] == IntegrationTypes.SIEM_INTEGRATION
-                    else soar_subtypes
-                    if choice[0] == IntegrationTypes.SOAR_INTEGRATION
-                    else itsm_subtypes
-                ),
-            }
-            for choice in IntegrationTypes.choices
+        threat_intelligence_subtypes = [
+            {"id": choice[0], "name": choice[1]}
+            for choice in ThreatIntelligenceSubTypes.choices
         ]
+
+        integration_types = []
+        for choice in IntegrationTypes.choices:
+            if choice[0] == IntegrationTypes.SIEM_INTEGRATION:
+                subtypes = siem_subtypes
+            elif choice[0] == IntegrationTypes.SOAR_INTEGRATION:
+                subtypes = soar_subtypes
+            elif choice[0] == IntegrationTypes.ITSM_INTEGRATION:
+                subtypes = itsm_subtypes
+            elif choice[0] == IntegrationTypes.THREAT_INTELLIGENCE:
+                subtypes = threat_intelligence_subtypes
+            else:
+                subtypes = []
+
+            integration_types.append(
+                {"id": choice[0], "name": choice[1], "sub_types": subtypes}
+            )
+
         return Response({"data": integration_types}, status=status.HTTP_200_OK)
 
 
