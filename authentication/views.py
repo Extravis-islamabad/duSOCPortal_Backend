@@ -99,9 +99,9 @@ class UserLoginAPIView(APIView):
                     {"error": "Invalid password or username"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            if flag:
-                username = "admin@gmail.com"  # nosec
-                password = "123456@We"  # nosec
+            # if flag:
+            #     username = "admin@gmail.com"  # nosec
+            #     password = "123456@We"  # nosec
         try:
             user = User.objects.filter(Q(username=username) | Q(email=username)).first()
 
