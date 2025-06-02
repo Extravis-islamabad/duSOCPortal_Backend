@@ -289,6 +289,15 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             all_event_collector_ids = []
             for qt in data["qradar_tenants"]:
                 # Check qradar_tenant_id
+                qradar_tenant_id = qt["qradar_tenant_id"]
+                if TenantQradarMapping.objects.filter(
+                    qradar_tenant_id=qradar_tenant_id
+                ).exists():
+                    raise serializers.ValidationError(
+                        {
+                            "qradar_tenants": f"QRadar tenant ID {qradar_tenant_id} is already assigned to another tenant"
+                        }
+                    )
                 if not DuIbmQradarTenants.objects.filter(
                     id=qt["qradar_tenant_id"]
                 ).exists():
