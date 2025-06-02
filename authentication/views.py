@@ -282,6 +282,9 @@ class LDAPUsersAPIView(APIView):
 
 
 class LDAPGroupListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
     def get(self, request):
         try:
             groups = LDAP.fetch_all_groups()
@@ -293,6 +296,9 @@ class LDAPGroupListView(APIView):
 
 
 class LDAPGroupUsersView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
     def get(self, request, group_name):
         try:
             users = LDAP.fetch_users_in_group(group_name)
