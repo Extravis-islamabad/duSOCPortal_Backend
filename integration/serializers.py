@@ -13,6 +13,7 @@ from .models import (
     ItsmSubTypes,
     SiemSubTypes,
     SoarSubTypes,
+    ThreatIntelligenceSubTypes,
 )
 
 
@@ -84,6 +85,7 @@ class IntegrationSerializer(serializers.ModelSerializer):
         siem_subtype = data.get("siem_subtype")
         itsm_subtype = data.get("itsm_subtype")
         soar_subtype = data.get("soar_subtype")
+        threat_intelligence_subtype = data.get("threat_intelligence_subtype")
         credentials_type = data.get("credentials").get("credential_type")
         credentials = data.get("credentials")
         # Only validate Integration itself; credentials are separate
@@ -149,6 +151,17 @@ class IntegrationSerializer(serializers.ModelSerializer):
             else:
                 raise serializers.ValidationError(
                     "Unsupported credential type for Cortex SOAR for Now..."
+                )
+        elif (
+            integration_type == IntegrationTypes.THREAT_INTELLIGENCE
+            and threat_intelligence_subtype == ThreatIntelligenceSubTypes.CYWARE
+        ):
+            if credentials_type == CredentialTypes.SECRET_KEY_ACCESS_KEY:
+                pass
+
+            else:
+                raise serializers.ValidationError(
+                    "Unsupported credential type for Cyware for Now..."
                 )
         return data
 

@@ -68,6 +68,12 @@ class Integration(models.Model):
         blank=True,
         help_text="Required for ITSM Integration type",
     )
+    threat_intelligence_subtype = models.IntegerField(
+        choices=ThreatIntelligenceSubTypes.choices,
+        null=True,
+        blank=True,
+        help_text="Required for Threat Intelligence Integration type",
+    )
     status = models.BooleanField(default=True)
     instance_name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
