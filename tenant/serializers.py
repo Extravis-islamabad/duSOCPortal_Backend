@@ -9,6 +9,7 @@ from common.modules.cyware import Cyware
 from integration.models import Integration
 
 from .models import (
+    Alert,
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
@@ -968,3 +969,17 @@ class IBMQradarEPSSerializer(serializers.ModelSerializer):
     class Meta:
         model = IBMQradarEPS
         fields = ["log_source", "domain", "eps"]
+
+
+class AlertSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Alert
+        fields = [
+            "id",
+            "db_id",
+            "title",
+            "status",
+            "published_time",
+            "created_at",
+            "updated_at",
+        ]

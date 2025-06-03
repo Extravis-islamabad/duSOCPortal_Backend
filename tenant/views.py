@@ -15,6 +15,7 @@ from django.db.models import (
 )
 from django.db.models.functions import ExtractSecond
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from loguru import logger
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
@@ -24,8 +25,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import PaginationConstants
-from tenant.ibm_qradar_tasks import sync_ibm
 from tenant.models import (
+    Alert,
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
@@ -39,8 +40,10 @@ from tenant.models import (
     TenantPermissionChoices,
     TenantQradarMapping,
     TenantRole,
+    ThreatIntelligenceTenant,
 )
 from tenant.serializers import (
+    AlertSerializer,
     DUCortexSOARIncidentSerializer,
     DuCortexSOARTenantsSerializer,
     DuIbmQradarTenantsSerializer,
@@ -51,6 +54,7 @@ from tenant.serializers import (
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
 )
+from tenant.threat_intelligence_tasks import sync_threat_intel
 
 
 class PermissionChoicesAPIView(APIView):
@@ -185,7 +189,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_ibm.delay()
+        sync_threat_intel()
         # sync_requests_for_soar.delay()
         # sync_itsm_tenants_tickets.delay()
         # sync_event_log_sources.delay()
@@ -1891,3 +1895,95 @@ class EPSCountValuesByDomainAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+# class AlertListView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             # Get the tenant object for the logged-in user
+#             tenant = Tenant.objects.get(tenant=request.user)
+
+#             # Determine which integration(s) to use
+#             if tenant.is_defualt_threat_intel:
+#                 integrations = tenant.integrations.filter(
+#                     integration_type=IntegrationTypes.THREAT_INTELLIGENCE
+#                 )
+#             else:
+#                 ti = ThreatIntelligenceTenant.objects.filter(tenant=tenant).first()
+#                 if not ti:
+#                     return Response({"error": "No custom threat intelligence found."}, status=404)
+
+#                 integrations = Integration.objects.filter(
+#                     threat_intelligence_subtype=ti.threat_intelligence,
+#                     credentials__base_url=ti.base_url
+#                 )
+
+#             alerts = Alert.objects.filter(integration__in=integrations).order_by("-published_time")
+#             serialized_alerts = [
+#                 {
+#                     "id": alert.id,
+#                     "title": alert.title,
+#                     "status": alert.status,
+#                     "published_time": alert.published_time,
+#                 }
+#                 for alert in alerts
+#             ]
+
+#             return Response({"alerts": serialized_alerts}, status=200)
+
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=500)
+
+
+class AlertListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        user = request.user
+        try:
+            tenant = Tenant.objects.get(tenant=user)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+
+        start_date = parse_datetime(start_date_str) if start_date_str else None
+        end_date = parse_datetime(end_date_str) if end_date_str else None
+
+        if tenant.is_defualt_threat_intel:
+            integrations = tenant.integrations.all()
+        else:
+            threat_intel_entry = ThreatIntelligenceTenant.objects.filter(
+                tenant=tenant
+            ).first()
+            integrations = (
+                [threat_intel_entry.integration]
+                if threat_intel_entry and threat_intel_entry.integration
+                else []
+            )
+
+        queryset = Alert.objects.filter(integration__in=integrations)
+
+        if start_date:
+            queryset = queryset.filter(published_time__gte=start_date)
+
+        if end_date:
+            queryset = queryset.filter(published_time__lte=end_date)
+
+        queryset = queryset.order_by("-published_time")
+
+        paginator = PageNumberPagination()
+        paginator.page_size = 10  # You can replace this with PaginationConstants.PAGE_SIZE if you have one
+        paginated_qs = paginator.paginate_queryset(queryset, request)
+
+        serializer = AlertSerializer(paginated_qs, many=True)
+        return paginator.get_paginated_response(serializer.data)

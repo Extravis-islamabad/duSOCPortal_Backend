@@ -1,6 +1,7 @@
 from django.urls import path
 
 from tenant.views import (
+    AlertListView,
     DashboardView,
     DuCortexSOARTenantsListView,
     DuIbmQradarTenantsListView,
@@ -115,5 +116,10 @@ urlpatterns = [
         name="total-tickets-by-tenant",
     ),
     path("api/eps/", EPSCountValuesByDomainAPIView.as_view(), name="tenant"),
+    path(
+        "get_threat_intelligence/",
+        AlertListView.as_view(),
+        name="get-threat-intelligence",
+    ),
     path("test/", TestView.as_view(), name="test"),
 ]
