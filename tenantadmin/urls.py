@@ -29,7 +29,7 @@ urlpatterns = [
         TenantDeleteAPIView.as_view(),
         name="tenant-delete",
     ),
-    path("sync_qradar", SyncIBMQradarDataAPIView.as_view(), name="sync-ibm-qradar"),
-    path("sync_soar", SyncCortexSOARDataAPIView.as_view(), name="sync-cortex-soar"),
-    path("sync_itsm", SyncITSMDataAPIView.as_view(), name="sync-itsm"),
+    path("sync_qradar/", SyncIBMQradarDataAPIView.as_view(), name="sync-ibm-qradar"),
+    path("sync_soar/", SyncCortexSOARDataAPIView.as_view(), name="sync-cortex-soar"),
+    path("sync_itsm/", SyncITSMDataAPIView.as_view(), name="sync-itsm"),
 ]
