@@ -192,14 +192,10 @@ class QradarTenantInputSerializer(serializers.Serializer):
 
 
 class TenantCreateSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(write_only=True, required=False, allow_null=True)
-    username = serializers.CharField(write_only=True, required=False, allow_null=True)
-    name = serializers.CharField(write_only=True, required=False, allow_null=True)
-    password = serializers.CharField(
+    ldap_users = serializers.ListField(
+        child=serializers.DictField(),
+        required=True,
         write_only=True,
-        style={"input_type": "password"},
-        required=False,
-        allow_null=True,
     )
     qradar_tenants = QradarTenantInputSerializer(
         many=True, required=False, write_only=True
@@ -210,20 +206,17 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     itsm_tenant_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
     )
-    role_permissions = serializers.ListField(
+    soar_tenant_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
     )
-    soar_tenant_ids = serializers.ListField(
+    role_permissions = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
     )
 
     class Meta:
         model = Tenant
         fields = [
-            "email",
-            "username",
-            "name",
-            "password",
+            "ldap_users",
             "phone_number",
             "country",
             "qradar_tenants",
@@ -238,286 +231,474 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate(self, data):
-        logger.debug("Starting validation with data: %s", data)
-        is_admin = self.context["request"].user.is_admin
-        if not is_admin and not (data.get("email") or data.get("username")):
+        ldap_users = data.get("ldap_users")
+        if not ldap_users:
             raise serializers.ValidationError(
-                {
-                    "error": "At least one of email or username must be provided for tenants"
-                }
+                {"ldap_users": "At least one LDAP user is required"}
             )
 
-        if "integration_ids" in data and len(data["integration_ids"]) == 0:
+        usernames = [u["username"] for u in ldap_users]
+        if len(usernames) != len(set(usernames)):
             raise serializers.ValidationError(
-                {"integration_ids": "At least one integration is required"}
+                {"ldap_users": "Duplicate usernames detected"}
             )
-        if (
-            "qradar_tenants" in data
-            and len(data["qradar_tenants"]) == 0
-            and "itsm_tenant_ids"
-            and len(data["itsm_tenant_ids"]) == 0
-            and "soar_tenant_ids" in data
-            and len(data["soar_tenant_ids"]) == 0
-        ):
-            raise serializers.ValidationError(
-                {
-                    "error": "At least one qradar tenant or itsm tenant or soar tenant is required"
-                }
-            )
-        # Validate role_permissions
-        if "role_permissions" in data:
-            valid_permissions = [
-                choice[0] for choice in TenantPermissionChoices.choices
-            ]
-            for perm in data["role_permissions"]:
-                if perm not in valid_permissions:
-                    raise serializers.ValidationError(
-                        {"role_permissions": f"Invalid permission value: {perm}"}
-                    )
 
-        # Validate qradar_tenants
-        if "qradar_tenants" in data:
-            qradar_tenant_ids = [
-                qt["qradar_tenant_id"] for qt in data["qradar_tenants"]
-            ]
-            if len(qradar_tenant_ids) != len(set(qradar_tenant_ids)):
+        integration_ids = data.get("integration_ids", [])
+        if integration_ids:
+            integrations = Integration.objects.filter(id__in=integration_ids)
+            if len(integrations) != len(integration_ids):
+                existing_ids = set(integrations.values_list("id", flat=True))
+                missing = set(integration_ids) - existing_ids
                 raise serializers.ValidationError(
-                    {"qradar_tenants": "Duplicate qradar_tenant_ids are not allowed"}
+                    {"integration_ids": f"Invalid integration IDs: {missing}"}
                 )
 
-            # Validate qradar_tenant_ids and event_collector_ids
-            all_event_collector_ids = []
+        if "qradar_tenants" in data:
             for qt in data["qradar_tenants"]:
-                # Check qradar_tenant_id
-                qradar_tenant_id = qt["qradar_tenant_id"]
-                if TenantQradarMapping.objects.filter(
-                    qradar_tenant_id=qradar_tenant_id
-                ).exists():
-                    raise serializers.ValidationError(
-                        {
-                            "qradar_tenants": f"QRadar tenant ID {qradar_tenant_id} is already assigned to another tenant"
-                        }
-                    )
                 if not DuIbmQradarTenants.objects.filter(
                     id=qt["qradar_tenant_id"]
                 ).exists():
                     raise serializers.ValidationError(
                         {
-                            "qradar_tenants": f"Invalid qradar_tenant_id: {qt['qradar_tenant_id']}"
+                            "qradar_tenants": f"Invalid QRadar tenant ID: {qt['qradar_tenant_id']}"
                         }
                     )
-                # Check event_collector_ids
-                event_collector_ids = qt["event_collector_ids"]
-                if event_collector_ids:
-                    valid_event_collectors = IBMQradarEventCollector.objects.filter(
-                        id__in=event_collector_ids
-                    )
-                    if len(valid_event_collectors) != len(event_collector_ids):
-                        invalid_ids = set(event_collector_ids) - set(
-                            ec.id for ec in valid_event_collectors
-                        )
+                for ec_id in qt.get("event_collector_ids", []):
+                    if not IBMQradarEventCollector.objects.filter(id=ec_id).exists():
                         raise serializers.ValidationError(
-                            {
-                                "qradar_tenants": f"Invalid event_collector_ids: {invalid_ids} for qradar_tenant_id: {qt['qradar_tenant_id']}"
-                            }
+                            {"qradar_tenants": f"Invalid Event Collector ID: {ec_id}"}
                         )
-                    all_event_collector_ids.extend(event_collector_ids)
-
-            # Ensure no duplicate event_collector_ids across qradar_tenants
-            if len(all_event_collector_ids) != len(set(all_event_collector_ids)):
-                raise serializers.ValidationError(
-                    {
-                        "qradar_tenants": "Duplicate event_collector_ids across qradar_tenants are not allowed"
-                    }
-                )
-
-        # Validate integration_ids
-        if "integration_ids" in data:
-            integrations = Integration.objects.filter(id__in=data["integration_ids"])
-            if len(integrations) != len(data["integration_ids"]):
-                invalid_ids = set(data["integration_ids"]) - set(
-                    intg.id for intg in integrations
-                )
-                raise serializers.ValidationError(
-                    {"integration_ids": f"Invalid integration_ids: {invalid_ids}"}
-                )
 
         if "itsm_tenant_ids" in data:
-            itsm_tenants = DuITSMTenants.objects.filter(
-                id__in=data["itsm_tenant_ids"]
-            ).select_related("integration")
-            if len(itsm_tenants) != len(data["itsm_tenant_ids"]):
-                invalid_ids = set(data["itsm_tenant_ids"]) - set(
-                    itsm.id for itsm in itsm_tenants
-                )
+            itsm_ids = data["itsm_tenant_ids"]
+            found = DuITSMTenants.objects.filter(id__in=itsm_ids).values_list(
+                "id", flat=True
+            )
+            if len(found) != len(itsm_ids):
+                missing = set(itsm_ids) - set(found)
                 raise serializers.ValidationError(
-                    {"itsm_tenant_ids": f"Invalid itsm_tenant_ids: {invalid_ids}"}
+                    {"itsm_tenant_ids": f"Invalid ITSM tenant IDs: {missing}"}
                 )
-            if "integration_ids" in data:
-                for itsm_tenant in itsm_tenants:
-                    if (
-                        itsm_tenant.integration
-                        and itsm_tenant.integration.id not in data["integration_ids"]
-                    ):
-                        raise serializers.ValidationError(
-                            {
-                                "itsm_tenant_ids": f"ITSM tenant {itsm_tenant.id} is linked to integration {itsm_tenant.integration.id}, which is not included in integration_ids"
-                            }
-                        )
 
         if "soar_tenant_ids" in data:
-            soar_tenants = DuCortexSOARTenants.objects.filter(
-                id__in=data["soar_tenant_ids"]
-            ).select_related("integration")
-            if len(soar_tenants) != len(data["soar_tenant_ids"]):
-                invalid_ids = set(data["soar_tenant_ids"]) - set(
-                    itsm.id for itsm in soar_tenants
-                )
+            soar_ids = data["soar_tenant_ids"]
+            found = DuCortexSOARTenants.objects.filter(id__in=soar_ids).values_list(
+                "id", flat=True
+            )
+            if len(found) != len(soar_ids):
+                missing = set(soar_ids) - set(found)
                 raise serializers.ValidationError(
-                    {"soar_tenant_ids": f"Invalid soar_tenant_ids: {invalid_ids}"}
+                    {"soar_tenant_ids": f"Invalid SOAR tenant IDs: {missing}"}
                 )
-            if "integration_ids" in data:
-                for soar_tenant in soar_tenants:
-                    if (
-                        soar_tenant.integration
-                        and soar_tenant.integration.id not in data["integration_ids"]
-                    ):
-                        raise serializers.ValidationError(
-                            {
-                                "soar_tenant_ids": f"Cortex Soar tenant {soar_tenant.id} is linked to integration {soar_tenant.integration.id}, which is not included in integration_ids"
-                            }
-                        )
 
-        logger.debug("Validation passed")
         return data
 
     def create(self, validated_data):
-        logger.debug("Starting tenant creation with validated_data: %s", validated_data)
+        ldap_users = validated_data.pop("ldap_users")
+        role_permissions = validated_data.pop("role_permissions", [])
+        integration_ids = validated_data.pop("integration_ids", [])
+        qradar_tenants_data = validated_data.pop("qradar_tenants", [])
+        itsm_tenant_ids = validated_data.pop("itsm_tenant_ids", [])
+        soar_tenant_ids = validated_data.pop("soar_tenant_ids", [])
+
+        created_by = self.context["request"].user
+
+        created_tenants = []
 
         with transaction.atomic():
-            # Extract user data
-            user_data = {
-                "email": validated_data.pop("email", None),
-                "username": validated_data.pop("username", None),
-                "name": validated_data.pop("name", None),
-                "password": validated_data.pop("password", None),
-            }
-            role_permissions = validated_data.pop("role_permissions", [])
-            integration_ids = validated_data.pop("integration_ids", [])
-            qradar_tenants_data = validated_data.pop("qradar_tenants", [])
-            itsm_tenant_ids = validated_data.pop("itsm_tenant_ids", [])
-            soar_tenant_ids = validated_data.pop("soar_tenant_ids", [])
+            for index, user_data in enumerate(ldap_users):
+                user, created = User.objects.get_or_create(
+                    username=user_data["username"],
+                    defaults={
+                        "email": user_data.get("email"),
+                        "name": user_data.get("name"),
+                        "is_tenant": True,
+                        "is_active": True,
+                    },
+                )
 
-            # Create User
-            logger.debug("Checking for existing user")
-            if user_data.get("email", None):
-                if User.objects.filter(email=user_data["email"]).exists():
-                    raise serializers.ValidationError(
-                        {"email": "User with this email already exists"}
+                tenant = Tenant.objects.create(
+                    tenant=user,
+                    created_by=created_by,
+                    **validated_data,
+                )
+
+                role_type = (
+                    TenantRole.TenantRoleChoices.TENANT_ADMIN
+                    if index == 0
+                    else TenantRole.TenantRoleChoices.TENANT_USER
+                )
+                role = TenantRole.objects.create(
+                    tenant=tenant,
+                    name="Tenant Admin" if role_type == 1 else "Tenant User",
+                    role_type=role_type,
+                )
+
+                for permission in role_permissions:
+                    TenantRolePermissions.objects.create(
+                        role=role, permission=permission
                     )
-            if User.objects.filter(username=user_data["username"]).exists():
-                raise serializers.ValidationError(
-                    {"username": "User with this username already exists"}
-                )
 
-            logger.debug("Creating user")
-            user = User(
-                email=user_data["email"],
-                username=user_data["username"],
-                name=user_data["name"],
-                is_tenant=True,
-                is_active=True,
-            )
-            user.set_password(user_data["password"])
-            user.save()
+                if integration_ids:
+                    tenant.integrations.set(
+                        Integration.objects.filter(id__in=integration_ids)
+                    )
 
-            # Get created_by from request user
-            created_by = self.context["request"].user
-            logger.debug("Created by: %s", created_by)
+                if itsm_tenant_ids:
+                    tenant.itsm_tenants.set(
+                        DuITSMTenants.objects.filter(id__in=itsm_tenant_ids)
+                    )
 
-            # Create Tenant
-            logger.debug("Creating tenant")
-            tenant = Tenant.objects.create(
-                tenant=user,
-                created_by=created_by,
-                **validated_data,
-            )
+                if soar_tenant_ids:
+                    tenant.soar_tenants.set(
+                        DuCortexSOARTenants.objects.filter(id__in=soar_tenant_ids)
+                    )
 
-            # Handle qradar_tenants and event_collectors
-            all_event_collectors = []
-            for qt_data in qradar_tenants_data:
-                logger.debug("Processing qradar_tenant: %s", qt_data)
-                qradar_tenant = DuIbmQradarTenants.objects.get(
-                    id=qt_data["qradar_tenant_id"]
-                )  # Already validated
-                event_collectors = []
-                for ec_id in qt_data["event_collector_ids"]:
-                    ec = IBMQradarEventCollector.objects.get(
-                        id=ec_id
-                    )  # Already validated
-                    event_collectors.append(ec)
-                    if ec not in all_event_collectors:
-                        all_event_collectors.append(ec)
+                for qt in qradar_tenants_data:
+                    qradar_tenant = DuIbmQradarTenants.objects.get(
+                        id=qt["qradar_tenant_id"]
+                    )
+                    mapping = TenantQradarMapping.objects.create(
+                        tenant=tenant, qradar_tenant=qradar_tenant
+                    )
+                    mapping.event_collectors.set(
+                        IBMQradarEventCollector.objects.filter(
+                            id__in=qt.get("event_collector_ids", [])
+                        )
+                    )
 
-                # Create mapping
-                mapping = TenantQradarMapping.objects.create(
-                    tenant=tenant, qradar_tenant=qradar_tenant
-                )
-                mapping.event_collectors.set(event_collectors)
+                created_tenants.append(tenant)
 
-            # Handle itsm_tenants
-            itsm_tenants = []
-            if itsm_tenant_ids:
-                logger.debug("Processing itsm_tenant_ids: %s", itsm_tenant_ids)
-                for itsm_id in itsm_tenant_ids:
-                    itsm_tenant = DuITSMTenants.objects.get(
-                        id=itsm_id
-                    )  # Already validated
-                    itsm_tenants.append(itsm_tenant)
-                tenant.itsm_tenants.set(itsm_tenants)
+        return created_tenants
 
-            # Handle soar_tenants
-            soar_tenants = []
-            if soar_tenant_ids:
-                logger.debug("Processing soar_tenant_ids: %s", soar_tenant_ids)
-                for soar_id in soar_tenant_ids:
-                    soar_tenant = DuCortexSOARTenants.objects.get(
-                        id=soar_id
-                    )  # Already validated
-                    soar_tenants.append(soar_tenant)
-                tenant.soar_tenants.set(soar_tenants)
 
-            # Handle integrations
-            integrations = []
-            if integration_ids:
-                logger.debug("Processing integration_ids: %s", integration_ids)
-                for int_id in integration_ids:
-                    integration = Integration.objects.get(
-                        id=int_id
-                    )  # Already validated
-                    integrations.append(integration)
-                tenant.integrations.set(integrations)
+# class TenantCreateSerializer(serializers.ModelSerializer):
+#     email = serializers.EmailField(write_only=True, required=False, allow_null=True)
+#     username = serializers.CharField(write_only=True, required=False, allow_null=True)
+#     name = serializers.CharField(write_only=True, required=False, allow_null=True)
+#     password = serializers.CharField(
+#         write_only=True,
+#         style={"input_type": "password"},
+#         required=False,
+#         allow_null=True,
+#     )
+#     qradar_tenants = QradarTenantInputSerializer(
+#         many=True, required=False, write_only=True
+#     )
+#     integration_ids = serializers.ListField(
+#         child=serializers.IntegerField(), required=False, write_only=True
+#     )
+#     itsm_tenant_ids = serializers.ListField(
+#         child=serializers.IntegerField(), required=False, write_only=True
+#     )
+#     role_permissions = serializers.ListField(
+#         child=serializers.IntegerField(), required=False, write_only=True
+#     )
+#     soar_tenant_ids = serializers.ListField(
+#         child=serializers.IntegerField(), required=False, write_only=True
+#     )
 
-            # Associate all event collectors with tenant
-            if all_event_collectors:
-                logger.debug("Associating event collectors: %s", all_event_collectors)
-                tenant.event_collectors.set(all_event_collectors)
+#     class Meta:
+#         model = Tenant
+#         fields = [
+#             "email",
+#             "username",
+#             "name",
+#             "password",
+#             "phone_number",
+#             "country",
+#             "qradar_tenants",
+#             "integration_ids",
+#             "itsm_tenant_ids",
+#             "soar_tenant_ids",
+#             "role_permissions",
+#             "id",
+#             "created_at",
+#             "updated_at",
+#         ]
+#         read_only_fields = ["id", "created_at", "updated_at"]
 
-            # Create TenantRole
-            logger.debug("Creating tenant role")
-            role = TenantRole.objects.create(
-                tenant=tenant,
-                name="Tenant Admin",
-                role_type=TenantRole.TenantRoleChoices.TENANT_ADMIN,
-            )
+#     def validate(self, data):
+#         logger.debug("Starting validation with data: %s", data)
+#         is_admin = self.context["request"].user.is_admin
+#         if not is_admin and not (data.get("email") or data.get("username")):
+#             raise serializers.ValidationError(
+#                 {
+#                     "error": "At least one of email or username must be provided for tenants"
+#                 }
+#             )
 
-            # Create TenantRolePermissions
-            for permission in role_permissions:
-                logger.debug("Creating role permission: %s", permission)
-                TenantRolePermissions.objects.create(role=role, permission=permission)
+#         if "integration_ids" in data and len(data["integration_ids"]) == 0:
+#             raise serializers.ValidationError(
+#                 {"integration_ids": "At least one integration is required"}
+#             )
+#         if (
+#             "qradar_tenants" in data
+#             and len(data["qradar_tenants"]) == 0
+#             and "itsm_tenant_ids"
+#             and len(data["itsm_tenant_ids"]) == 0
+#             and "soar_tenant_ids" in data
+#             and len(data["soar_tenant_ids"]) == 0
+#         ):
+#             raise serializers.ValidationError(
+#                 {
+#                     "error": "At least one qradar tenant or itsm tenant or soar tenant is required"
+#                 }
+#             )
+#         # Validate role_permissions
+#         if "role_permissions" in data:
+#             valid_permissions = [
+#                 choice[0] for choice in TenantPermissionChoices.choices
+#             ]
+#             for perm in data["role_permissions"]:
+#                 if perm not in valid_permissions:
+#                     raise serializers.ValidationError(
+#                         {"role_permissions": f"Invalid permission value: {perm}"}
+#                     )
 
-            logger.debug("Tenant creation completed successfully")
-            return tenant
+#         # Validate qradar_tenants
+#         if "qradar_tenants" in data:
+#             qradar_tenant_ids = [
+#                 qt["qradar_tenant_id"] for qt in data["qradar_tenants"]
+#             ]
+#             if len(qradar_tenant_ids) != len(set(qradar_tenant_ids)):
+#                 raise serializers.ValidationError(
+#                     {"qradar_tenants": "Duplicate qradar_tenant_ids are not allowed"}
+#                 )
+
+#             # Validate qradar_tenant_ids and event_collector_ids
+#             all_event_collector_ids = []
+#             for qt in data["qradar_tenants"]:
+#                 # Check qradar_tenant_id
+#                 qradar_tenant_id = qt["qradar_tenant_id"]
+#                 if TenantQradarMapping.objects.filter(
+#                     qradar_tenant_id=qradar_tenant_id
+#                 ).exists():
+#                     raise serializers.ValidationError(
+#                         {
+#                             "qradar_tenants": f"QRadar tenant ID {qradar_tenant_id} is already assigned to another tenant"
+#                         }
+#                     )
+#                 if not DuIbmQradarTenants.objects.filter(
+#                     id=qt["qradar_tenant_id"]
+#                 ).exists():
+#                     raise serializers.ValidationError(
+#                         {
+#                             "qradar_tenants": f"Invalid qradar_tenant_id: {qt['qradar_tenant_id']}"
+#                         }
+#                     )
+#                 # Check event_collector_ids
+#                 event_collector_ids = qt["event_collector_ids"]
+#                 if event_collector_ids:
+#                     valid_event_collectors = IBMQradarEventCollector.objects.filter(
+#                         id__in=event_collector_ids
+#                     )
+#                     if len(valid_event_collectors) != len(event_collector_ids):
+#                         invalid_ids = set(event_collector_ids) - set(
+#                             ec.id for ec in valid_event_collectors
+#                         )
+#                         raise serializers.ValidationError(
+#                             {
+#                                 "qradar_tenants": f"Invalid event_collector_ids: {invalid_ids} for qradar_tenant_id: {qt['qradar_tenant_id']}"
+#                             }
+#                         )
+#                     all_event_collector_ids.extend(event_collector_ids)
+
+#             # Ensure no duplicate event_collector_ids across qradar_tenants
+#             if len(all_event_collector_ids) != len(set(all_event_collector_ids)):
+#                 raise serializers.ValidationError(
+#                     {
+#                         "qradar_tenants": "Duplicate event_collector_ids across qradar_tenants are not allowed"
+#                     }
+#                 )
+
+#         # Validate integration_ids
+#         if "integration_ids" in data:
+#             integrations = Integration.objects.filter(id__in=data["integration_ids"])
+#             if len(integrations) != len(data["integration_ids"]):
+#                 invalid_ids = set(data["integration_ids"]) - set(
+#                     intg.id for intg in integrations
+#                 )
+#                 raise serializers.ValidationError(
+#                     {"integration_ids": f"Invalid integration_ids: {invalid_ids}"}
+#                 )
+
+#         if "itsm_tenant_ids" in data:
+#             itsm_tenants = DuITSMTenants.objects.filter(
+#                 id__in=data["itsm_tenant_ids"]
+#             ).select_related("integration")
+#             if len(itsm_tenants) != len(data["itsm_tenant_ids"]):
+#                 invalid_ids = set(data["itsm_tenant_ids"]) - set(
+#                     itsm.id for itsm in itsm_tenants
+#                 )
+#                 raise serializers.ValidationError(
+#                     {"itsm_tenant_ids": f"Invalid itsm_tenant_ids: {invalid_ids}"}
+#                 )
+#             if "integration_ids" in data:
+#                 for itsm_tenant in itsm_tenants:
+#                     if (
+#                         itsm_tenant.integration
+#                         and itsm_tenant.integration.id not in data["integration_ids"]
+#                     ):
+#                         raise serializers.ValidationError(
+#                             {
+#                                 "itsm_tenant_ids": f"ITSM tenant {itsm_tenant.id} is linked to integration {itsm_tenant.integration.id}, which is not included in integration_ids"
+#                             }
+#                         )
+
+#         if "soar_tenant_ids" in data:
+#             soar_tenants = DuCortexSOARTenants.objects.filter(
+#                 id__in=data["soar_tenant_ids"]
+#             ).select_related("integration")
+#             if len(soar_tenants) != len(data["soar_tenant_ids"]):
+#                 invalid_ids = set(data["soar_tenant_ids"]) - set(
+#                     itsm.id for itsm in soar_tenants
+#                 )
+#                 raise serializers.ValidationError(
+#                     {"soar_tenant_ids": f"Invalid soar_tenant_ids: {invalid_ids}"}
+#                 )
+#             if "integration_ids" in data:
+#                 for soar_tenant in soar_tenants:
+#                     if (
+#                         soar_tenant.integration
+#                         and soar_tenant.integration.id not in data["integration_ids"]
+#                     ):
+#                         raise serializers.ValidationError(
+#                             {
+#                                 "soar_tenant_ids": f"Cortex Soar tenant {soar_tenant.id} is linked to integration {soar_tenant.integration.id}, which is not included in integration_ids"
+#                             }
+#                         )
+
+#         logger.debug("Validation passed")
+#         return data
+
+#     def create(self, validated_data):
+#         logger.debug("Starting tenant creation with validated_data: %s", validated_data)
+
+#         with transaction.atomic():
+#             # Extract user data
+#             user_data = {
+#                 "email": validated_data.pop("email", None),
+#                 "username": validated_data.pop("username", None),
+#                 "name": validated_data.pop("name", None),
+#                 "password": validated_data.pop("password", None),
+#             }
+#             role_permissions = validated_data.pop("role_permissions", [])
+#             integration_ids = validated_data.pop("integration_ids", [])
+#             qradar_tenants_data = validated_data.pop("qradar_tenants", [])
+#             itsm_tenant_ids = validated_data.pop("itsm_tenant_ids", [])
+#             soar_tenant_ids = validated_data.pop("soar_tenant_ids", [])
+
+#             # Create User
+#             logger.debug("Checking for existing user")
+#             if user_data.get("email", None):
+#                 if User.objects.filter(email=user_data["email"]).exists():
+#                     raise serializers.ValidationError(
+#                         {"email": "User with this email already exists"}
+#                     )
+#             if User.objects.filter(username=user_data["username"]).exists():
+#                 raise serializers.ValidationError(
+#                     {"username": "User with this username already exists"}
+#                 )
+
+#             logger.debug("Creating user")
+#             user = User(
+#                 email=user_data["email"],
+#                 username=user_data["username"],
+#                 name=user_data["name"],
+#                 is_tenant=True,
+#                 is_active=True,
+#             )
+#             user.set_password(user_data["password"])
+#             user.save()
+
+#             # Get created_by from request user
+#             created_by = self.context["request"].user
+#             logger.debug("Created by: %s", created_by)
+
+#             # Create Tenant
+#             logger.debug("Creating tenant")
+#             tenant = Tenant.objects.create(
+#                 tenant=user,
+#                 created_by=created_by,
+#                 **validated_data,
+#             )
+
+#             # Handle qradar_tenants and event_collectors
+#             all_event_collectors = []
+#             for qt_data in qradar_tenants_data:
+#                 logger.debug("Processing qradar_tenant: %s", qt_data)
+#                 qradar_tenant = DuIbmQradarTenants.objects.get(
+#                     id=qt_data["qradar_tenant_id"]
+#                 )  # Already validated
+#                 event_collectors = []
+#                 for ec_id in qt_data["event_collector_ids"]:
+#                     ec = IBMQradarEventCollector.objects.get(
+#                         id=ec_id
+#                     )  # Already validated
+#                     event_collectors.append(ec)
+#                     if ec not in all_event_collectors:
+#                         all_event_collectors.append(ec)
+
+#                 # Create mapping
+#                 mapping = TenantQradarMapping.objects.create(
+#                     tenant=tenant, qradar_tenant=qradar_tenant
+#                 )
+#                 mapping.event_collectors.set(event_collectors)
+
+#             # Handle itsm_tenants
+#             itsm_tenants = []
+#             if itsm_tenant_ids:
+#                 logger.debug("Processing itsm_tenant_ids: %s", itsm_tenant_ids)
+#                 for itsm_id in itsm_tenant_ids:
+#                     itsm_tenant = DuITSMTenants.objects.get(
+#                         id=itsm_id
+#                     )  # Already validated
+#                     itsm_tenants.append(itsm_tenant)
+#                 tenant.itsm_tenants.set(itsm_tenants)
+
+#             # Handle soar_tenants
+#             soar_tenants = []
+#             if soar_tenant_ids:
+#                 logger.debug("Processing soar_tenant_ids: %s", soar_tenant_ids)
+#                 for soar_id in soar_tenant_ids:
+#                     soar_tenant = DuCortexSOARTenants.objects.get(
+#                         id=soar_id
+#                     )  # Already validated
+#                     soar_tenants.append(soar_tenant)
+#                 tenant.soar_tenants.set(soar_tenants)
+
+#             # Handle integrations
+#             integrations = []
+#             if integration_ids:
+#                 logger.debug("Processing integration_ids: %s", integration_ids)
+#                 for int_id in integration_ids:
+#                     integration = Integration.objects.get(
+#                         id=int_id
+#                     )  # Already validated
+#                     integrations.append(integration)
+#                 tenant.integrations.set(integrations)
+
+#             # Associate all event collectors with tenant
+#             if all_event_collectors:
+#                 logger.debug("Associating event collectors: %s", all_event_collectors)
+#                 tenant.event_collectors.set(all_event_collectors)
+
+#             # Create TenantRole
+#             logger.debug("Creating tenant role")
+#             role = TenantRole.objects.create(
+#                 tenant=tenant,
+#                 name="Tenant Admin",
+#                 role_type=TenantRole.TenantRoleChoices.TENANT_ADMIN,
+#             )
+
+#             # Create TenantRolePermissions
+#             for permission in role_permissions:
+#                 logger.debug("Creating role permission: %s", permission)
+#                 TenantRolePermissions.objects.create(role=role, permission=permission)
+
+#             logger.debug("Tenant creation completed successfully")
+#             return tenant
 
 
 # class TenantUpdateSerializer(serializers.ModelSerializer):

@@ -29,17 +29,36 @@ class TenantCreateAPIView(APIView):
             data=request.data, context={"request": request}
         )
         if serializer.is_valid():
-            tenant = serializer.save()
+            serializer.save()
             return Response(
                 {
                     "message": "Tenant created successfully",
-                    "tenant_id": tenant.id,
-                    "user_id": tenant.tenant.id,
-                    "role_id": tenant.roles.first().id,
                 },
                 status=status.HTTP_201_CREATED,
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# class TenantCreateAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAdminUser]
+
+#     def post(self, request):
+#         serializer = TenantCreateSerializer(
+#             data=request.data, context={"request": request}
+#         )
+#         if serializer.is_valid():
+#             tenant = serializer.save()
+#             return Response(
+#                 {
+#                     "message": "Tenant created successfully",
+#                     "tenant_id": tenant.id,
+#                     "user_id": tenant.tenant.id,
+#                     "role_id": tenant.roles.first().id,
+#                 },
+#                 status=status.HTTP_201_CREATED,
+#             )
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # class TenantUpdateAPIView(APIView):
