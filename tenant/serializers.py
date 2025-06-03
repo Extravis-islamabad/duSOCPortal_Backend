@@ -253,7 +253,15 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"ldap_users": "At least one LDAP user is required"}
             )
-
+        existing_usernames = User.objects.filter(
+            username__in=[u["username"] for u in ldap_users]
+        ).values_list("username", flat=True)
+        if existing_usernames:
+            raise serializers.ValidationError(
+                {
+                    "ldap_users": f"User(s) with username(s) {list(existing_usernames)} already exist."
+                }
+            )
         usernames = [u["username"] for u in ldap_users]
         if len(usernames) != len(set(usernames)):
             raise serializers.ValidationError(
@@ -390,32 +398,33 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                         )
                     )
 
-                if not is_defualt_threat_intel and threat_intelligence and base_url:
-                    try:
-                        with Cyware(
-                            base_url=base_url,
-                            secret_key=secret_key,
-                            access_key=access_key,
-                        ) as cyware:
-                            response = cyware.get_alert_list()
-                            if response.status_code != 200:
-                                raise serializers.ValidationError(
-                                    "Cyware integration is not accessible."
-                                )
-                    except Exception:
-                        raise serializers.ValidationError(
-                            "Failed to validate Cyware integration."
-                        )
-
-                    ThreatIntelligenceTenant.objects.create(
-                        tenant=tenant,
-                        threat_intelligence=threat_intelligence,
-                        access_key=access_key,
-                        secret_key=secret_key,
+                created_tenants.append(tenant)
+            if not is_defualt_threat_intel and threat_intelligence and base_url:
+                try:
+                    with Cyware(
                         base_url=base_url,
+                        secret_key=secret_key,
+                        access_key=access_key,
+                    ) as cyware:
+                        response = cyware.get_alert_list()
+                        if response.status_code != 200:
+                            raise serializers.ValidationError(
+                                "Cyware integration is not accessible."
+                            )
+                except Exception:
+                    raise serializers.ValidationError(
+                        "Failed to validate Cyware integration."
                     )
 
-                created_tenants.append(tenant)
+                ti_obj, _ = ThreatIntelligenceTenant.objects.get_or_create(
+                    base_url=base_url,
+                    defaults={
+                        "threat_intelligence": threat_intelligence,
+                        "access_key": access_key,
+                        "secret_key": secret_key,
+                    },
+                )
+                ti_obj.tenants.set(created_tenants)
 
         return created_tenants
 
