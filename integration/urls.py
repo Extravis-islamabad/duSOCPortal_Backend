@@ -6,7 +6,7 @@ from integration.views import (
     GetIntegrationInstanceListView,
     IntegrationCreateAPIView,
     IntegrationTypesView,
-    TestIntegrationView,
+    TestIntegrationAPIView,
     UpdateCredentialView,
 )
 
@@ -38,7 +38,7 @@ urlpatterns = [
     ),
     path(
         "test_integration/",
-        TestIntegrationView.as_view(),
+        TestIntegrationAPIView.as_view(),
         name="test-integration",
     ),
     path("get_integration_instances/", GetIntegrationInstanceListView.as_view()),
