@@ -5,6 +5,7 @@ from loguru import logger
 from rest_framework import serializers
 
 from authentication.models import User
+from common.modules.cyware import Cyware
 from integration.models import Integration
 
 from .models import (
@@ -21,6 +22,7 @@ from .models import (
     TenantQradarMapping,
     TenantRole,
     TenantRolePermissions,
+    ThreatIntelligenceTenant,
 )
 
 
@@ -212,7 +214,15 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     role_permissions = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
     )
-    is_defualt_threat_intel = serializers.BooleanField(default=True)
+    is_defualt_threat_intel = serializers.BooleanField(required=False, write_only=True)
+    threat_intelligence = serializers.IntegerField(required=False, write_only=True)
+    access_key = serializers.CharField(
+        required=False, allow_blank=True, write_only=True
+    )
+    secret_key = serializers.CharField(
+        required=False, allow_blank=True, write_only=True
+    )
+    base_url = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     class Meta:
         model = Tenant
@@ -222,13 +232,17 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             "country",
             "qradar_tenants",
             "integration_ids",
-            "is_defualt_threat_intel",
             "itsm_tenant_ids",
             "soar_tenant_ids",
             "role_permissions",
             "id",
             "created_at",
             "updated_at",
+            "is_defualt_threat_intel",
+            "threat_intelligence",
+            "access_key",
+            "secret_key",
+            "base_url",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
@@ -302,6 +316,11 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         qradar_tenants_data = validated_data.pop("qradar_tenants", [])
         itsm_tenant_ids = validated_data.pop("itsm_tenant_ids", [])
         soar_tenant_ids = validated_data.pop("soar_tenant_ids", [])
+        is_defualt_threat_intel = validated_data.pop("is_defualt_threat_intel", True)
+        threat_intelligence = validated_data.pop("threat_intelligence", None)
+        access_key = validated_data.pop("access_key", None)
+        secret_key = validated_data.pop("secret_key", None)
+        base_url = validated_data.pop("base_url", None)
 
         created_by = self.context["request"].user
 
@@ -322,6 +341,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 tenant = Tenant.objects.create(
                     tenant=user,
                     created_by=created_by,
+                    is_defualt_threat_intel=is_defualt_threat_intel,
                     **validated_data,
                 )
 
@@ -367,6 +387,31 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                         IBMQradarEventCollector.objects.filter(
                             id__in=qt.get("event_collector_ids", [])
                         )
+                    )
+
+                if not is_defualt_threat_intel and threat_intelligence and base_url:
+                    try:
+                        with Cyware(
+                            base_url=base_url,
+                            secret_key=secret_key,
+                            access_key=access_key,
+                        ) as cyware:
+                            response = cyware.get_alert_list()
+                            if response.status_code != 200:
+                                raise serializers.ValidationError(
+                                    "Cyware integration is not accessible."
+                                )
+                    except Exception:
+                        raise serializers.ValidationError(
+                            "Failed to validate Cyware integration."
+                        )
+
+                    ThreatIntelligenceTenant.objects.create(
+                        tenant=tenant,
+                        threat_intelligence=threat_intelligence,
+                        access_key=access_key,
+                        secret_key=secret_key,
+                        base_url=base_url,
                     )
 
                 created_tenants.append(tenant)
