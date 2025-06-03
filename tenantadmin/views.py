@@ -29,10 +29,16 @@ class TenantCreateAPIView(APIView):
             data=request.data, context={"request": request}
         )
         if serializer.is_valid():
-            serializer.save()
+            tenants = serializer.save()
             return Response(
                 {
-                    "message": "Tenant created successfully",
+                    "message": "Tenants created successfully",
+                    "tenants": [
+                        {
+                            "tenant_id": tenant.id,
+                        }
+                        for tenant in tenants
+                    ],
                 },
                 status=status.HTTP_201_CREATED,
             )
