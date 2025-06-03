@@ -1,17 +1,19 @@
 from loguru import logger
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser
+from common.modules.cortex_soar import CortexSOAR
+from common.modules.cyware import Cyware
 from common.modules.ibm_qradar import IBMQradar
+from common.modules.itsm import ITSM
 from integration.serializers import (
     GetIntegrationInstanceSerializer,
     GetIntegrationSerializer,
     IntegrationCredentialUpdateSerializer,
     IntegrationSerializer,
-    TestCredentialSerializer,
 )
 
 from .models import (
@@ -24,6 +26,86 @@ from .models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
+
+
+def test_integration_connection(
+    integration_type, subtype, credentials_type, credentials
+):
+    if (
+        integration_type == IntegrationTypes.SIEM_INTEGRATION
+        and subtype == SiemSubTypes.IBM_QRADAR
+    ):
+        if credentials_type == CredentialTypes.USERNAME_PASSWORD:
+            with IBMQradar(
+                username=credentials.get("username"),
+                password=credentials.get("password"),
+                ip_address=credentials.get("ip_address"),
+                port=credentials.get("port"),
+            ) as ibm_qradar:
+                if not ibm_qradar.test_integration():
+                    raise serializers.ValidationError(
+                        "QRadar integration is not accessible."
+                    )
+        else:
+            raise serializers.ValidationError(
+                "Unsupported credential type for IBM Qradar."
+            )
+
+    elif (
+        integration_type == IntegrationTypes.ITSM_INTEGRATION
+        and subtype == ItsmSubTypes.MANAGE_ENGINE
+    ):
+        if credentials_type == CredentialTypes.API_KEY:
+            with ITSM(
+                ip_address=credentials.get("ip_address"),
+                port=credentials.get("port"),
+                token=credentials.get("api_key"),
+            ) as itsm:
+                if not itsm._get_accounts():
+                    raise serializers.ValidationError(
+                        "ManageEngine integration is not accessible."
+                    )
+        else:
+            raise serializers.ValidationError(
+                "Unsupported credential type for ManageEngine."
+            )
+
+    elif (
+        integration_type == IntegrationTypes.SOAR_INTEGRATION
+        and subtype == SoarSubTypes.CORTEX_SOAR
+    ):
+        if credentials_type == CredentialTypes.API_KEY:
+            with CortexSOAR(
+                ip_address=credentials.get("ip_address"),
+                port=credentials.get("port"),
+                token=credentials.get("api_key"),
+            ) as soar:
+                if not soar._get_accounts():
+                    raise serializers.ValidationError(
+                        "Cortex SOAR integration is not accessible."
+                    )
+        else:
+            raise serializers.ValidationError(
+                "Unsupported credential type for Cortex SOAR."
+            )
+
+    elif (
+        integration_type == IntegrationTypes.THREAT_INTELLIGENCE
+        and subtype == ThreatIntelligenceSubTypes.CYWARE
+    ):
+        if credentials_type == CredentialTypes.SECRET_KEY_ACCESS_KEY:
+            with Cyware(
+                base_url=credentials.get("base_url"),
+                secret_key=credentials.get("secret_key"),
+                access_key=credentials.get("access_key"),
+            ) as cyware:
+                response = cyware.get_alert_list()
+                if response.status_code != 200:
+                    raise serializers.ValidationError(
+                        "Cyware integration is not accessible."
+                    )
+        else:
+            raise serializers.ValidationError("Unsupported credential type for Cyware.")
 
 
 class IntegrationTypesView(APIView):
@@ -132,28 +214,41 @@ class UpdateCredentialView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class TestIntegrationView(APIView):
+class TestIntegrationAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def post(self, request):
-        serializer = TestCredentialSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def post(self, request, *args, **kwargs):
+        data = request.data
 
-        data = serializer.data
-        with IBMQradar(
-            data["username"],
-            data["password"],
-            ip_address=data["ip_address"],
-            port=data["port"],
-        ) as ibm_qradar:
-            data = ibm_qradar.test_integration()
-            if data:
-                return Response({"data": data}, status=status.HTTP_200_OK)
+        try:
+            integration_type = data.get("integration_type")
+            credentials = data.get("credentials")
+            credentials_type = credentials.get("credential_type")
+
+            subtype = (
+                data.get("siem_subtype")
+                or data.get("itsm_subtype")
+                or data.get("soar_subtype")
+                or data.get("threat_intelligence_subtype")
+            )
+
+            test_integration_connection(
+                integration_type, subtype, credentials_type, credentials
+            )
+
+        except serializers.ValidationError as e:
+            return Response(
+                {"error": str(e.detail)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
         return Response(
-            {"message": "Integration is not working"},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            {"message": "Integration credentials are valid and reachable."},
+            status=status.HTTP_200_OK,
         )
 
 
