@@ -212,6 +212,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     role_permissions = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
     )
+    is_defualt_threat_intel = serializers.BooleanField(default=True)
 
     class Meta:
         model = Tenant
@@ -221,6 +222,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             "country",
             "qradar_tenants",
             "integration_ids",
+            "is_defualt_threat_intel",
             "itsm_tenant_ids",
             "soar_tenant_ids",
             "role_permissions",

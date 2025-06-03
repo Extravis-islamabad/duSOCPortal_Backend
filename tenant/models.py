@@ -333,6 +333,7 @@ class Tenant(models.Model):
     integrations = models.ManyToManyField(Integration, blank=True)
     itsm_tenants = models.ManyToManyField(DuITSMTenants, blank=True)
     soar_tenants = models.ManyToManyField(DuCortexSOARTenants, blank=True)
+    is_defualt_threat_intel = models.BooleanField(default=True)
     phone_number = models.CharField(max_length=20, blank=True)
     country = models.CharField(max_length=2, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
