@@ -7,6 +7,7 @@ from integration.models import (
     IntegrationTypes,
     ThreatIntelligenceSubTypes,
 )
+from tenant.models import ThreatIntelligenceTenant
 
 
 @shared_task
@@ -36,3 +37,18 @@ def sync_threat_intel_with_signal(access_key, secret_key, base_url, integration_
         all_alerts = cyware.fetch_all_alerts(page_size=1000)
         transformed_data = cyware.transform_alert(all_alerts, integration_id)
         cyware.insert_alerts(transformed_data)
+
+
+@shared_task
+def sync_threat_intel_for_tenants():
+    results = ThreatIntelligenceTenant.objects.all()
+
+    for result in results:
+        with Cyware(
+            access_key=result.access_key,
+            secret_key=result.secret_key,
+            base_url=result.base_url,
+        ) as cyware:
+            all_alerts = cyware.fetch_all_alerts(page_size=1000)
+            transformed_data = cyware.transform_alert_for_tenants(all_alerts, result.id)
+            cyware.insert_tenant_alerts(transformed_data)
