@@ -11,7 +11,7 @@ from tenant.ibm_qradar_tasks import (
     sync_qradar_tenants,
 )
 from tenant.itsm_tasks import sync_itsm, sync_itsm_tenants
-from tenant.threat_intelligence import sync_threat_intel_with_signal
+from tenant.threat_intelligence_tasks import sync_threat_intel_with_signal
 
 from .models import (
     CredentialTypes,

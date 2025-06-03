@@ -23,4 +23,8 @@ app.conf.beat_schedule = {
         "task": "tenant.cortex_soar_tasks.sync_soar_data",
         "schedule": crontab(minute="*/5"),
     },
+    "threat-intelligence-sync-tasks": {
+        "task": "tenant.threat_intelligence_tasks.sync_threat_intel",
+        "schedule": crontab(minute="*/5"),
+    },
 }
