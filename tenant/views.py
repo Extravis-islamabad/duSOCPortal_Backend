@@ -41,6 +41,7 @@ from tenant.models import (
     TenantQradarMapping,
     TenantRole,
     ThreatIntelligenceTenant,
+    ThreatIntelligenceTenantAlerts,
 )
 from tenant.serializers import (
     AlertSerializer,
@@ -1961,28 +1962,31 @@ class AlertListView(APIView):
 
         if tenant.is_defualt_threat_intel:
             integrations = tenant.integrations.all()
+            queryset = Alert.objects.filter(integration__in=integrations)
         else:
-            threat_intel_entry = ThreatIntelligenceTenant.objects.filter(
-                tenant=tenant
-            ).first()
-            integrations = (
-                [threat_intel_entry.integration]
-                if threat_intel_entry and threat_intel_entry.integration
-                else []
+            ti_entry = ThreatIntelligenceTenant.objects.filter(tenants=tenant).first()
+            if not ti_entry:
+                return Response(
+                    {
+                        "error": "No Threat Intelligence configuration found for this tenant."
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            queryset = ThreatIntelligenceTenantAlerts.objects.filter(
+                threat_intelligence=ti_entry
             )
 
-        queryset = Alert.objects.filter(integration__in=integrations)
-
         if start_date:
-            queryset = queryset.filter(published_time__gte=start_date)
+            queryset = queryset.filter(published_time__date__gte=start_date.date())
 
         if end_date:
-            queryset = queryset.filter(published_time__lte=end_date)
+            queryset = queryset.filter(published_time__date__lte=end_date.date())
 
         queryset = queryset.order_by("-published_time")
 
         paginator = PageNumberPagination()
-        paginator.page_size = 10  # You can replace this with PaginationConstants.PAGE_SIZE if you have one
+        paginator.page_size = 10  # Or replace with PaginationConstants.PAGE_SIZE
         paginated_qs = paginator.paginate_queryset(queryset, request)
 
         serializer = AlertSerializer(paginated_qs, many=True)
