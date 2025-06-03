@@ -9,6 +9,9 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser
 from common.constants import PaginationConstants
+from tenant.cortex_soar_tasks import sync_soar_data
+from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
+from tenant.itsm_tasks import sync_itsm
 from tenant.models import Tenant
 from tenant.serializers import (
     TenantCreateSerializer,
@@ -184,3 +187,30 @@ class TenantDeleteAPIView(APIView):
         return Response(
             {"message": "Tenant deleted successfully."}, status=status.HTTP_200_OK
         )
+
+
+class SyncIBMQradarDataAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        sync_ibm_qradar_data.delay()
+        return Response({"message": "Sync process for IBM QRadar data started."})
+
+
+class SyncCortexSOARDataAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        sync_soar_data.delay()
+        return Response({"message": "Sync process for Cotex SOAR data started."})
+
+
+class SyncITSMDataAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        sync_itsm.delay()
+        return Response({"message": "Sync process for ITSM SOAR data started."})
