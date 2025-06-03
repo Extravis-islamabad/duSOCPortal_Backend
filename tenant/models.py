@@ -357,8 +357,8 @@ class ThreatIntelligenceTenant(models.Model):
         help_text="Required for Threat Intelligence Integration type",
         default=ThreatIntelligenceSubTypes.CYWARE,
     )
-    access_key = models.CharField(max_length=100, null=True, blank=True)
-    secret_key = models.CharField(max_length=100, null=True, blank=True)
+    access_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    secret_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
     base_url = models.CharField(max_length=100, null=True, blank=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -366,6 +366,24 @@ class ThreatIntelligenceTenant(models.Model):
 
     class Meta:
         db_table = "threat_intelligence_tenants"
+
+
+class ThreatIntelligenceTenantAlerts(models.Model):
+    threat_intelligence = models.ForeignKey(
+        ThreatIntelligenceTenant, on_delete=models.CASCADE
+    )
+    db_id = models.CharField(max_length=64, unique=True)
+    title = models.TextField()
+    status = models.TextField()
+    published_time = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.title} ({self.db_id})"
+
+    class Meta:
+        db_table = "threat_intelligence_tenant_alerts"
 
 
 class TenantPermissionChoices(models.IntegerChoices):
