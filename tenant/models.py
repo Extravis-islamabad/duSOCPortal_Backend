@@ -357,14 +357,15 @@ class ThreatIntelligenceTenant(models.Model):
         help_text="Required for Threat Intelligence Integration type",
         default=ThreatIntelligenceSubTypes.CYWARE,
     )
-    access_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
-    secret_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
-    base_url = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    access_key = models.CharField(max_length=100, null=True, blank=True)
+    secret_key = models.CharField(max_length=100, null=True, blank=True)
+    base_url = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="tenants")
+    tenants = models.ManyToManyField(Tenant, related_name="custom_threat_intels")
 
     class Meta:
+        unique_together = ("access_key", "secret_key", "base_url")
         db_table = "threat_intelligence_tenants"
 
 
