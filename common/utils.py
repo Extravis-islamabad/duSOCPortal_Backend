@@ -69,6 +69,18 @@ class DBMappings:
 class LDAP:
     @staticmethod
     def get_connection():
+        """
+        Establishes and returns a connection to the LDAP server.
+
+        This method initializes an LDAP connection using the first server
+        from the list of LDAP servers and binds it using the configured
+        bind user credentials. The connection is set to not follow referrals
+        and to use protocol version 3.
+
+        Returns:
+            LDAPObject: An LDAP connection object for interacting with the server.
+        """
+
         connect = ldap.initialize(
             f"ldap://{LDAPConstants.LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
         )
@@ -80,6 +92,14 @@ class LDAP:
 
     @staticmethod
     def fetch_all_groups():
+        """
+        Fetches all groups from LDAP server.
+
+        Connects to the LDAP server, searches for all groups (objectClass=group),
+        and returns a list of group names (cn attribute).
+
+        :return: List of group names
+        """
         connect = LDAP.get_connection()
         search_filter = "(objectClass=group)"
         attributes = ["cn"]
@@ -92,6 +112,23 @@ class LDAP:
 
     @staticmethod
     def fetch_users_in_group(group_name):
+        """
+        Fetches all users in a given LDAP group.
+
+        Connects to the LDAP server and searches for the specified group by its
+        common name (cn). Once the group is found, retrieves all members of the
+        group, and for each member, fetches their user details such as username,
+        email, and display name.
+
+        Args:
+            group_name (str): The common name of the group to search for users.
+
+        Returns:
+            list: A list of dictionaries containing user details (username, email,
+            and name) for each member of the group. Returns an empty list if the
+            group is not found or if an error occurs.
+        """
+
         connect = LDAP.get_connection()
         # Find group DN first
         group_filter = f"(&(objectClass=group)(cn={group_name}))"
@@ -134,6 +171,21 @@ class LDAP:
 
     @staticmethod
     def _check_ldap(username: str, password: str):
+        """
+        Authenticates a user against the LDAP server.
+
+        This method attempts to connect to the LDAP server using the provided
+        username and password. If the user is successfully authenticated, the
+        distinguished name (DN) is retrieved, and group memberships are logged.
+
+        Args:
+            username (str): The username of the user to authenticate.
+            password (str): The password corresponding to the username.
+
+        Returns:
+            bool: True if the user is successfully authenticated; False otherwise.
+        """
+
         try:
             connect = ldap.initialize(
                 f"ldap://{LDAPConstants.LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
@@ -179,6 +231,15 @@ class LDAP:
 
     @staticmethod
     def fetch_all_ldap_users():
+        """
+        Fetches all user accounts from the LDAP server.
+
+        :return: A list of dictionaries with the following keys:
+            - username: string
+            - name: string
+            - email: string
+            - dn: string (distinguished name)
+        """
         start = time.time()
         logger.info(f"LDAP.fetch_all_ldap_users() started : {start}")
         try:
