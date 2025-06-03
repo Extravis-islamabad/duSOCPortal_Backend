@@ -1,7 +1,7 @@
 from django.db import models
 
 from authentication.models import User
-from integration.models import Integration
+from integration.models import Integration, ThreatIntelligenceSubTypes
 
 
 class DuIbmQradarTenants(models.Model):
@@ -347,6 +347,25 @@ class TenantQradarMapping(models.Model):
 
     class Meta:
         unique_together = ("tenant", "qradar_tenant")
+
+
+class ThreatIntelligenceTenant(models.Model):
+    threat_intelligence = models.IntegerField(
+        choices=ThreatIntelligenceSubTypes.choices,
+        null=True,
+        blank=True,
+        help_text="Required for Threat Intelligence Integration type",
+        default=ThreatIntelligenceSubTypes.CYWARE,
+    )
+    access_key = models.CharField(max_length=100, null=True, blank=True)
+    secret_key = models.CharField(max_length=100, null=True, blank=True)
+    base_url = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="tenants")
+
+    class Meta:
+        db_table = "threat_intelligence_tenants"
 
 
 class TenantPermissionChoices(models.IntegerChoices):
