@@ -1,10 +1,13 @@
 # Create your views here.
+import json
 import time
+from copy import deepcopy
 
 from django.db.models import Q
 from django.utils import timezone
 from loguru import logger
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -270,46 +273,76 @@ class UserLogoutAPIView(APIView):
 class TenantProfileUpdateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
+    parser_classes = (MultiPartParser, FormParser)
 
     def patch(self, request):
-        tenant_ids = request.data.get("tenant_ids")
-        if not tenant_ids or not isinstance(tenant_ids, list):
-            return Response(
-                {"error": "A list of tenant_ids is required."},
-                status=status.HTTP_400_BAD_REQUEST,
+        try:
+            tenant_ids_raw = request.data.get("tenant_ids")
+            tenant_ids = (
+                json.loads(tenant_ids_raw)
+                if isinstance(tenant_ids_raw, str)
+                else tenant_ids_raw
             )
 
-        profile_fields = {
-            "profile_picture": request.data.get("profile_picture"),
-            "company_name": request.data.get("company_name"),
-        }
-
-        updated = []
-
-        for tenant in Tenant.objects.filter(id__in=tenant_ids, created_by=request.user):
-            user = tenant.tenant
-            serializer = ProfilePictureUploadSerializer(
-                user, data=profile_fields, partial=True
-            )
-            if serializer.is_valid():
-                serializer.save()
-                updated.append({"tenant_id": tenant.id, "username": user.username})
-            else:
+            if not isinstance(tenant_ids, list) or not tenant_ids:
                 return Response(
-                    {
-                        "error": f"Validation failed for tenant {tenant.id}",
-                        "details": serializer.errors,
-                    },
+                    {"error": "A list of tenant_ids is required."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        return Response(
-            {
-                "message": "Profiles updated successfully",
-                "updated": updated,
-            },
-            status=status.HTTP_200_OK,
-        )
+            profile_picture = request.FILES.get("profile_picture")
+            company_name = request.data.get("company_name")
+            profile_data = {
+                "company_name": company_name,
+            }
+            if profile_picture:
+                profile_data["profile_picture"] = deepcopy(profile_picture)
+            updated = []
+
+            for tenant in Tenant.objects.filter(
+                id__in=tenant_ids, created_by=request.user
+            ):
+                user = tenant.tenant
+
+                # Clone file for each serializer
+                profile_data = {
+                    "company_name": company_name,
+                }
+                if profile_picture:
+                    profile_data["profile_picture"] = deepcopy(profile_picture)
+
+                serializer = ProfilePictureUploadSerializer(
+                    user, data=profile_data, partial=True
+                )
+
+                if serializer.is_valid():
+                    serializer.save()
+                    updated.append({"tenant_id": tenant.id, "username": user.username})
+                else:
+                    return Response(
+                        {
+                            "error": f"Validation failed for tenant {tenant.id}",
+                            "details": serializer.errors,
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            return Response(
+                {
+                    "message": "Profile updated successfully",
+                    "data": updated,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error(
+                f"An error occurred in TenantProfileUpdateAPIView.patch: {str(e)}"
+            )
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
 
 class LDAPUsersAPIView(APIView):
