@@ -18,6 +18,10 @@ from tenant.serializers import (
     TenantDetailSerializer,
     TenantUpdateSerializer,
 )
+from tenant.threat_intelligence_tasks import (
+    sync_threat_intel,
+    sync_threat_intel_for_tenants,
+)
 
 
 class TenantCreateAPIView(APIView):
@@ -30,6 +34,8 @@ class TenantCreateAPIView(APIView):
         )
         if serializer.is_valid():
             tenants = serializer.save()
+            sync_threat_intel.delay()
+            sync_threat_intel_for_tenants.delay()
             return Response(
                 {
                     "message": "Tenants created successfully",
