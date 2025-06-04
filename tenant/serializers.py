@@ -342,10 +342,12 @@ class TenantCreateSerializer(serializers.ModelSerializer):
 
         with transaction.atomic():
             for index, user_data in enumerate(ldap_users):
+                email = user_data.get("email")
+                email = None if email == "N/A" else email
                 user, created = User.objects.get_or_create(
                     username=user_data["username"],
                     defaults={
-                        "email": user_data.get("email"),
+                        "email": email,
                         "name": user_data.get("name"),
                         "is_tenant": True,
                         "is_active": True,
