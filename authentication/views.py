@@ -1,8 +1,9 @@
 # Create your views here.
 import json
 import time
-from copy import deepcopy
+from io import BytesIO
 
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db.models import Q
 from django.utils import timezone
 from loguru import logger
@@ -270,6 +271,8 @@ class UserLogoutAPIView(APIView):
 #                 {"error": f"An error occurred: {str(e)}"},
 #                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
 #             )
+
+
 class TenantProfileUpdateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
@@ -290,13 +293,15 @@ class TenantProfileUpdateAPIView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            profile_picture = request.FILES.get("profile_picture")
             company_name = request.data.get("company_name")
-            profile_data = {
-                "company_name": company_name,
-            }
+            profile_picture = request.FILES.get("profile_picture")
+
+            # Read image data once
+            image_content = None
             if profile_picture:
-                profile_data["profile_picture"] = deepcopy(profile_picture)
+                image_content = profile_picture.read()
+                profile_picture.seek(0)
+
             updated = []
 
             for tenant in Tenant.objects.filter(
@@ -304,12 +309,19 @@ class TenantProfileUpdateAPIView(APIView):
             ):
                 user = tenant.tenant
 
-                # Clone file for each serializer
-                profile_data = {
-                    "company_name": company_name,
-                }
-                if profile_picture:
-                    profile_data["profile_picture"] = deepcopy(profile_picture)
+                profile_data = {"company_name": company_name}
+
+                # For each user, create a fresh file object
+                if image_content:
+                    file_copy = InMemoryUploadedFile(
+                        file=BytesIO(image_content),
+                        field_name="profile_picture",
+                        name=profile_picture.name,
+                        content_type=profile_picture.content_type,
+                        size=len(image_content),
+                        charset=None,
+                    )
+                    profile_data["profile_picture"] = file_copy
 
                 serializer = ProfilePictureUploadSerializer(
                     user, data=profile_data, partial=True
@@ -329,8 +341,8 @@ class TenantProfileUpdateAPIView(APIView):
 
             return Response(
                 {
-                    "message": "Profile updated successfully",
-                    "data": updated,
+                    "message": "Profiles updated successfully",
+                    "updated": updated,
                 },
                 status=status.HTTP_200_OK,
             )
