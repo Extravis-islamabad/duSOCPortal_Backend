@@ -268,6 +268,11 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 {"ldap_users": "Duplicate usernames detected"}
             )
 
+        if not any(user.get("is_admin") for user in ldap_users):
+            raise serializers.ValidationError(
+                {"ldap_users": "At least one user must be marked as is_admin=True"}
+            )
+
         integration_ids = data.get("integration_ids", [])
         if integration_ids:
             integrations = Integration.objects.filter(id__in=integration_ids)
@@ -356,7 +361,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
 
                 role_type = (
                     TenantRole.TenantRoleChoices.TENANT_ADMIN
-                    if index == 0
+                    if user_data.get("is_admin")
                     else TenantRole.TenantRoleChoices.TENANT_USER
                 )
                 role = TenantRole.objects.create(
