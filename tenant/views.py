@@ -55,7 +55,10 @@ from tenant.serializers import (
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
 )
-from tenant.threat_intelligence_tasks import sync_threat_intel
+from tenant.threat_intelligence_tasks import (
+    sync_threat_intel,
+    sync_threat_intel_for_tenants,
+)
 
 
 class PermissionChoicesAPIView(APIView):
@@ -190,7 +193,8 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_threat_intel()
+        sync_threat_intel.delay()
+        sync_threat_intel_for_tenants.delay()
         # sync_requests_for_soar.delay()
         # sync_itsm_tenants_tickets.delay()
         # sync_event_log_sources.delay()
