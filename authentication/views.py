@@ -219,53 +219,97 @@ class UserLogoutAPIView(APIView):
             )
 
 
+# class TenantProfileUpdateAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAdminUser]
+
+#     def patch(self, request, tenant_id):
+#         try:
+#             tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
+#             if not tenant:
+#                 return Response(
+#                     {
+#                         "error": "You are not authorized to update this tenant's profile."
+#                     },
+#                     status=status.HTTP_403_FORBIDDEN,
+#                 )
+
+#             # Step 2: Get the associated User
+#             user = tenant.tenant
+#             if not user:
+#                 return Response(
+#                     {"error": "Associated user not found for this tenant."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             # Step 3: Validate and update company_name and profile_picture
+#             serializer = ProfilePictureUploadSerializer(
+#                 user, data=request.data, partial=True
+#             )
+#             if serializer.is_valid():
+#                 serializer.save()
+#                 return Response(
+#                     {
+#                         "message": "Profile updated successfully",
+#                         "data": serializer.data,
+#                     },
+#                     status=status.HTTP_200_OK,
+#                 )
+#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+#         except Exception as e:
+#             return Response(
+#                 {"error": f"An error occurred: {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             )
 class TenantProfileUpdateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def patch(self, request, tenant_id):
-        try:
-            tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
-            if not tenant:
-                return Response(
-                    {
-                        "error": "You are not authorized to update this tenant's profile."
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+    def patch(self, request):
+        tenant_ids = request.data.get("tenant_ids")
+        if not tenant_ids or not isinstance(tenant_ids, list):
+            return Response(
+                {"error": "A list of tenant_ids is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            # Step 2: Get the associated User
+        profile_fields = {
+            "profile_picture": request.data.get("profile_picture"),
+            "company_name": request.data.get("company_name"),
+        }
+
+        updated = []
+
+        for tenant in Tenant.objects.filter(id__in=tenant_ids, created_by=request.user):
             user = tenant.tenant
-            if not user:
-                return Response(
-                    {"error": "Associated user not found for this tenant."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-            # Step 3: Validate and update company_name and profile_picture
             serializer = ProfilePictureUploadSerializer(
-                user, data=request.data, partial=True
+                user, data=profile_fields, partial=True
             )
             if serializer.is_valid():
                 serializer.save()
+                updated.append({"tenant_id": tenant.id, "username": user.username})
+            else:
                 return Response(
                     {
-                        "message": "Profile updated successfully",
-                        "data": serializer.data,
+                        "error": f"Validation failed for tenant {tenant.id}",
+                        "details": serializer.errors,
                     },
-                    status=status.HTTP_200_OK,
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {"error": f"An error occurred: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        return Response(
+            {
+                "message": "Profiles updated successfully",
+                "updated": updated,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class LDAPUsersAPIView(APIView):
