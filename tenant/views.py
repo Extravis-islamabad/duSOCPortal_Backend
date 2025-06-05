@@ -1429,14 +1429,101 @@ class OffenseStatsAPIView(APIView):
             )
 
 
+# class OffenseDetailsByTenantAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
+#             tenant = request.user
+#             mappings = TenantQradarMapping.objects.filter(
+#                 tenant__tenant=tenant
+#             ).values_list("event_collectors__id", "qradar_tenant__id")
+
+#             if not mappings:
+#                 return Response(
+#                     {"error": "No mappings found for the tenant."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             # Extract collector IDs and tenant IDs
+#             collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
+
+#             # Step 2: Retrieve asset IDs based on collector IDs
+#             assets = IBMQradarAssests.objects.filter(
+#                 event_collector__id__in=collector_ids
+#             ).values_list("id", flat=True)
+
+#             if not assets:
+#                 return Response(
+#                     {"error": "No assets found for the given collectors."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             # Step 3: Retrieve offenses with specific fields
+#             offenses = (
+#                 IBMQradarOffense.objects.filter(
+#                     Q(assests__id__in=assets)
+#                     & Q(qradar_tenant_domain__id__in=tenant_ids)
+#                 )
+#                 .values(
+#                     "id",
+#                     "db_id",
+#                     "description",
+#                     "severity",
+#                     "status",
+#                     "source_address_ids",
+#                     "start_time",
+#                 )
+#                 .distinct()
+#             )
+
+#             # Step 4: Format the response
+#             response_data = [
+#                 {
+#                     "id": offense["id"],
+#                     "db_id": offense["db_id"],
+#                     "description": offense["description"],
+#                     "severity": offense["severity"],
+#                     "status": offense["status"],
+#                     "source_address_ids": offense["source_address_ids"],
+#                     "start_time": offense["start_time"],
+#                 }
+#                 for offense in offenses
+#             ]
+
+#             if not response_data:
+#                 return Response(
+#                     {
+#                         "message": "No offenses found for the given assets and tenant.",
+#                         "offenses": [],
+#                     },
+#                     status=status.HTTP_200_OK,
+#                 )
+
+#             return Response({"offenses": response_data}, status=status.HTTP_200_OK)
+
+#         except Exception:
+#             return Response(
+#                 {"error": "Invalid tenant or related data not found."},
+#                 status=status.HTTP_404_NOT_FOUND,
+#             )
+#         except Exception as e:
+#             return Response(
+#                 {"error": f"An error occurred: {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             )
+
+
 class OffenseDetailsByTenantAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
     def get(self, request):
         try:
-            # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
             tenant = request.user
+
             mappings = TenantQradarMapping.objects.filter(
                 tenant__tenant=tenant
             ).values_list("event_collectors__id", "qradar_tenant__id")
@@ -1447,10 +1534,8 @@ class OffenseDetailsByTenantAPIView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            # Extract collector IDs and tenant IDs
             collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
 
-            # Step 2: Retrieve asset IDs based on collector IDs
             assets = IBMQradarAssests.objects.filter(
                 event_collector__id__in=collector_ids
             ).values_list("id", flat=True)
@@ -1461,12 +1546,52 @@ class OffenseDetailsByTenantAPIView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            # Step 3: Retrieve offenses with specific fields
+            # Filters from query params
+            start_date = request.query_params.get("start_date")
+            end_date = request.query_params.get("end_date")
+            status_filter = request.query_params.get("status")
+            severity_filter = request.query_params.get("severity")
+            db_id_filter = request.query_params.get("id")
+
+            filters = Q(assests__id__in=assets) & Q(
+                qradar_tenant_domain__id__in=tenant_ids
+            )
+
+            if start_date:
+                try:
+                    start_parsed = parse_datetime(f"{start_date}T00:00:00")
+                    start_ts = int(start_parsed.timestamp() * 1000)
+                    filters &= Q(start_time__gte=start_ts)
+                except Exception:
+                    return Response(
+                        {"error": "Invalid start_date format. Use YYYY-MM-DD."},
+                        status=400,
+                    )
+
+            if end_date:
+                try:
+                    end_parsed = parse_datetime(f"{end_date}T00:00:00") + timedelta(
+                        days=1
+                    )
+                    end_ts = int(end_parsed.timestamp() * 1000)
+                    filters &= Q(start_time__lt=end_ts)
+                except Exception:
+                    return Response(
+                        {"error": "Invalid end_date format. Use YYYY-MM-DD."},
+                        status=400,
+                    )
+
+            if status_filter:
+                filters &= Q(status__icontains=status_filter)
+
+            if severity_filter:
+                filters &= Q(severity=severity_filter)
+
+            if db_id_filter:
+                filters &= Q(db_id=db_id_filter)
+
             offenses = (
-                IBMQradarOffense.objects.filter(
-                    Q(assests__id__in=assets)
-                    & Q(qradar_tenant_domain__id__in=tenant_ids)
-                )
+                IBMQradarOffense.objects.filter(filters)
                 .values(
                     "id",
                     "db_id",
@@ -1479,24 +1604,12 @@ class OffenseDetailsByTenantAPIView(APIView):
                 .distinct()
             )
 
-            # Step 4: Format the response
-            response_data = [
-                {
-                    "id": offense["id"],
-                    "db_id": offense["db_id"],
-                    "description": offense["description"],
-                    "severity": offense["severity"],
-                    "status": offense["status"],
-                    "source_address_ids": offense["source_address_ids"],
-                    "start_time": offense["start_time"],
-                }
-                for offense in offenses
-            ]
+            response_data = list(offenses)
 
             if not response_data:
                 return Response(
                     {
-                        "message": "No offenses found for the given assets and tenant.",
+                        "message": "No offenses found for the given filters.",
                         "offenses": [],
                     },
                     status=status.HTTP_200_OK,
@@ -1508,11 +1621,6 @@ class OffenseDetailsByTenantAPIView(APIView):
             return Response(
                 {"error": "Invalid tenant or related data not found."},
                 status=status.HTTP_404_NOT_FOUND,
-            )
-        except Exception as e:
-            return Response(
-                {"error": f"An error occurred: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
