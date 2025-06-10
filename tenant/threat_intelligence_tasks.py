@@ -61,6 +61,27 @@ def sync_threat_tags():
 
 
 @shared_task
+def sync_threat_groups():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.THREAT_INTELLIGENCE,
+        integration__threat_intelligence_subtype=ThreatIntelligenceSubTypes.CYWARE,
+        credential_type=CredentialTypes.SECRET_KEY_ACCESS_KEY,
+    )
+
+    for result in results:
+        with Cyware(
+            access_key=result.access_key,
+            secret_key=result.secret_key,
+            base_url=result.base_url,
+        ) as cyware:
+            groups = cyware.get_list_groups()
+            transformed_data = cyware.transform_groups(
+                data=groups, integration=result.integration.id
+            )
+            cyware.insert_groups(groups=transformed_data)
+
+
+@shared_task
 def sync_threat_intel_for_tenants():
     results = ThreatIntelligenceTenant.objects.all()
 
