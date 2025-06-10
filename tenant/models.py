@@ -440,6 +440,27 @@ class CywareCustomField(models.Model):
         return self.field_label
 
 
+class CywareCategories(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    db_id = models.CharField(max_length=64, unique=True)
+    category_name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    threat_indicator_fields = models.ManyToManyField(
+        CywareCustomField, related_name="threat_categories", blank=True
+    )
+    additional_fields = models.ManyToManyField(
+        CywareCustomField, related_name="additional_categories", blank=True
+    )
+    required_fields = models.ManyToManyField(
+        CywareCustomField, related_name="required_categories", blank=True
+    )
+
+    class Meta:
+        db_table = "cyware_categories"
+
+
 class TenantPermissionChoices(models.IntegerChoices):
     DASHBOARD = 1, "Dashboard"
     CHATBOT = 2, "Chatbot"
