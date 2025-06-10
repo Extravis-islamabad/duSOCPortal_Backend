@@ -7,7 +7,7 @@ from integration.models import (
     IntegrationTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.models import ThreatIntelligenceTenant
+from tenant.models import Alert, ThreatIntelligenceTenant
 
 
 @shared_task
@@ -121,6 +121,29 @@ def sync_threat_categories():
                 data=categories, integration=result.integration.id
             )
             cyware.insert_categories(categories=transformed_data)
+
+
+@shared_task
+def sync_threat_alert_details():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.THREAT_INTELLIGENCE,
+        integration__threat_intelligence_subtype=ThreatIntelligenceSubTypes.CYWARE,
+        credential_type=CredentialTypes.SECRET_KEY_ACCESS_KEY,
+    )
+
+    for result in results:
+        with Cyware(
+            access_key=result.access_key,
+            secret_key=result.secret_key,
+            base_url=result.base_url,
+        ) as cyware:
+            alerts = Alert.objects.filter(integration=result.integration).all()
+            for alert in alerts:
+                data = cyware.get_alert_detail(short_id=alert.db_id)
+                alert_object = cyware.transform_alert_detail(
+                    data=data, integration_id=result.integration.id, alert_id=alert.id
+                )
+                cyware.insert_alert_detail(alert_obj=alert_object)
 
 
 @shared_task
