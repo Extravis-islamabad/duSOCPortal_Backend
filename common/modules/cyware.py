@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import json
 import time
 import urllib.parse
 
@@ -10,7 +11,7 @@ from django.db import transaction
 from loguru import logger
 
 from common.constants import CywareConstants, SSLConstants
-from tenant.models import Alert, ThreatIntelligenceTenantAlerts
+from tenant.models import Alert, CywareTag, ThreatIntelligenceTenantAlerts
 
 
 class Cyware:
@@ -172,3 +173,82 @@ class Cyware:
             logger.error(
                 f"Cyware.insert_tenant_alerts() Failed to insert alerts: {str(e)}"
             )
+
+    def list_groups(self, page: int = 1, limit: int = 100) -> None:
+        """
+        Fetch the list of all groups (paginated).
+        """
+        endpoint = "csap/v1/groups/"
+        params = {"page": page, "limit": limit, **self.params}
+        full_url = self.base_url + endpoint + "?" + urllib.parse.urlencode(params)
+
+        try:
+            r = requests.get(full_url, timeout=10)
+            r.raise_for_status()
+            print(json.dumps(r.json(), indent=2))
+        except requests.exceptions.HTTPError as http_err:
+            print(f"[GroupList] HTTP {http_err} – {r.text}")
+        except requests.exceptions.RequestException as err:
+            print(f"[GroupList] Connection error: {err}")
+
+    def get_list_tags(self):
+        start = time.time()
+        logger.info(f"Cyware.list_tags() started : {start}")
+        full_url = f"{self.base_url}/{CywareConstants.TAGS_ENDPOINT}?{urllib.parse.urlencode(self.params)}"
+        try:
+            response = requests.get(full_url, timeout=SSLConstants.TIMEOUT)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(f"Cyware.list_tags() Completed in {time.time() - start} s")
+            return data
+        except Exception as e:
+            logger.error(f"Cyware.list_tags() Failed to list tags: {str(e)}")
+
+    def transform_tags(self, data: list, integration: int) -> list:
+        """
+        Transforms raw tag JSON data into CywareTag model instances.
+        """
+        tags = []
+        for item in data:
+            tag = CywareTag(
+                integration_id=integration,
+                db_id=item.get("tag_id"),
+                tag_name=item.get("tag_name"),
+                tag_slug=item.get("tag_slug"),
+                is_active=item.get("is_active", True),
+            )
+            tags.append(tag)
+        return tags
+
+    def insert_tags(self, tags: list):
+        """
+        Inserts or updates CywareTag records in the DB.
+        """
+        start = time.time()
+        logger.info(f"Cyware.insert_tags() started : {start}")
+
+        if not tags:
+            logger.warning("No tags to insert")
+            return
+
+        logger.info(f"Inserting/Updating {len(tags)} tags")
+
+        try:
+            with transaction.atomic():
+                CywareTag.objects.bulk_create(
+                    tags,
+                    update_conflicts=True,
+                    update_fields=[
+                        "tag_name",
+                        "tag_slug",
+                        "is_active",
+                        "updated_at",
+                    ],
+                    unique_fields=["db_id"],
+                )
+            logger.info(
+                f"Inserted/Updated {len(tags)} tags in {time.time() - start:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(f"Cyware.insert_tags() Failed to insert tags: {str(e)}")

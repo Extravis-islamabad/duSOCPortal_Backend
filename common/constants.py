@@ -147,6 +147,6 @@ class LDAPConstants:
 
 
 class CywareConstants:
-    EXPIRATION_MARGIN_TIME = 20
-    EXPIRATION_MARGIN_TIME = 20
+    EXPIRATION_MARGIN_TIME = 300
     LIST_ALERT_ENDPOINT = "csap/v1/list_alert/"
+    TAGS_ENDPOINT = "api/csap/v1/tag/"
