@@ -10,7 +10,13 @@ from django.db import transaction
 from loguru import logger
 
 from common.constants import CywareConstants, SSLConstants
-from tenant.models import Alert, CywareGroup, CywareTag, ThreatIntelligenceTenantAlerts
+from tenant.models import (
+    Alert,
+    CywareCustomField,
+    CywareGroup,
+    CywareTag,
+    ThreatIntelligenceTenantAlerts,
+)
 
 
 class Cyware:
@@ -250,6 +256,18 @@ class Cyware:
             logger.error(f"Cyware.insert_groups() Failed to insert groups: {str(e)}")
 
     def get_list_tags(self):
+        """
+        Fetch the list of all tags from the Cyware API.
+
+        This method sends an HTTP GET request to the tags endpoint of the Cyware API
+        and retrieves the list of tags. It logs the start and completion time of the request.
+        If the request is successful, it returns the parsed JSON response. If the request fails
+        or an exception occurs, it logs an error.
+
+        :return: A list of tags if the request is successful.
+        :raises: Logs any exceptions that occur during the request.
+        """
+
         start = time.time()
         logger.info(f"Cyware.list_tags() started : {start}")
         full_url = f"{self.base_url}/{CywareConstants.TAGS_ENDPOINT}?{urllib.parse.urlencode(self.params)}"
@@ -310,3 +328,75 @@ class Cyware:
 
         except Exception as e:
             logger.error(f"Cyware.insert_tags() Failed to insert tags: {str(e)}")
+
+    def get_custom_fields(self):
+        start = time.time()
+        logger.info(f"Cyware.get_custom_fields() started : {start}")
+        full_url = f"{self.base_url}/{CywareConstants.CUSTOM_FIELDS_ENDPOINT}?{urllib.parse.urlencode(self.params)}"
+        try:
+            response = requests.get(full_url, timeout=SSLConstants.TIMEOUT)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(
+                f"Cyware.get_custom_fields() Completed in {time.time() - start} s"
+            )
+            return data
+        except Exception as e:
+            logger.error(f"Cyware.get_custom_fields() Failed to list tags: {str(e)}")
+
+    def transform_custom_fields(self, data: list, integration) -> list:
+        """
+        Transforms raw custom/system field JSON data into CustomField model instances.
+        """
+        fields = []
+        for group in data:
+            is_system = group.get("key") == "system"
+            for item in group.get("values", []):
+                field = CywareCustomField(
+                    integration_id=integration,
+                    db_id=item.get("field_id"),
+                    field_name=item.get("field_name"),
+                    field_label=item.get("field_label"),
+                    field_type=item.get("field_type"),
+                    field_description=item.get("field_description", ""),
+                    is_system=is_system,
+                )
+                fields.append(field)
+        return fields
+
+    def insert_custom_fields(self, fields: list):
+        """
+        Inserts or updates CustomField records in the DB.
+        """
+        start = time.time()
+        logger.info(f"Cyware.insert_custom_fields() started : {start}")
+
+        if not fields:
+            logger.warning("No custom fields to insert")
+            return
+
+        logger.info(f"Inserting/Updating {len(fields)} custom fields")
+
+        try:
+            with transaction.atomic():
+                CywareCustomField.objects.bulk_create(
+                    fields,
+                    update_conflicts=True,
+                    update_fields=[
+                        "field_name",
+                        "field_label",
+                        "field_type",
+                        "field_description",
+                        "is_system",
+                        "updated_at",
+                    ],
+                    unique_fields=["db_id"],
+                )
+            logger.info(
+                f"Inserted/Updated {len(fields)} custom fields in {time.time() - start:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Cyware.insert_custom_fields() Failed to insert custom fields: {str(e)}"
+            )
