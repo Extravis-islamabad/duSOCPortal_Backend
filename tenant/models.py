@@ -423,7 +423,7 @@ class CywareGroup(models.Model):
 
 class CywareCustomField(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
-    db_id = models.UUIDField(unique=True)
+    db_id = models.CharField(unique=True, max_length=64)
     field_name = models.CharField(max_length=255)
     field_label = models.CharField(max_length=255)
     field_type = models.CharField(max_length=50)
