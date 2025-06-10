@@ -387,6 +387,22 @@ class ThreatIntelligenceTenantAlerts(models.Model):
         db_table = "threat_intelligence_tenant_alerts"
 
 
+class CywareTag(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    db_id = models.UUIDField(unique=True)
+    tag_name = models.CharField(max_length=255)
+    tag_slug = models.SlugField(max_length=255, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "cyware_tags"
+
+    def __str__(self):
+        return self.tag_name
+
+
 class TenantPermissionChoices(models.IntegerChoices):
     DASHBOARD = 1, "Dashboard"
     CHATBOT = 2, "Chatbot"
