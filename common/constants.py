@@ -153,3 +153,4 @@ class CywareConstants:
     GROUPS_ENDPOINT = "api/csap/v1/list_recipient_group/"
     CUSTOM_FIELDS_ENDPOINT = "api/csap/v1/list_additional_fields/"
     CATEGORIES_ENDPOINT = "api/csap/v1/list_category/"
+    ALERT_DETAIL_ENDPOINT = "api/csap/v1/get_alert_detail/"

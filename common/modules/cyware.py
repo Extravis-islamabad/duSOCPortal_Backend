@@ -3,16 +3,19 @@ import hashlib
 import hmac
 import time
 import urllib.parse
+from datetime import datetime
 
 import pandas as pd
 import requests
 from django.db import transaction
+from django.utils.timezone import make_aware
 from loguru import logger
 
 from common.constants import CywareConstants, SSLConstants
 from common.utils import DBMappings
 from tenant.models import (
     Alert,
+    CywareAlertDetails,
     CywareCategories,
     CywareCustomField,
     CywareGroup,
@@ -588,3 +591,115 @@ class Cyware:
 
         except Exception as e:
             logger.error(f"Cyware.insert_categories() Failed: {str(e)}")
+
+    def get_alert_detail(self, short_id):
+        """
+        Fetch the full alert details for a given short-ID.
+
+        :param short_id: The alert's short ID
+        :return: The parsed JSON response from the Cyware API
+        :raises: Logs any exceptions that occur during the request
+        """
+        start = time.time()
+        logger.info(f"Cyware.get_alert_detail() started : {start}")
+        full_url = f"{self.base_url}/{CywareConstants.ALERT_DETAIL_ENDPOINT}/{short_id}?{urllib.parse.urlencode(self.params)}"
+        try:
+            response = requests.get(full_url, timeout=SSLConstants.TIMEOUT)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(
+                f"Cyware.get_alert_detail() Completed in {time.time() - start} s"
+            )
+            return data
+        except Exception as e:
+            logger.error(f"Cyware.get_alert_detail() Failed: {str(e)}")
+
+    def transform_alert_detail(self, data: dict, integration_id: int, alert_id: int):
+        # Mappings
+        tag_map = DBMappings.get_db_id_to_id_mapping(CywareTag)
+        group_map = DBMappings.get_db_id_to_id_mapping(CywareGroup)
+        category_map = DBMappings.get_db_id_to_id_mapping(CywareCategories)
+
+        published_time = data.get("published_time")
+        if isinstance(published_time, (int, float)):
+            published_time = make_aware(datetime.fromtimestamp(published_time))
+        else:
+            published_time = None
+
+        instance = CywareAlertDetails(
+            integration_id=integration_id,
+            alert_id=alert_id,
+            short_id=data.get("short_id"),
+            title=data.get("title"),
+            content=data.get("content"),
+            status=data.get("status"),
+            tlp=data.get("tlp"),
+            published_time=published_time,
+            push_required=data.get("push_required", False),
+            push_email_notification=data.get("push_email_notification", False),
+            tracking_id=data.get("tracking_id"),
+            card_image=data.get("card_image"),
+            card_info=data.get("card_info"),
+            intel_id=data.get("intel_id"),
+            rfi_id=data.get("rfi_id"),
+        )
+
+        # Attach M2M ids temporarily
+        instance._tag_ids = [
+            tag_map[t["tag_id"]]
+            for t in data.get("card_tag", [])
+            if t["tag_id"] in tag_map
+        ]
+        instance._card_group_ids = [
+            group_map[g["group_id"]]
+            for g in data.get("card_group", [])
+            if g["group_id"] in group_map
+        ]
+        instance._recipient_group_ids = [
+            group_map[g["group_id"]]
+            for g in data.get("recipient_groups", [])
+            if g["group_id"] in group_map
+        ]
+
+        # FK category
+        category_id = data.get("card_category", {}).get("category_id")
+        if category_id in category_map:
+            instance.card_category_id_id = category_map[category_id]
+
+        return instance
+
+    def insert_alert_detail(self, alert_obj: CywareAlertDetails):
+        try:
+            with transaction.atomic():
+                obj, _ = CywareAlertDetails.objects.update_or_create(
+                    short_id=alert_obj.short_id,
+                    integration_id=alert_obj.integration_id,
+                    alert_id=alert_obj.alert_id,
+                    defaults={
+                        "title": alert_obj.title,
+                        "content": alert_obj.content,
+                        "status": alert_obj.status,
+                        "tlp": alert_obj.tlp,
+                        "published_time": alert_obj.published_time,
+                        "push_required": alert_obj.push_required,
+                        "push_email_notification": alert_obj.push_email_notification,
+                        "tracking_id": alert_obj.tracking_id,
+                        "card_category": alert_obj.card_category_id,
+                        "card_image": alert_obj.card_image,
+                        "card_info": alert_obj.card_info,
+                        "intel_id": alert_obj.intel_id,
+                        "rfi_id": alert_obj.rfi_id,
+                    },
+                )
+
+                # Assign M2M relationships
+                obj.card_groups.set(getattr(alert_obj, "_card_group_ids", []))
+                obj.recipient_groups.set(getattr(alert_obj, "_recipient_group_ids", []))
+                obj.card_tag.set(getattr(alert_obj, "_tag_ids", []))
+
+                logger.info(f"Inserted/Updated CywareAlertDetails: {obj.short_id}")
+
+        except Exception as e:
+            logger.error(
+                f"Cyware.insert_alert_detail() Failed for {alert_obj.short_id}: {str(e)}"
+            )
