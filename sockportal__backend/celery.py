@@ -27,4 +27,12 @@ app.conf.beat_schedule = {
         "task": "tenant.threat_intelligence_tasks.sync_threat_intel",
         "schedule": crontab(minute="*/5"),
     },
+    "threat-intelligence-tenant-sync-tasks": {
+        "task": "tenant.threat_intelligence_tasks.sync_threat_intel_for_tenants",
+        "schedule": crontab(minute="*/5"),
+    },
+    "threat-intelligence-all-sync-tasks": {
+        "task": "tenant.threat_intelligence_tasks.sync_threat_intel_all",
+        "schedule": crontab(minute="*/30"),
+    },
 }
