@@ -55,10 +55,7 @@ from tenant.serializers import (
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
 )
-from tenant.threat_intelligence_tasks import (
-    sync_threat_intel,
-    sync_threat_intel_for_tenants,
-)
+from tenant.threat_intelligence_tasks import sync_threat_alert_details
 
 
 class PermissionChoicesAPIView(APIView):
@@ -193,8 +190,16 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_threat_intel.delay()
-        sync_threat_intel_for_tenants.delay()
+        # sync_threat_intel.delay()
+        # sync_threat_intel_for_tenants.delay()
+        sync_threat_alert_details.delay()
+        # with Cyware(
+        #     base_url="https://du.cyware.com",
+        #     access_key="c54d63c9-8c08-4921-adee-8a83a2112104",
+        #     secret_key="24303184-4d71-4935-9608-24ffba93c8e0",
+        # ) as cyware:
+        #     data = cyware.get_list_groups()
+        #     print(data)
         # sync_requests_for_soar.delay()
         # sync_itsm_tenants_tickets.delay()
         # sync_event_log_sources.delay()
