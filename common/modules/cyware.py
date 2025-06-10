@@ -10,8 +10,10 @@ from django.db import transaction
 from loguru import logger
 
 from common.constants import CywareConstants, SSLConstants
+from common.utils import DBMappings
 from tenant.models import (
     Alert,
+    CywareCategories,
     CywareCustomField,
     CywareGroup,
     CywareTag,
@@ -21,6 +23,14 @@ from tenant.models import (
 
 class Cyware:
     def __init__(self, access_key: str, secret_key: str, base_url: str):
+        """
+        Initialize Cyware class.
+
+        Args:
+            access_key (str): Cyware access key.
+            secret_key (str): Cyware secret key.
+            base_url (str): Cyware API base URL.
+        """
         self.access_key = access_key
         self.secret_key = secret_key
         self.base_url = base_url
@@ -32,16 +42,53 @@ class Cyware:
         }
 
     def __enter__(self):
+        """
+        Enter the runtime context related to this object.
+
+        This method logs the entry into the Cyware context and
+        prepares the object for use with a context manager (e.g.,
+        with statement).
+
+        :return: Returns self after logging the entry.
+        """
         logger.info("Logging into Cyware")
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Exit the runtime context related to this object.
+
+        This method logs the exit from the Cyware context.
+
+        :param exc_type: The type of exception thrown, if any.
+        :param exc_value: The value of the exception thrown, if any.
+        :param traceback: The traceback of the exception thrown, if any.
+        """
         logger.info("Logging out of Cyware")
 
     def expiry_time(self) -> int:
+        """
+        Calculates the expiration time in seconds.
+
+        This function returns the current time plus the expiration margin time
+        in seconds.
+
+        Returns:
+            int: The expiration time in seconds.
+        """
         return int(time.time() + CywareConstants.EXPIRATION_MARGIN_TIME)
 
     def signature(self) -> str:
+        """
+        Generate the signature required for authentication to Cyware.
+
+        This function follows the exact specification as provided by Cyware.
+        The signature is generated using the access key, secret key and
+        the current time plus the expiration margin.
+
+        Returns:
+            str: The signature required for authentication.
+        """
         to_sign = f"{self.access_key}\n{self.expiry}"
         hashed = hmac.new(self.secret_key.encode(), to_sign.encode(), hashlib.sha1)
         return base64.b64encode(hashed.digest()).decode()
@@ -56,6 +103,12 @@ class Cyware:
             logger.error(f"Failed to fetch alerts: {str(e)}")
 
     def fetch_all_alerts(self, page_size=2000):
+        """
+        Fetch all alerts from Cyware.
+
+        :param page_size: The number of records to fetch in each page. Defaults to 2000.
+        :return: A list of all alerts
+        """
         logger.info("Fetching all alerts...")
         all_alerts = []
         page = 1
@@ -90,6 +143,16 @@ class Cyware:
         return all_alerts
 
     def transform_alert(self, alerts_data, integration):
+        """
+        Transforms the list of alert data into a list of Alert objects.
+
+        Args:
+            alerts_data (list): A list of dictionaries containing the alert data.
+            integration (int): The ID of the integration for which the alerts need to be transformed.
+
+        Returns:
+            list: A list of Alert objects.
+        """
         logger.info("Cyware.transform_alert() started...")
         df = pd.DataFrame(alerts_data)
         df.rename(columns={"short_id": "db_id"}, inplace=True)
@@ -109,6 +172,16 @@ class Cyware:
         return alerts
 
     def transform_alert_for_tenants(self, alerts_data, threat_intel_id):
+        """
+        Transforms the list of alert data into a list of ThreatIntelligenceTenantAlerts objects.
+
+        Args:
+            alerts_data (list): A list of dictionaries containing the alert data.
+            threat_intel_id (int): The ID of the Threat Intelligence for which the alerts need to be transformed.
+
+        Returns:
+            list: A list of ThreatIntelligenceTenantAlerts objects.
+        """
         logger.info("Cyware.transform_alert() started...")
         df = pd.DataFrame(alerts_data)
         df.rename(columns={"short_id": "db_id"}, inplace=True)
@@ -128,6 +201,12 @@ class Cyware:
         return alerts
 
     def insert_alerts(self, alerts):
+        """
+        Inserts/Updates alerts into the database.
+
+        Args:
+        alerts (list): A list of dictionaries representing the alerts to be inserted/updated.
+        """
         start = time.time()
         logger.info(f"Cyware.insert_alerts() started : {start}")
         if not alerts:
@@ -151,6 +230,12 @@ class Cyware:
             logger.error(f"Failed to insert alerts: {str(e)}")
 
     def insert_tenant_alerts(self, alerts):
+        """
+        Inserts/Updates alerts for a tenant into the database.
+
+        Args:
+        alerts (list): A list of dictionaries representing the alerts to be inserted/updated.
+        """
         start = time.time()
         logger.info(f"Cyware.insert_tenant_alerts() started : {start}")
         if not alerts:
@@ -330,6 +415,12 @@ class Cyware:
             logger.error(f"Cyware.insert_tags() Failed to insert tags: {str(e)}")
 
     def get_custom_fields(self):
+        """
+        Fetches the list of custom fields from Cyware CSAP.
+
+        Returns:
+            list: List of custom fields
+        """
         start = time.time()
         logger.info(f"Cyware.get_custom_fields() started : {start}")
         full_url = f"{self.base_url}/{CywareConstants.CUSTOM_FIELDS_ENDPOINT}?{urllib.parse.urlencode(self.params)}"
@@ -400,3 +491,100 @@ class Cyware:
             logger.error(
                 f"Cyware.insert_custom_fields() Failed to insert custom fields: {str(e)}"
             )
+
+    def get_categories(self):
+        """
+        Fetches the list of all categories from Cyware CSAP.
+
+        Returns:
+            list: List of category objects
+        """
+        start = time.time()
+        logger.info(f"Cyware.get_categories() started : {start}")
+        full_url = f"{self.base_url}/{CywareConstants.CATEGORIES_ENDPOINT}?{urllib.parse.urlencode(self.params)}"
+        try:
+            response = requests.get(full_url, timeout=SSLConstants.TIMEOUT)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(f"Cyware.get_categories() Completed in {time.time() - start} s")
+            return data["results"]
+        except Exception as e:
+            logger.error(f"Cyware.get_categories() Failed to list tags: {str(e)}")
+
+    def transform_categories(self, data: list, integration) -> list:
+        """
+        Transforms raw category JSON data into CywareCategories model instances.
+        """
+        cyware_mappings = DBMappings.get_db_id_to_id_mapping(CywareCustomField)
+        categories = []
+
+        for item in data:
+            category = CywareCategories(
+                integration_id=integration,
+                db_id=item.get("category_id"),
+                category_name=item.get("category_name"),
+            )
+
+            # Collect related field IDs using db_id mapping
+            def extract_field_ids(field_list):
+                return [
+                    cyware_mappings[field["field_id"]]
+                    for field in field_list
+                    if field.get("field_id") in cyware_mappings
+                ]
+
+            # Attach as temporary attributes for later use in insert step
+            category._additional_fields = extract_field_ids(
+                item.get("additional_fields", [])
+            )
+            category._threat_indicator_fields = extract_field_ids(
+                item.get("threat_indicator_fields", [])
+            )
+            category._required_fields = extract_field_ids(
+                item.get("required_fields", [])
+            )
+
+            categories.append(category)
+
+        return categories
+
+    def insert_categories(self, categories: list):
+        """
+        Inserts or updates CywareCategories and assigns M2M fields
+        from pre-transformed field ID lists.
+        """
+        start = time.time()
+        logger.info(f"Cyware.insert_categories() started : {start}")
+
+        if not categories:
+            logger.warning("No categories to insert")
+            return
+
+        logger.info(f"Inserting/Updating {len(categories)} categories")
+
+        try:
+            with transaction.atomic():
+                for category in categories:
+                    obj, _ = CywareCategories.objects.update_or_create(
+                        db_id=category.db_id,
+                        integration_id=category.integration_id,
+                        defaults={
+                            "category_name": category.category_name,
+                        },
+                    )
+
+                    # Set M2M fields using extracted IDs
+                    obj.additional_fields.set(
+                        getattr(category, "_additional_fields", [])
+                    )
+                    obj.threat_indicator_fields.set(
+                        getattr(category, "_threat_indicator_fields", [])
+                    )
+                    obj.required_fields.set(getattr(category, "_required_fields", []))
+
+            logger.info(
+                f"Inserted/Updated {len(categories)} categories in {time.time() - start:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(f"Cyware.insert_categories() Failed: {str(e)}")
