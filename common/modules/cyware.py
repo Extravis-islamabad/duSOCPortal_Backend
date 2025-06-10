@@ -1,7 +1,6 @@
 import base64
 import hashlib
 import hmac
-import json
 import time
 import urllib.parse
 
@@ -11,7 +10,7 @@ from django.db import transaction
 from loguru import logger
 
 from common.constants import CywareConstants, SSLConstants
-from tenant.models import Alert, CywareTag, ThreatIntelligenceTenantAlerts
+from tenant.models import Alert, CywareGroup, CywareTag, ThreatIntelligenceTenantAlerts
 
 
 class Cyware:
@@ -174,22 +173,81 @@ class Cyware:
                 f"Cyware.insert_tenant_alerts() Failed to insert alerts: {str(e)}"
             )
 
-    def list_groups(self, page: int = 1, limit: int = 100) -> None:
+    def get_list_groups(self) -> None:
         """
         Fetch the list of all groups (paginated).
         """
-        endpoint = "csap/v1/groups/"
-        params = {"page": page, "limit": limit, **self.params}
-        full_url = self.base_url + endpoint + "?" + urllib.parse.urlencode(params)
+        start = time.time()
+        logger.info(f"Cyware.get_list_groups() started at {start}")
+        full_url = f"{self.base_url}/{CywareConstants.GROUPS_ENDPOINT}?{urllib.parse.urlencode(self.params)}"
 
         try:
-            r = requests.get(full_url, timeout=10)
-            r.raise_for_status()
-            print(json.dumps(r.json(), indent=2))
-        except requests.exceptions.HTTPError as http_err:
-            print(f"[GroupList] HTTP {http_err} – {r.text}")
-        except requests.exceptions.RequestException as err:
-            print(f"[GroupList] Connection error: {err}")
+            response = requests.get(full_url, timeout=SSLConstants.TIMEOUT)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(
+                f"Cyware.get_list_groups() Completed in {time.time() - start} s"
+            )
+            return data
+        except Exception as e:
+            logger.error(f"Cyware.get_list_groups() Failed to list groups: {str(e)}")
+
+    def transform_groups(self, data: list, integration) -> list:
+        """
+        Transforms raw group JSON data into CywareGroup model instances.
+        """
+        groups = []
+        for item in data:
+            group = CywareGroup(
+                integration_id=integration,
+                db_id=item.get("group_id"),
+                group_name=item.get("group_name"),
+                group_tlp=item.get("group_tlp"),
+                group_type=item.get("group_type"),
+                allowed_for_intel_submission=item.get(
+                    "allowed_for_intel_submission", False
+                ),
+                allowed_for_rfi_submission=item.get(
+                    "allowed_for_rfi_submission", False
+                ),
+            )
+            groups.append(group)
+        return groups
+
+    def insert_groups(self, groups: list):
+        """
+        Inserts or updates CywareGroup records in the DB.
+        """
+        start = time.time()
+        logger.info(f"Cyware.insert_groups() started : {start}")
+
+        if not groups:
+            logger.warning("No groups to insert")
+            return
+
+        logger.info(f"Inserting/Updating {len(groups)} groups")
+
+        try:
+            with transaction.atomic():
+                CywareGroup.objects.bulk_create(
+                    groups,
+                    update_conflicts=True,
+                    update_fields=[
+                        "group_name",
+                        "group_tlp",
+                        "group_type",
+                        "allowed_for_intel_submission",
+                        "allowed_for_rfi_submission",
+                        "updated_at",
+                    ],
+                    unique_fields=["db_id"],
+                )
+            logger.info(
+                f"Inserted/Updated {len(groups)} groups in {time.time() - start:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(f"Cyware.insert_groups() Failed to insert groups: {str(e)}")
 
     def get_list_tags(self):
         start = time.time()
