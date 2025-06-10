@@ -387,6 +387,25 @@ class ThreatIntelligenceTenantAlerts(models.Model):
         db_table = "threat_intelligence_tenant_alerts"
 
 
+class Alert(models.Model):
+    db_id = models.CharField(max_length=64, unique=True)
+    title = models.TextField()
+    status = models.TextField()
+    published_time = models.DateTimeField(null=True, blank=True)
+    integration = models.ForeignKey(
+        Integration, on_delete=models.CASCADE, related_name="alerts"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["db_id"])]
+        db_table = "threat_intelligence_alerts"
+
+    def __str__(self):
+        return f"{self.title} ({self.db_id})"
+
+
 class CywareTag(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     db_id = models.UUIDField(unique=True)
@@ -461,6 +480,46 @@ class CywareCategories(models.Model):
         db_table = "cyware_categories"
 
 
+class CywareAlertDetails(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    alert = models.ForeignKey(Alert, on_delete=models.CASCADE)
+    short_id = models.CharField(max_length=64, unique=True)
+    title = models.CharField(max_length=512)
+    content = models.TextField()
+    status = models.CharField(max_length=32)
+    tlp = models.CharField(max_length=32)
+    published_time = models.DateTimeField(null=True, blank=True)
+    push_required = models.BooleanField(default=False)
+    push_email_notification = models.BooleanField(default=False)
+    tracking_id = models.CharField(max_length=255, null=True, blank=True)
+
+    card_groups = models.ManyToManyField(
+        CywareGroup, blank=True, related_name="card_alerts"
+    )
+    recipient_groups = models.ManyToManyField(
+        CywareGroup, blank=True, related_name="recipient_alerts"
+    )
+
+    card_tag = models.ManyToManyField(
+        CywareTag, blank=True, related_name="tagged_alerts"
+    )
+    card_category = models.ForeignKey(
+        CywareCategories, blank=True, on_delete=models.CASCADE, null=True
+    )
+
+    card_image = models.URLField(null=True, blank=True)
+    card_info = models.TextField(null=True, blank=True)
+    event = models.JSONField(null=True, blank=True)
+    intel_id = models.CharField(max_length=255, null=True, blank=True)
+    rfi_id = models.CharField(max_length=255, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "cyware_alert_details"
+
+
 class TenantPermissionChoices(models.IntegerChoices):
     DASHBOARD = 1, "Dashboard"
     CHATBOT = 2, "Chatbot"
@@ -501,22 +560,3 @@ class TenantRolePermissions(models.Model):
     def save(self, *args, **kwargs):
         self.permission_text = TenantPermissionChoices(self.permission).label
         super().save(*args, **kwargs)
-
-
-class Alert(models.Model):
-    db_id = models.CharField(max_length=64, unique=True)
-    title = models.TextField()
-    status = models.TextField()
-    published_time = models.DateTimeField(null=True, blank=True)
-    integration = models.ForeignKey(
-        Integration, on_delete=models.CASCADE, related_name="alerts"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        indexes = [models.Index(fields=["db_id"])]
-        db_table = "threat_intelligence_alerts"
-
-    def __str__(self):
-        return f"{self.title} ({self.db_id})"
