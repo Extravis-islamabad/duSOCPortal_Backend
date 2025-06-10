@@ -421,6 +421,25 @@ class CywareGroup(models.Model):
         return self.group_name
 
 
+class CywareCustomField(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    db_id = models.UUIDField(unique=True)
+    field_name = models.CharField(max_length=255)
+    field_label = models.CharField(max_length=255)
+    field_type = models.CharField(max_length=50)
+    field_description = models.TextField(blank=True, null=True)
+    is_system = models.BooleanField(default=False)  # True = system, False = custom
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "cyware_custom_fields"
+
+    def __str__(self):
+        return self.field_label
+
+
 class TenantPermissionChoices(models.IntegerChoices):
     DASHBOARD = 1, "Dashboard"
     CHATBOT = 2, "Chatbot"
