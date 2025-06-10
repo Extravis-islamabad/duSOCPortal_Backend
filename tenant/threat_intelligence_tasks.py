@@ -159,3 +159,14 @@ def sync_threat_intel_for_tenants():
             all_alerts = cyware.fetch_all_alerts(page_size=1000)
             transformed_data = cyware.transform_alert_for_tenants(all_alerts, result.id)
             cyware.insert_tenant_alerts(transformed_data)
+
+
+@shared_task
+def sync_threat_intel_all():
+    sync_threat_intel.delay()
+    sync_threat_tags.delay()
+    sync_threat_groups.delay()
+    sync_threat_custom_fields.delay()
+    sync_threat_categories.delay()
+    sync_threat_alert_details.delay()
+    sync_threat_intel_for_tenants.delay()
