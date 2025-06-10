@@ -403,6 +403,24 @@ class CywareTag(models.Model):
         return self.tag_name
 
 
+class CywareGroup(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    db_id = models.CharField(max_length=64, unique=True)
+    group_name = models.CharField(max_length=255)
+    group_tlp = models.CharField(max_length=20)
+    group_type = models.CharField(max_length=50)
+    allowed_for_intel_submission = models.BooleanField(default=False)
+    allowed_for_rfi_submission = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "cyware_groups"
+
+    def __str__(self):
+        return self.group_name
+
+
 class TenantPermissionChoices(models.IntegerChoices):
     DASHBOARD = 1, "Dashboard"
     CHATBOT = 2, "Chatbot"
