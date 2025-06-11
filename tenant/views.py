@@ -1132,6 +1132,7 @@ class IncidentDetailView(APIView):
                 )
                 .values(
                     "id",
+                    "db_id",
                     "account",
                     "name",
                     "status",
@@ -1297,7 +1298,8 @@ class IncidentDetailView(APIView):
             # Format response
             response = {
                 "incident": {
-                    "id": f"{incident_id}",
+                    "id": incident_id,
+                    "db_id": incident["db_id"],
                     "account": incident["account"],
                     "name": incident["name"],
                     "status": incident["status"],
