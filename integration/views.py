@@ -106,6 +106,10 @@ def test_integration_connection(
                     )
         else:
             raise serializers.ValidationError("Unsupported credential type for Cyware.")
+    else:
+        raise serializers.ValidationError(
+            "Missing or incorrect credentials for integration."
+        )
 
 
 class IntegrationTypesView(APIView):
@@ -248,7 +252,7 @@ class TestIntegrationAPIView(APIView):
 
         except serializers.ValidationError as e:
             return Response(
-                {"error": str(e.detail)}, status=status.HTTP_400_BAD_REQUEST
+                {"error": str(e.default_detail)}, status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             return Response(
