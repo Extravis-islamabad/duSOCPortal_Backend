@@ -953,6 +953,7 @@ class IncidentsView(APIView):
                 "status",
                 "severity",
                 "incident_priority",
+                "incident_phase",
                 "created",
                 "owner",
                 "playbook_id",
@@ -961,11 +962,11 @@ class IncidentsView(APIView):
             ).order_by("-created")
 
             incidents = []
-            severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
+            # severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
             for row in queryset:
-                priority = row["incident_priority"] or severity_map.get(
-                    row["severity"], "P4"
-                )
+                # priority = row["incident_priority"] or severity_map.get(
+                #     row["severity"], "P4"
+                # )
                 created_date = (
                     row["created"].strftime("%Y-%m-%d %I:%M %p")
                     if row["created"]
@@ -983,8 +984,12 @@ class IncidentsView(APIView):
                         "db_id": row["db_id"],
                         "account": row["account"],
                         "name": row["name"],
+                        "description": row["name"].strip().split(" ", 1)[1],
                         "status": row["status"],
-                        "priority": priority,
+                        "severity": row["severity"],
+                        "priority": row["incident_priority"],
+                        "phase": row["incident_phase"],
+                        # "priority": priority,
                         "created": created_date,
                         "assignee": row["owner"],
                         "playbook": row["playbook_id"],
