@@ -1149,6 +1149,7 @@ class IncidentDetailView(APIView):
                     "reason",
                     "incident_phase",
                     "qradar_category",
+                    "qradar_sub_category",
                     "incident_tta",
                     "tta_calculation",
                     "source_ips",
@@ -1285,9 +1286,9 @@ class IncidentDetailView(APIView):
                     )
 
             # Determine priority
-            priority = incident["incident_priority"] or (
-                {1: "P1", 2: "P2", 3: "P3", 4: "P4"}.get(incident["severity"], "P4")
-            )
+            # priority = incident["incident_priority"] or (
+            #     {1: "P1", 2: "P2", 3: "P3", 4: "P4"}.get(incident["severity"], "P4")
+            # )
 
             # Format source IPs and log source types
             source_ips_str = ", ".join(source_ips) if source_ips else "Unknown"
@@ -1315,13 +1316,15 @@ class IncidentDetailView(APIView):
                     ),
                     "creator": "System",  # No creator field in schema
                     "assignee": incident["owner"],
-                    "description": incident["reason"] or "No description provided",
+                    "description": incident["name"].strip().split(" ", 1)[1],
                     "customFields": {
                         "phase": incident["incident_phase"] or "Detection",
-                        "priority": priority,
+                        "priority": incident["incident_phase"] or None,
+                        "severity": incident["severity"],
                         "sourceIPs": source_ips_str,
                         "logSourceType": log_source_type_str,
-                        "category": incident["qradar_category"] or "Unknown",
+                        "category": incident["qradar_category"] or None,
+                        "sub_category": incident["qradar_sub_category"] or None,
                     },
                     "timeline": timeline,
                     "relatedItems": related_items,
