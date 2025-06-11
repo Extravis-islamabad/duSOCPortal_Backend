@@ -16,6 +16,7 @@ from django.db.models import (
 from django.db.models.functions import ExtractSecond
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.timezone import make_aware
 from loguru import logger
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
@@ -906,7 +907,9 @@ class IncidentsView(APIView):
             date_format = "%Y-%m-%d"
             if start_date_str:
                 try:
-                    start_date = datetime.strptime(start_date_str, date_format)
+                    start_date = make_aware(
+                        datetime.strptime(start_date_str, date_format)
+                    ).date()
                 except ValueError:
                     return Response(
                         {"error": "Invalid start_date format. Use YYYY-MM-DD."},
@@ -915,7 +918,9 @@ class IncidentsView(APIView):
 
             if end_date_str:
                 try:
-                    end_date = datetime.strptime(end_date_str, date_format)
+                    end_date = make_aware(
+                        datetime.strptime(end_date_str, date_format)
+                    ).date()  # + timedelta(days=1)
                 except ValueError:
                     return Response(
                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
@@ -928,10 +933,10 @@ class IncidentsView(APIView):
                 )
 
             if start_date:
-                queryset = queryset.filter(created__gte=start_date)
+                queryset = queryset.filter(created__date__gte=start_date)
 
             if end_date:
-                queryset = queryset.filter(created__lte=end_date)
+                queryset = queryset.filter(created__date__lte=end_date)
 
             if filter_type != "all":
                 if filter_type == "unassigned":
