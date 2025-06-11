@@ -1707,8 +1707,6 @@ class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
             offense.pop("closing_reason_id", None)
             response_data = {
                 "offense": offense,  # full offense fields
-                "flows": offense.get("flow_count", 0),
-                "events": offense.get("event_count", 0),
                 "assets": list(offense_assets),
             }
             # # Step 5: Format the response
