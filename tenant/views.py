@@ -1613,7 +1613,7 @@ class OffenseDetailsByTenantAPIView(APIView):
                     "description",
                     "severity",
                     "status",
-                    "source_address_ids",
+                    # "source_address_ids",
                     "start_time",
                 )
                 .distinct()
@@ -1679,16 +1679,7 @@ class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
                         & Q(assests__id__in=assets)
                         & Q(qradar_tenant_domain__id__in=tenant_ids)
                     )
-                    .values(
-                        "id",
-                        "db_id",
-                        "description",
-                        "severity",
-                        "status",
-                        "source_address_ids",
-                        "start_time",
-                        "flow_count",
-                    )
+                    .values()
                     .first()
                 )
 
@@ -1710,28 +1701,39 @@ class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
                 du_ibm_qradar_offenses__id=offense_id
             ).values("id", "db_id", "name", "description")
 
-            # Step 5: Format the response
+            offense.pop("source_address_ids", None)
+            offense.pop("qradar_tenant_domain_id", None)
+            offense.pop("integration_id", None)
+            offense.pop("closing_reason_id", None)
             response_data = {
-                "offense": {
-                    "id": offense["id"],
-                    "db_id": offense["db_id"],
-                    "description": offense["description"],
-                    "severity": offense["severity"],
-                    "status": offense["status"],
-                    "source_address_ids": offense["source_address_ids"],
-                    "start_time": offense["start_time"],
-                },
-                "flows": offense["flow_count"],
-                "assets": [
-                    {
-                        "id": asset["id"],
-                        "db_id": asset["db_id"],
-                        "name": asset["name"],
-                        "description": asset["description"],
-                    }
-                    for asset in offense_assets
-                ],
+                "offense": offense,  # full offense fields
+                "flows": offense.get("flow_count", 0),
+                "events": offense.get("event_count", 0),
+                "assets": list(offense_assets),
             }
+            # # Step 5: Format the response
+            # response_data = {
+            #     "offense": {
+            #         "id": offense["id"],
+            #         "db_id": offense["db_id"],
+            #         "description": offense["description"],
+            #         "severity": offense["severity"],
+            #         "status": offense["status"],
+            #         # "source_address_ids": offense["source_address_ids"],
+            #         "start_time": offense["start_time"],
+            #     },
+            #     "flows": offense["flow_count"],
+            #     "events": offense["event_count"],
+            #     "assets": [
+            #         {
+            #             "id": asset["id"],
+            #             "db_id": asset["db_id"],
+            #             "name": asset["name"],
+            #             "description": asset["description"],
+            #         }
+            #         for asset in offense_assets
+            #     ],
+            # }
 
             return Response(response_data, status=status.HTTP_200_OK)
 
