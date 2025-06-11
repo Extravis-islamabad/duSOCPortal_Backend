@@ -222,10 +222,19 @@ class TestIntegrationAPIView(APIView):
         data = request.data
 
         try:
-            integration_type = data.get("integration_type")
-            credentials = data.get("credentials")
-            credentials_type = credentials.get("credential_type")
+            integration_type = data.get("integration_type", None)
+            credentials = data.get("credentials", None)
+            credentials_type = credentials.get("credential_type", None)
 
+            if (
+                integration_type is None
+                or credentials is None
+                or credentials_type is None
+            ):
+                return Response(
+                    {"error": "Missing required fields in the request"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             subtype = (
                 data.get("siem_subtype")
                 or data.get("itsm_subtype")
