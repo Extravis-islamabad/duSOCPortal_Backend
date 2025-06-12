@@ -104,8 +104,27 @@ class IBMQradarAssests(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    creation_date_converted = models.DateField(null=True, blank=True)
+    modified_date_converted = models.DateField(null=True, blank=True)
+    last_event_date_converted = models.DateField(null=True, blank=True)
+
     class Meta:
         db_table = "du_ibm_qradar_assets"
+
+    def save(self, *args, **kwargs):
+        # Helper to convert timestamp string to date
+        def parse_timestamp(ts_str):
+            try:
+                ts = int(ts_str)
+                return datetime.utcfromtimestamp(ts / 1000).date()
+            except Exception:
+                return None
+
+        self.creation_date_converted = parse_timestamp(self.creation_date)
+        self.modified_date_converted = parse_timestamp(self.modified_date)
+        self.last_event_date_converted = parse_timestamp(self.last_event_time)
+
+        super().save(*args, **kwargs)
 
 
 class IBMQradarEPS(models.Model):
