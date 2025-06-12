@@ -26,7 +26,12 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import PaginationConstants
-from integration.models import IntegrationTypes, ItsmSubTypes
+from integration.models import (
+    IntegrationTypes,
+    ItsmSubTypes,
+    SiemSubTypes,
+    SoarSubTypes,
+)
 from tenant.models import (
     Alert,
     DUCortexSOARIncidentFinalModel,
@@ -940,6 +945,16 @@ class IncidentsView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
+        soar_integrations = tenant.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.CORTEX_SOAR,
+            status=True,
+        )
+        if not soar_integrations.exists():
+            return Response(
+                {"error": "No active SOAR integration configured for tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         soar_tenants = tenant.soar_tenants.all()
         if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
@@ -1179,6 +1194,17 @@ class IncidentDetailView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
+        soar_integrations = tenant.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.CORTEX_SOAR,
+            status=True,
+        )
+        if not soar_integrations.exists():
+            return Response(
+                {"error": "No active SOAR integration configured for tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         soar_tenants = tenant.soar_tenants.all()
         if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
@@ -1416,6 +1442,21 @@ class OffenseStatsAPIView(APIView):
     permission_classes = [IsTenant]
 
     def get(self, request):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        siem_integrations = tenant.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            siem_subtype=SiemSubTypes.IBM_QRADAR,
+            status=True,
+        )
+        if not siem_integrations.exists():
+            return Response(
+                {"error": "No active SEIM integration configured for tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
             tenant = request.user
