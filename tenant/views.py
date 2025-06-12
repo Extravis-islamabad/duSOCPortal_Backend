@@ -222,6 +222,16 @@ class GetTenantAssetsList(APIView):
             # Step 1: Get current tenant
             tenant = Tenant.objects.select_related("tenant").get(tenant=request.user)
 
+            siem_integrations = tenant.integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                siem_subtype=SiemSubTypes.IBM_QRADAR,
+                status=True,
+            )
+            if not siem_integrations.exists():
+                return Response(
+                    {"error": "No active SEIM integration configured for tenant."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             # Step 2: Get mapped collector IDs
             collector_ids = (
                 TenantQradarMapping.objects.filter(tenant=tenant)
