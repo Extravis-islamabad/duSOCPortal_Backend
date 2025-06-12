@@ -287,11 +287,53 @@ class TenantITSMTicketsView(APIView):
                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
-        itsm_tenants = tenant.itsm_tenants.all()
-        itsm_tenant_ids = [t.id for t in itsm_tenants]
+        itsm_tenant_ids = tenant.itsm_tenants.values_list("id", flat=True)
 
         tickets = DuITSMFinalTickets.objects.filter(itsm_tenant__in=itsm_tenant_ids)
 
+        # Parse start_date and end_date from query params
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+
+        date_format_in_db = "%b %d, %Y %I:%M %p"  # e.g., "Apr 17, 2025 10:42 PM"
+        date_format_filter = "%Y-%m-%d"  # e.g., "2025-04-17"
+
+        def parse_ticket_date(ticket):
+            try:
+                return datetime.strptime(ticket.creation_date, date_format_in_db).date()
+            except Exception:
+                return None
+
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(
+                    start_date_str, date_format_filter
+                ).date()
+                tickets = [
+                    t
+                    for t in tickets
+                    if (dt := parse_ticket_date(t)) and dt >= start_date
+                ]
+            except ValueError:
+                return Response(
+                    {"error": "Invalid start_date format. Use YYYY-MM-DD."}, status=400
+                )
+
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, date_format_filter).date()
+                tickets = [
+                    t
+                    for t in tickets
+                    if (dt := parse_ticket_date(t)) and dt <= end_date
+                ]
+            except ValueError:
+                return Response(
+                    {"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400
+                )
+
+        tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
+        # Pagination
         paginator = PageNumberPagination()
         paginator.page_size = PaginationConstants.PAGE_SIZE
         paginated_tickets = paginator.paginate_queryset(tickets, request)
@@ -1565,7 +1607,8 @@ class OffenseDetailsByTenantAPIView(APIView):
                     {"error": "No assets found for the given collectors."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-
+            start_parsed = None
+            end_parsed = None
             # Filters from query params
             start_date = request.query_params.get("start_date")
             end_date = request.query_params.get("end_date")
@@ -1600,6 +1643,12 @@ class OffenseDetailsByTenantAPIView(APIView):
                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
                         status=400,
                     )
+
+            if start_parsed and end_parsed and end_parsed <= start_parsed:
+                return Response(
+                    {"error": "end_date must be after start_date."},
+                    status=400,
+                )
 
             if status_filter:
                 filters &= Q(status__icontains=status_filter)
