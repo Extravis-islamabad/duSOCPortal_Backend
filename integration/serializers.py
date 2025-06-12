@@ -262,7 +262,111 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
 class IntegrationCredentialUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = IntegrationCredentials
-        fields = ["id", "credential_type", "username", "password", "ip_address", "port"]
+        exclude = []  # Include fields you want to allow updates on
+        read_only_fields = ["credential_type"]
+
+    def validate(self, data):
+        instance = self.instance
+        integration = instance.integration
+
+        integration_type = integration.integration_type
+        siem_subtype = integration.siem_subtype
+        itsm_subtype = integration.itsm_subtype
+        soar_subtype = integration.soar_subtype
+        threat_intelligence_subtype = integration.threat_intelligence_subtype
+
+        credentials_type = data.get("credential_type", instance.credential_type)
+        credentials = {
+            "username": data.get("username", instance.username),
+            "password": data.get("password", instance.password),
+            "api_key": data.get("api_key", instance.api_key),
+            "base_url": data.get("base_url", instance.base_url),
+            "access_key": data.get("access_key", instance.access_key),
+            "secret_key": data.get("secret_key", instance.secret_key),
+            "ip_address": data.get("ip_address", instance.ip_address),
+            "port": data.get("port", instance.port),
+        }
+
+        # Perform actual reachability check based on type
+        if (
+            integration_type == IntegrationTypes.SIEM_INTEGRATION
+            and siem_subtype == SiemSubTypes.IBM_QRADAR
+        ):
+            if credentials_type == CredentialTypes.USERNAME_PASSWORD:
+                with IBMQradar(
+                    username=credentials.get("username"),
+                    password=credentials.get("password"),
+                    ip_address=credentials.get("ip_address"),
+                    port=credentials.get("port"),
+                ) as ibm_qradar:
+                    if not ibm_qradar.test_integration():
+                        raise serializers.ValidationError(
+                            "QRadar integration is not accessible."
+                        )
+            else:
+                raise serializers.ValidationError(
+                    "Unsupported credential type for IBM Qradar for Now..."
+                )
+
+        elif (
+            integration_type == IntegrationTypes.ITSM_INTEGRATION
+            and itsm_subtype == ItsmSubTypes.MANAGE_ENGINE
+        ):
+            if credentials_type == CredentialTypes.API_KEY:
+                with ITSM(
+                    ip_address=credentials.get("ip_address"),
+                    port=credentials.get("port"),
+                    token=credentials.get("api_key"),
+                ) as itsm:
+                    if not itsm._get_accounts():
+                        raise serializers.ValidationError(
+                            "ManageEngine integration is not accessible."
+                        )
+            else:
+                raise serializers.ValidationError(
+                    "Unsupported credential type for ManageEngine for Now..."
+                )
+
+        elif (
+            integration_type == IntegrationTypes.SOAR_INTEGRATION
+            and soar_subtype == SoarSubTypes.CORTEX_SOAR
+        ):
+            if credentials_type == CredentialTypes.API_KEY:
+                with CortexSOAR(
+                    ip_address=credentials.get("ip_address"),
+                    port=credentials.get("port"),
+                    token=credentials.get("api_key"),
+                ) as soar:
+                    if not soar._get_accounts():
+                        raise serializers.ValidationError(
+                            "Cortex SOAR integration is not accessible."
+                        )
+            else:
+                raise serializers.ValidationError(
+                    "Unsupported credential type for Cortex SOAR for Now..."
+                )
+
+        elif (
+            integration_type == IntegrationTypes.THREAT_INTELLIGENCE
+            and threat_intelligence_subtype == ThreatIntelligenceSubTypes.CYWARE
+        ):
+            if credentials_type == CredentialTypes.SECRET_KEY_ACCESS_KEY:
+                with Cyware(
+                    base_url=credentials.get("base_url"),
+                    secret_key=credentials.get("secret_key"),
+                    access_key=credentials.get("access_key"),
+                ) as cyware:
+                    response = cyware.get_alert_list()
+                    if response.status_code != 200:
+                        raise serializers.ValidationError(
+                            "Cyware integration is not accessible."
+                        )
+            else:
+                raise serializers.ValidationError(
+                    "Unsupported credential type for Cyware for Now..."
+                )
+
+        return data
 
 
 class TestCredentialSerializer(serializers.Serializer):
