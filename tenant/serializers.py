@@ -19,7 +19,6 @@ from .models import (
     IBMQradarEPS,
     IBMQradarEventCollector,
     Tenant,
-    TenantPermissionChoices,
     TenantQradarMapping,
     TenantRole,
     TenantRolePermissions,
@@ -31,46 +30,179 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
     permissions = serializers.ListField(
         child=serializers.IntegerField(min_value=1, max_value=5),
         required=False,
-        help_text="List of permission integers from TenantPermissionChoices (1-5) to assign to the tenant",
     )
+    integration_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False
+    )
+    itsm_tenant_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False
+    )
+    soar_tenant_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False
+    )
+    is_defualt_threat_intel = serializers.BooleanField(required=False)
+    qradar_tenants = serializers.ListField(
+        child=serializers.DictField(), required=False
+    )
+    threat_intelligence = serializers.IntegerField(required=False)
+    access_key = serializers.CharField(required=False, allow_blank=True)
+    secret_key = serializers.CharField(required=False, allow_blank=True)
+    base_url = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Tenant
-        fields = ["permissions"]  # Only permissions can be updated
+        fields = [
+            "permissions",
+            "integration_ids",
+            "itsm_tenant_ids",
+            "soar_tenant_ids",
+            "is_defualt_threat_intel",
+            "qradar_tenants",
+            "threat_intelligence",
+            "access_key",
+            "secret_key",
+            "base_url",
+        ]
 
-    def validate_permissions(self, value):
-        """Ensure all provided permissions are valid choices."""
-        valid_choices = [choice.value for choice in TenantPermissionChoices]
-        if value:
-            invalid = [p for p in value if p not in valid_choices]
-            if invalid:
+    def validate(self, data):
+        if "integration_ids" in data:
+            existing = Integration.objects.filter(
+                id__in=data["integration_ids"]
+            ).values_list("id", flat=True)
+            missing = set(data["integration_ids"]) - set(existing)
+            if missing:
                 raise serializers.ValidationError(
-                    f"Invalid permissions: {invalid}. Must be one of {valid_choices}"
+                    {"integration_ids": f"Invalid integration IDs: {missing}"}
                 )
-        return value
+
+        if "itsm_tenant_ids" in data:
+            existing = DuITSMTenants.objects.filter(
+                id__in=data["itsm_tenant_ids"]
+            ).values_list("id", flat=True)
+            missing = set(data["itsm_tenant_ids"]) - set(existing)
+            if missing:
+                raise serializers.ValidationError(
+                    {"itsm_tenant_ids": f"Invalid ITSM tenant IDs: {missing}"}
+                )
+
+        if "soar_tenant_ids" in data:
+            existing = DuCortexSOARTenants.objects.filter(
+                id__in=data["soar_tenant_ids"]
+            ).values_list("id", flat=True)
+            missing = set(data["soar_tenant_ids"]) - set(existing)
+            if missing:
+                raise serializers.ValidationError(
+                    {"soar_tenant_ids": f"Invalid SOAR tenant IDs: {missing}"}
+                )
+
+        if "qradar_tenants" in data:
+            for qt in data["qradar_tenants"]:
+                qt_id = qt.get("qradar_tenant_id")
+                if not DuIbmQradarTenants.objects.filter(id=qt_id).exists():
+                    raise serializers.ValidationError(
+                        {"qradar_tenants": f"Invalid QRadar tenant ID: {qt_id}"}
+                    )
+                for ec_id in qt.get("event_collector_ids", []):
+                    if not IBMQradarEventCollector.objects.filter(id=ec_id).exists():
+                        raise serializers.ValidationError(
+                            {"qradar_tenants": f"Invalid Event Collector ID: {ec_id}"}
+                        )
+
+                    existing_mappings = TenantQradarMapping.objects.filter(
+                        event_collectors__id=ec_id
+                    ).exclude(tenant=self.instance)
+                    if existing_mappings.exists():
+                        raise serializers.ValidationError(
+                            {
+                                "qradar_tenants": f"Event Collector ID {ec_id} is already assigned to another tenant."
+                            }
+                        )
+
+        if data.get("is_defualt_threat_intel") is False:
+            required_fields = [
+                "threat_intelligence",
+                "access_key",
+                "secret_key",
+                "base_url",
+            ]
+            for field in required_fields:
+                if not data.get(field):
+                    raise serializers.ValidationError(
+                        {
+                            field: f"{field} is required when default threat intel is disabled."
+                        }
+                    )
+
+        return data
 
     def update(self, instance, validated_data):
-        # Extract permissions (if provided)
         permissions = validated_data.pop("permissions", None)
+        integration_ids = validated_data.pop("integration_ids", None)
+        itsm_ids = validated_data.pop("itsm_tenant_ids", None)
+        soar_ids = validated_data.pop("soar_tenant_ids", None)
+        qradar_data = validated_data.pop("qradar_tenants", None)
+        is_defualt_threat_intel = validated_data.get("is_defualt_threat_intel", None)
 
-        # No fields to update on the Tenant model itself, just save to trigger updated_at
-        instance.save()
+        threat_intelligence = validated_data.get("threat_intelligence")
+        access_key = validated_data.get("access_key")
+        secret_key = validated_data.get("secret_key")
+        base_url = validated_data.get("base_url")
 
-        # Update permissions only if provided
-        if permissions is not None:
-            # Get or create the tenant's role
-            role, _ = TenantRole.objects.get_or_create(
-                tenant=instance,
-                defaults={
-                    "name": f"{instance.tenant.username} Admin",
-                    "role_type": TenantRole.TenantRoleChoices.TENANT_ADMIN,
-                },
-            )
-            # Clear existing permissions
-            TenantRolePermissions.objects.filter(role=role).delete()
-            # Add new permissions
-            for perm_value in permissions:
-                TenantRolePermissions.objects.create(role=role, permission=perm_value)
+        company_name = instance.tenant.company_name
+        related_tenants = Tenant.objects.filter(tenant__company_name=company_name)
+
+        for tenant in related_tenants:
+            if integration_ids is not None:
+                tenant.integrations.set(
+                    Integration.objects.filter(id__in=integration_ids)
+                )
+            if itsm_ids is not None:
+                tenant.itsm_tenants.set(DuITSMTenants.objects.filter(id__in=itsm_ids))
+            if soar_ids is not None:
+                tenant.soar_tenants.set(
+                    DuCortexSOARTenants.objects.filter(id__in=soar_ids)
+                )
+            if is_defualt_threat_intel is not None:
+                tenant.is_defualt_threat_intel = is_defualt_threat_intel
+
+            if permissions is not None:
+                role, _ = TenantRole.objects.get_or_create(
+                    tenant=tenant,
+                    defaults={
+                        "name": f"{tenant.tenant.username} Admin",
+                        "role_type": TenantRole.TenantRoleChoices.TENANT_ADMIN,
+                    },
+                )
+                TenantRolePermissions.objects.filter(role=role).delete()
+                for perm in permissions:
+                    TenantRolePermissions.objects.create(role=role, permission=perm)
+
+            if qradar_data is not None:
+                for qt in qradar_data:
+                    qradar_tenant = DuIbmQradarTenants.objects.get(
+                        id=qt["qradar_tenant_id"]
+                    )
+                    mapping, _ = TenantQradarMapping.objects.get_or_create(
+                        tenant=tenant, qradar_tenant=qradar_tenant
+                    )
+                    mapping.event_collectors.set(
+                        IBMQradarEventCollector.objects.filter(
+                            id__in=qt.get("event_collector_ids", [])
+                        )
+                    )
+
+            if is_defualt_threat_intel is False and threat_intelligence and base_url:
+                ti_obj, _ = ThreatIntelligenceTenant.objects.get_or_create(
+                    base_url=base_url,
+                    defaults={
+                        "threat_intelligence": threat_intelligence,
+                        "access_key": access_key,
+                        "secret_key": secret_key,
+                    },
+                )
+                ti_obj.tenants.add(tenant)
+
+            tenant.save()
 
         return instance
 
@@ -84,8 +216,11 @@ class TenantRolePermissionsSerializer(serializers.ModelSerializer):
 class TenantDetailSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="tenant.username", read_only=True)
     email = serializers.EmailField(source="tenant.email", read_only=True)
+    company_name = serializers.CharField(source="tenant.company_name", read_only=True)
     permissions = serializers.SerializerMethodField()
     tenant_admin = serializers.SerializerMethodField()
+    created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
+    role = serializers.SerializerMethodField()
     total_incidents = serializers.SerializerMethodField()
     active_incidents = serializers.SerializerMethodField()
     tickets_count = serializers.SerializerMethodField()
@@ -98,6 +233,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "id",
             "username",
             "email",
+            "company_name",
             "phone_number",
             "created_at",
             "updated_at",
@@ -108,6 +244,8 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "tickets_count",
             "sla",
             "tenant_admin",
+            "created_by_id",
+            "role",
         ]
 
     def get_permissions(self, obj):
@@ -121,23 +259,26 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             logger.error(e)
             return []
 
+    def get_role(self, obj):
+        try:
+            role = obj.roles.get()
+            return role.get_role_type_display()
+        except Exception:
+            return None
+
     def get_tenant_admin(self, obj):
         if obj.tenant:
-            return obj.created_by.username or None
+            return obj.created_by.username if obj.created_by else None
         return None
 
     def get_asset_count(self, obj):
         try:
-            # Get all event collector IDs for the tenant
             collector_ids = TenantQradarMapping.objects.filter(tenant=obj).values_list(
                 "event_collectors__id", flat=True
             )
-
-            # Count assets for these collectors
             asset_count = IBMQradarAssests.objects.filter(
                 event_collector__id__in=collector_ids
             ).aggregate(totalAssets=Count("id"))
-
             return asset_count["totalAssets"] or 0
         except Exception:
             return 0
