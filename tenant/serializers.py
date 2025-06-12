@@ -66,6 +66,10 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         if "integration_ids" in data:
+            if not data["integration_ids"]:
+                raise serializers.ValidationError(
+                    {"integration_ids": "At least one integration ID is required"}
+                )
             existing = Integration.objects.filter(
                 id__in=data["integration_ids"]
             ).values_list("id", flat=True)
@@ -108,15 +112,15 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
                             {"qradar_tenants": f"Invalid Event Collector ID: {ec_id}"}
                         )
 
-                    existing_mappings = TenantQradarMapping.objects.filter(
-                        event_collectors__id=ec_id
-                    ).exclude(tenant=self.instance)
-                    if existing_mappings.exists():
-                        raise serializers.ValidationError(
-                            {
-                                "qradar_tenants": f"Event Collector ID {ec_id} is already assigned to another tenant."
-                            }
-                        )
+                    # existing_mappings = TenantQradarMapping.objects.filter(
+                    #     event_collectors__id=ec_id
+                    # ).exclude(tenant=self.instance)
+                    # if existing_mappings.exists():
+                    #     raise serializers.ValidationError(
+                    #         {
+                    #             "qradar_tenants": f"Event Collector ID {ec_id} is already assigned to another tenant."
+                    #         }
+                    #     )
 
         if data.get("is_defualt_threat_intel") is False:
             required_fields = [
