@@ -14,6 +14,7 @@ from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
 from tenant.itsm_tasks import sync_itsm
 from tenant.models import Tenant
 from tenant.serializers import (
+    AllTenantDetailSerializer,
     TenantCreateSerializer,
     TenantDetailSerializer,
     TenantUpdateSerializer,
@@ -129,17 +130,15 @@ class TenantUpdateAPIView(APIView):
         try:
             tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
         except Tenant.DoesNotExist:
-            return Response(
-                {"error": "Tenant not found"}, status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"error": "Tenant not found"}, status=404)
 
         serializer = TenantUpdateSerializer(
             tenant, data=request.data, partial=True, context={"request": request}
         )
         if serializer.is_valid():
-            tenant = serializer.save()
+            serializer.save()
             return Response({"message": "Tenant updated successfully"})
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=400)
 
 
 class TenantDetailAPIView(APIView):
@@ -175,13 +174,13 @@ class AllTenantsAPIView(APIView):
 
     def get(self, request):
         logger.info(f"All tenants request by user: {request.user.username}")
-        tenants = Tenant.objects.filter(created_by=request.user)
+        tenants = Tenant.objects.filter(created_by=request.user).order_by("-created_at")
 
         paginator = PageNumberPagination()
         paginator.page_size = PaginationConstants.PAGE_SIZE
 
         paginated_tenants = paginator.paginate_queryset(tenants, request)
-        serializer = TenantDetailSerializer(paginated_tenants, many=True)
+        serializer = AllTenantDetailSerializer(paginated_tenants, many=True)
 
         logger.success(
             f"Retrieved {tenants.count()} tenants for user: {request.user.username}"

@@ -213,6 +213,106 @@ class TenantRolePermissionsSerializer(serializers.ModelSerializer):
         fields = ["permission", "permission_text"]
 
 
+class AllTenantDetailSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="tenant.username", read_only=True)
+    email = serializers.EmailField(source="tenant.email", read_only=True)
+    permissions = serializers.SerializerMethodField()
+    tenant_admin = serializers.SerializerMethodField()
+    total_incidents = serializers.SerializerMethodField()
+    active_incidents = serializers.SerializerMethodField()
+    tickets_count = serializers.SerializerMethodField()
+    sla = serializers.SerializerMethodField()
+    asset_count = serializers.SerializerMethodField()
+    created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Tenant
+        fields = [
+            "id",
+            "username",
+            "email",
+            "phone_number",
+            "created_at",
+            "updated_at",
+            "permissions",
+            "asset_count",
+            "total_incidents",
+            "active_incidents",
+            "tickets_count",
+            "sla",
+            "tenant_admin",
+            "created_by_id",
+            "role",
+        ]
+
+    def get_permissions(self, obj):
+        try:
+            role = obj.roles.get()
+            return [
+                {"id": perm.permission, "name": perm.permission_text}
+                for perm in role.role_permissions.all()
+            ]
+        except Exception as e:
+            logger.error(e)
+            return []
+
+    def get_tenant_admin(self, obj):
+        if obj.tenant:
+            return obj.created_by.username or None
+        return None
+
+    def get_asset_count(self, obj):
+        try:
+            # Get all event collector IDs for the tenant
+            collector_ids = TenantQradarMapping.objects.filter(tenant=obj).values_list(
+                "event_collectors__id", flat=True
+            )
+
+            # Count assets for these collectors
+            asset_count = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).aggregate(totalAssets=Count("id"))
+
+            return asset_count["totalAssets"] or 0
+        except Exception:
+            return 0
+
+    def get_active_incidents(self, obj):
+        return self.get_total_incidents(obj)
+
+    def get_sla(self, obj):
+        try:
+            return obj.sla.name
+        except Exception:
+            return 0
+
+    def get_total_incidents(self, obj):
+        try:
+            soar_tenants = obj.soar_tenants.all()
+            return DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_soar_tenant__in=soar_tenants
+            ).count()
+        except Exception:
+            return 0
+
+    def get_tickets_count(self, obj):
+        try:
+            itsm_tenants = obj.itsm_tenants.all()
+            return DuITSMFinalTickets.objects.filter(
+                itsm_tenant__in=itsm_tenants
+            ).count()
+        except Exception:
+            return 0
+
+    def get_role(self, obj):
+        try:
+            role = obj.roles.get()
+            return role.get_role_type_display()
+        except Exception:
+            return None
+
+
 class TenantDetailSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="tenant.username", read_only=True)
     email = serializers.EmailField(source="tenant.email", read_only=True)
@@ -226,6 +326,8 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     tickets_count = serializers.SerializerMethodField()
     sla = serializers.SerializerMethodField()
     asset_count = serializers.SerializerMethodField()
+    tenant_data = serializers.SerializerMethodField()
+    qradar_tenants = serializers.SerializerMethodField()
 
     class Meta:
         model = Tenant
@@ -235,6 +337,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "email",
             "company_name",
             "phone_number",
+            "country",
             "created_at",
             "updated_at",
             "permissions",
@@ -246,6 +349,12 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "tenant_admin",
             "created_by_id",
             "role",
+            "tenant_data",
+            "qradar_tenants",
+            "integrations",
+            "itsm_tenants",
+            "soar_tenants",
+            "is_defualt_threat_intel",
         ]
 
     def get_permissions(self, obj):
@@ -309,6 +418,29 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             ).count()
         except Exception:
             return 0
+
+    def get_tenant_data(self, obj):
+        return {
+            "tenant_id": obj.tenant.id if obj.tenant else None,
+            "tenant_username": obj.tenant.username if obj.tenant else None,
+            "tenant_email": obj.tenant.email if obj.tenant else None,
+            "tenant_company_name": obj.tenant.company_name if obj.tenant else None,
+        }
+
+    def get_qradar_tenants(self, obj):
+        try:
+            mappings = TenantQradarMapping.objects.filter(tenant=obj)
+            return [
+                {
+                    "qradar_tenant_id": mapping.qradar_tenant.id,
+                    "event_collector_ids": list(
+                        mapping.event_collectors.values_list("id", flat=True)
+                    ),
+                }
+                for mapping in mappings
+            ]
+        except Exception:
+            return []
 
 
 class TenantPermissionSerializer(serializers.ModelSerializer):
