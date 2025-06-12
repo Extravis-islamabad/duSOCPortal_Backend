@@ -137,7 +137,11 @@ def sync_threat_alert_details():
             secret_key=result.secret_key,
             base_url=result.base_url,
         ) as cyware:
-            alerts = Alert.objects.filter(integration=result.integration).all()
+            alerts = (
+                Alert.objects.filter(integration=result.integration)
+                .all()
+                .order_by("-created_at")
+            )
             for alert in alerts:
                 data = cyware.get_alert_detail(short_id=alert.db_id)
                 alert_object = cyware.transform_alert_detail(
