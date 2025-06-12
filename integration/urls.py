@@ -7,6 +7,7 @@ from integration.views import (
     IntegrationCreateAPIView,
     IntegrationTypesView,
     TestIntegrationAPIView,
+    TestIntegrationConnectionAPIView,
     UpdateCredentialView,
 )
 
@@ -40,6 +41,11 @@ urlpatterns = [
         "test_integration/",
         TestIntegrationAPIView.as_view(),
         name="test-integration",
+    ),
+    path(
+        "test_connection/<int:integration_id>/",
+        TestIntegrationConnectionAPIView.as_view(),
+        name="test-integration-connection",
     ),
     path("get_integration_instances/", GetIntegrationInstanceListView.as_view()),
 ]

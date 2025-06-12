@@ -265,6 +265,56 @@ class TestIntegrationAPIView(APIView):
         )
 
 
+class TestIntegrationConnectionAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, integration_id):
+        try:
+            integration = Integration.objects.get(id=integration_id)
+        except Integration.DoesNotExist:
+            return Response({"error": "Integration not found."}, status=404)
+
+        credentials = integration.credentials.first()
+        if not credentials:
+            return Response(
+                {"error": "No credentials found for this integration."}, status=400
+            )
+
+        credentials_data = {
+            "username": credentials.username,
+            "password": credentials.password,
+            "api_key": credentials.api_key,
+            "access_key": credentials.access_key,
+            "secret_key": credentials.secret_key,
+            "ip_address": credentials.ip_address,
+            "port": credentials.port,
+            "base_url": credentials.base_url,
+        }
+
+        try:
+            test_integration_connection(
+                integration_type=integration.integration_type,
+                subtype=(
+                    integration.siem_subtype
+                    or integration.soar_subtype
+                    or integration.itsm_subtype
+                    or integration.threat_intelligence_subtype
+                ),
+                credentials_type=credentials.credential_type,
+                credentials=credentials_data,
+            )
+            return Response(
+                {"message": "Integration connection successful."}, status=200
+            )
+
+        except serializers.ValidationError as ve:
+            return Response({"error": str(ve.detail)}, status=400)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
 class GetIntegrationInstanceListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
