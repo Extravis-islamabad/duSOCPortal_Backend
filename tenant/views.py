@@ -15,7 +15,7 @@ from django.db.models import (
 )
 from django.db.models.functions import ExtractSecond
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
+from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.timezone import make_aware
 from loguru import logger
 from rest_framework import status
@@ -193,7 +193,7 @@ class TestView(APIView):
     def get(self, request):
         # sync_threat_intel.delay()
         # sync_threat_intel_for_tenants.delay()
-        sync_threat_alert_details.delay()
+        sync_threat_alert_details()
         # with Cyware(
         #     base_url="https://du.cyware.com",
         #     access_key="c54d63c9-8c08-4921-adee-8a83a2112104",
@@ -1498,93 +1498,6 @@ class OffenseStatsAPIView(APIView):
             )
 
 
-# class OffenseDetailsByTenantAPIView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
-#             tenant = request.user
-#             mappings = TenantQradarMapping.objects.filter(
-#                 tenant__tenant=tenant
-#             ).values_list("event_collectors__id", "qradar_tenant__id")
-
-#             if not mappings:
-#                 return Response(
-#                     {"error": "No mappings found for the tenant."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-
-#             # Extract collector IDs and tenant IDs
-#             collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
-
-#             # Step 2: Retrieve asset IDs based on collector IDs
-#             assets = IBMQradarAssests.objects.filter(
-#                 event_collector__id__in=collector_ids
-#             ).values_list("id", flat=True)
-
-#             if not assets:
-#                 return Response(
-#                     {"error": "No assets found for the given collectors."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-
-#             # Step 3: Retrieve offenses with specific fields
-#             offenses = (
-#                 IBMQradarOffense.objects.filter(
-#                     Q(assests__id__in=assets)
-#                     & Q(qradar_tenant_domain__id__in=tenant_ids)
-#                 )
-#                 .values(
-#                     "id",
-#                     "db_id",
-#                     "description",
-#                     "severity",
-#                     "status",
-#                     "source_address_ids",
-#                     "start_time",
-#                 )
-#                 .distinct()
-#             )
-
-#             # Step 4: Format the response
-#             response_data = [
-#                 {
-#                     "id": offense["id"],
-#                     "db_id": offense["db_id"],
-#                     "description": offense["description"],
-#                     "severity": offense["severity"],
-#                     "status": offense["status"],
-#                     "source_address_ids": offense["source_address_ids"],
-#                     "start_time": offense["start_time"],
-#                 }
-#                 for offense in offenses
-#             ]
-
-#             if not response_data:
-#                 return Response(
-#                     {
-#                         "message": "No offenses found for the given assets and tenant.",
-#                         "offenses": [],
-#                     },
-#                     status=status.HTTP_200_OK,
-#                 )
-
-#             return Response({"offenses": response_data}, status=status.HTTP_200_OK)
-
-#         except Exception:
-#             return Response(
-#                 {"error": "Invalid tenant or related data not found."},
-#                 status=status.HTTP_404_NOT_FOUND,
-#             )
-#         except Exception as e:
-#             return Response(
-#                 {"error": f"An error occurred: {str(e)}"},
-#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             )
-
-
 class OffenseDetailsByTenantAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1593,6 +1506,7 @@ class OffenseDetailsByTenantAPIView(APIView):
         try:
             tenant = request.user
 
+            # Get tenant mappings
             mappings = TenantQradarMapping.objects.filter(
                 tenant__tenant=tenant
             ).values_list("event_collectors__id", "qradar_tenant__id")
@@ -1603,7 +1517,7 @@ class OffenseDetailsByTenantAPIView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
+            collector_ids, tenant_ids = zip(*mappings)
 
             assets = IBMQradarAssests.objects.filter(
                 event_collector__id__in=collector_ids
@@ -1614,49 +1528,54 @@ class OffenseDetailsByTenantAPIView(APIView):
                     {"error": "No assets found for the given collectors."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-            start_parsed = None
-            end_parsed = None
-            # Filters from query params
-            start_date = request.query_params.get("start_date")
-            end_date = request.query_params.get("end_date")
+
+            # Get filters from query params
+            start_date_str = request.query_params.get("start_date")
+            end_date_str = request.query_params.get("end_date")
             status_filter = request.query_params.get("status")
             severity_filter = request.query_params.get("severity")
             db_id_filter = request.query_params.get("id")
 
+            # Base filters
             filters = Q(assests__id__in=assets) & Q(
                 qradar_tenant_domain__id__in=tenant_ids
             )
 
-            if start_date:
+            # Parse and apply date filters
+            if start_date_str:
                 try:
-                    start_parsed = parse_datetime(f"{start_date}T00:00:00")
-                    start_ts = int(start_parsed.timestamp() * 1000)
-                    filters &= Q(start_time__gte=start_ts)
-                except Exception:
+                    start_date = parse_date(start_date_str)
+                    if start_date:
+                        filters &= Q(start_date__gte=start_date)
+                    else:
+                        raise ValueError
+                except ValueError:
                     return Response(
                         {"error": "Invalid start_date format. Use YYYY-MM-DD."},
                         status=400,
                     )
 
-            if end_date:
+            if end_date_str:
                 try:
-                    end_parsed = parse_datetime(f"{end_date}T00:00:00") + timedelta(
-                        days=1
-                    )
-                    end_ts = int(end_parsed.timestamp() * 1000)
-                    filters &= Q(start_time__lt=end_ts)
-                except Exception:
+                    end_date = parse_date(end_date_str)
+                    if end_date:
+                        filters &= Q(start_date__lte=end_date)
+                    else:
+                        raise ValueError
+                except ValueError:
                     return Response(
                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
                         status=400,
                     )
 
-            if start_parsed and end_parsed and end_parsed <= start_parsed:
+            # Validate date range
+            if start_date_str and end_date_str and end_date < start_date:
                 return Response(
-                    {"error": "end_date must be after start_date."},
+                    {"error": "end_date must be after or equal to start_date."},
                     status=400,
                 )
 
+            # Additional filters
             if status_filter:
                 filters &= Q(status__icontains=status_filter)
 
@@ -1669,34 +1588,20 @@ class OffenseDetailsByTenantAPIView(APIView):
             offenses = (
                 IBMQradarOffense.objects.filter(filters)
                 .values(
-                    "id",
-                    "db_id",
-                    "description",
-                    "severity",
-                    "status",
-                    # "source_address_ids",
-                    "start_time",
+                    "id", "db_id", "description", "severity", "status", "start_date"
                 )
                 .distinct()
             )
 
-            response_data = list(offenses)
-
-            if not response_data:
-                return Response(
-                    {
-                        "message": "No offenses found for the given filters.",
-                        "offenses": [],
-                    },
-                    status=status.HTTP_200_OK,
-                )
-
-            return Response({"offenses": response_data}, status=status.HTTP_200_OK)
-
-        except Exception:
             return Response(
-                {"error": "Invalid tenant or related data not found."},
-                status=status.HTTP_404_NOT_FOUND,
+                {"offenses": list(offenses), "count": len(offenses)},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": f"Something went wrong: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
