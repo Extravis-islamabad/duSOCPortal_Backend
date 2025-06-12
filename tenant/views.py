@@ -26,6 +26,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import PaginationConstants
+from integration.models import IntegrationTypes, ItsmSubTypes
 from tenant.models import (
     Alert,
     DUCortexSOARIncidentFinalModel,
@@ -281,6 +282,16 @@ class TenantITSMTicketsView(APIView):
                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
+        itsm_integrations = tenant.integrations.filter(
+            integration_type=IntegrationTypes.ITSM_INTEGRATION,
+            itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
+            status=True,
+        )
+        if not itsm_integrations.exists():
+            return Response(
+                {"error": "No active ITSM integration configured for tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         itsm_tenant_ids = tenant.itsm_tenants.values_list("id", flat=True)
 
         tickets = DuITSMFinalTickets.objects.filter(itsm_tenant__in=itsm_tenant_ids)
