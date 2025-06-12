@@ -1588,7 +1588,13 @@ class OffenseDetailsByTenantAPIView(APIView):
             offenses = (
                 IBMQradarOffense.objects.filter(filters)
                 .values(
-                    "id", "db_id", "description", "severity", "status", "start_date"
+                    "id",
+                    "db_id",
+                    "description",
+                    "severity",
+                    "status",
+                    "start_date",
+                    "start_time",
                 )
                 .distinct()
             )
