@@ -34,6 +34,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
             "profile_picture",
             "is_tenant",
             "is_admin",
+            "company_name",
             "created_at",
             "updated_at",
             "company_name",
