@@ -233,16 +233,58 @@ class TestView(APIView):
 #             )
 
 
+# class GetTenantAssetsList(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             # Step 1: Get the current tenant (fast lookup)
+#             tenant = Tenant.objects.select_related("tenant").get(tenant=request.user)
+
+#             # Step 2: Get all related event collectors from mappings
+#             collector_ids = (
+#                 TenantQradarMapping.objects.filter(tenant=tenant)
+#                 .prefetch_related("event_collectors")
+#                 .values_list("event_collectors__id", flat=True)
+#             )
+
+#             if not collector_ids:
+#                 return Response(
+#                     {"detail": "No Event Collectors mapped to this tenant."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             # Step 3: Filter assets
+#             assets = IBMQradarAssests.objects.filter(
+#                 event_collector_id__in=collector_ids
+#             ).select_related("event_collector", "log_source_type")
+
+#             # Step 4: Pagination
+#             paginator = PageNumberPagination()
+#             paginator.page_size = PaginationConstants.PAGE_SIZE
+#             result_page = paginator.paginate_queryset(assets, request)
+
+#             # Step 5: Serialize and return
+#             serializer = IBMQradarAssestsSerializer(result_page, many=True)
+#             return paginator.get_paginated_response(serializer.data)
+
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
     def get(self, request):
         try:
-            # Step 1: Get the current tenant (fast lookup)
+            # Step 1: Get current tenant
             tenant = Tenant.objects.select_related("tenant").get(tenant=request.user)
 
-            # Step 2: Get all related event collectors from mappings
+            # Step 2: Get mapped collector IDs
             collector_ids = (
                 TenantQradarMapping.objects.filter(tenant=tenant)
                 .prefetch_related("event_collectors")
@@ -255,17 +297,37 @@ class GetTenantAssetsList(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            # Step 3: Filter assets
-            assets = IBMQradarAssests.objects.filter(
-                event_collector_id__in=collector_ids
-            ).select_related("event_collector", "log_source_type")
+            # Step 3: Parse date filters
+            start_date_str = request.query_params.get("start_date")
+            end_date_str = request.query_params.get("end_date")
+            start_date = parse_date(start_date_str) if start_date_str else None
+            end_date = parse_date(end_date_str) if end_date_str else None
 
-            # Step 4: Pagination
+            if start_date and end_date and start_date > end_date:
+                return Response(
+                    {"error": "start_date cannot be greater than end_date."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Step 4: Filter assets
+            filters = Q(event_collector_id__in=collector_ids)
+            if start_date:
+                filters &= Q(creation_date_converted__gte=start_date)
+            if end_date:
+                filters &= Q(creation_date_converted__lte=end_date)
+
+            assets = (
+                IBMQradarAssests.objects.filter(filters)
+                .select_related("event_collector", "log_source_type")
+                .order_by("-creation_date_converted")
+            )
+
+            # Step 5: Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
             result_page = paginator.paginate_queryset(assets, request)
 
-            # Step 5: Serialize and return
+            # Step 6: Serialization
             serializer = IBMQradarAssestsSerializer(result_page, many=True)
             return paginator.get_paginated_response(serializer.data)
 
