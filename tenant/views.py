@@ -331,8 +331,15 @@ class TenantITSMTicketsView(APIView):
                 return Response(
                     {"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400
                 )
-
-        tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
+            tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
+        else:
+            # No filtering needed, just order in queryset
+            tickets = list(tickets)
+            tickets.sort(
+                key=lambda t: parse_ticket_date(t) or datetime.min.date(), reverse=True
+            )
+            # tickets = tickets.order_by("creation_date")
+        # tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
         # Pagination
         paginator = PageNumberPagination()
         paginator.page_size = PaginationConstants.PAGE_SIZE
