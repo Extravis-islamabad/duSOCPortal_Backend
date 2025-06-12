@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from django.db import models
 
 from authentication.models import User
@@ -188,8 +190,26 @@ class IBMQradarOffense(models.Model):
     categories = models.JSONField(default=list)  # Store as JSON array
     rules = models.JSONField(default=list)  # Store as JSON array
 
+    start_date = models.DateField(null=True, blank=True)
+    last_updated_date = models.DateField(null=True, blank=True)
+    last_persisted_date = models.DateField(null=True, blank=True)
+    first_persisted_date = models.DateField(null=True, blank=True)
+
     class Meta:
         db_table = "du_ibm_qradar_offenses"
+
+    def save(self, *args, **kwargs):
+        self.start_date = datetime.utcfromtimestamp(self.start_time / 1000).date()
+        self.last_updated_date = datetime.utcfromtimestamp(
+            self.last_updated_time / 1000
+        ).date()
+        self.last_persisted_date = datetime.utcfromtimestamp(
+            self.last_persisted_time / 1000
+        ).date()
+        self.first_persisted_date = datetime.utcfromtimestamp(
+            self.first_persisted_time / 1000
+        ).date()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Offense {self.db_id} - {self.description}"
