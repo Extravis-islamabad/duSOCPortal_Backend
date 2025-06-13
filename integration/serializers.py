@@ -207,6 +207,7 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
     siem_subtype_text = serializers.SerializerMethodField()
     soar_subtype_text = serializers.SerializerMethodField()
     itsm_subtype_text = serializers.SerializerMethodField()
+    threat_intelligence_subtype_text = serializers.SerializerMethodField()
     modified_by = serializers.SerializerMethodField()
     modified_by_id = serializers.SerializerMethodField()
     tenant_count = serializers.SerializerMethodField()
@@ -227,6 +228,8 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
             "soar_subtype_text",
             "itsm_subtype",
             "itsm_subtype_text",
+            "threat_intelligence_subtype",
+            "threat_intelligence_subtype_text",
             "instance_name",
             "credentials",
             "tenant_count",
@@ -256,6 +259,15 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
         return (
             dict(ItsmSubTypes.choices).get(obj.itsm_subtype)
             if obj.itsm_subtype
+            else None
+        )
+
+    def get_threat_intelligence_subtype_text(self, obj):
+        return (
+            dict(ThreatIntelligenceSubTypes.choices).get(
+                obj.threat_intelligence_subtype
+            )
+            if obj.threat_intelligence_subtype
             else None
         )
 
