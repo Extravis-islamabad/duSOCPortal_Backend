@@ -107,7 +107,9 @@ class UserLoginAPIView(APIView):
         try:
             # user = User.objects.filter(Q(username=username) | Q(email=username)).first()
             user = User.objects.filter(
-                Q(username__iexact=username) | Q(email__iexact=username)
+                Q(username__iexact=username) | Q(email__iexact=username),
+                is_active=True,
+                is_deleted=False,
             ).first()
             if user is None:
                 return Response(
@@ -371,8 +373,8 @@ class LDAPUsersAPIView(APIView):
 
 
 class LDAPGroupListView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsAdminUser]
 
     def get(self, request):
         try:
