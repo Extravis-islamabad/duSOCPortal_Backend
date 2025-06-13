@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from authentication.models import User
 from authentication.permissions import IsAdminUser
 from common.constants import PaginationConstants
 from tenant.cortex_soar_tasks import sync_soar_data
@@ -141,6 +142,33 @@ class TenantUpdateAPIView(APIView):
         return Response(serializer.errors, status=400)
 
 
+class TenantDeleteAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def delete(self, request, tenant_id):
+        try:
+            tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found"}, status=404)
+
+        company_name = tenant.tenant.company_name
+        if not company_name:
+            return Response(
+                {"error": "Company name is missing for the tenant."}, status=400
+            )
+
+        # Update all users with same company name
+        User.objects.filter(company_name=company_name).update(
+            is_deleted=True, is_active=False
+        )
+
+        return Response(
+            {"message": f"Users under company '{company_name}' marked as deleted."},
+            status=200,
+        )
+
+
 class TenantDetailAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
@@ -187,36 +215,6 @@ class AllTenantsAPIView(APIView):
         )
 
         return paginator.get_paginated_response(serializer.data)
-
-
-class TenantDeleteAPIView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
-
-    def delete(self, request, tenant_id):
-        logger.info(
-            f"Tenant delete request by user: {request.user.username} for tenant_id: {tenant_id}"
-        )
-        try:
-            # Only allow the creator to delete their tenant
-            tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
-        except Tenant.DoesNotExist:
-            logger.warning(
-                f"Tenant with id {tenant_id} not found or not owned by {request.user.username}"
-            )
-            return Response(
-                {
-                    "error": "Tenant not found or you do not have permission to delete it."
-                },
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        tenant_username = tenant.tenant.username if tenant.tenant else "Unnamed Tenant"
-        tenant.delete()
-        logger.success(f"Tenant deleted: {tenant_username} (ID: {tenant_id})")
-        return Response(
-            {"message": "Tenant deleted successfully."}, status=status.HTTP_200_OK
-        )
 
 
 class SyncIBMQradarDataAPIView(APIView):
