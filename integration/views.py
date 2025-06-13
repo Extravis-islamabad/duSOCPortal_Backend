@@ -1,3 +1,4 @@
+from cryptography.fernet import Fernet
 from loguru import logger
 from rest_framework import serializers, status
 from rest_framework.response import Response
@@ -5,6 +6,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser
+from common.constants import EncryptedKeyConstants
 from common.modules.cortex_soar import CortexSOAR
 from common.modules.cyware import Cyware
 from common.modules.ibm_qradar import IBMQradar
@@ -195,6 +197,37 @@ class GetAllIntegrationsAPIView(APIView):
         integrations = Integration.objects.all().prefetch_related("credentials")
         serializer = GetIntegrationSerializer(integrations, many=True)
         return Response(serializer.data)
+
+
+class DecryptCredentialsAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        fernet = Fernet(EncryptedKeyConstants.ENCRYPTED_KEY.encode())
+
+        encrypted_fields = {
+            "username": request.data.get("username"),
+            "password": request.data.get("password"),
+            "api_key": request.data.get("api_key"),
+            "access_key": request.data.get("access_key"),
+            "secret_key": request.data.get("secret_key"),
+            "base_url": request.data.get("base_url"),
+            "ip_address": request.data.get("ip_address"),
+        }
+
+        result = {}
+
+        for field, encrypted_value in encrypted_fields.items():
+            if encrypted_value:
+                try:
+                    result[field] = fernet.decrypt(encrypted_value.encode()).decode()
+                except Exception as e:
+                    result[field] = f"[DECRYPTION FAILED] {str(e)}"
+            else:
+                result[field] = None
+
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class UpdateCredentialView(APIView):

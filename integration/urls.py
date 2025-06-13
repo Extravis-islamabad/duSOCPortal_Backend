@@ -2,6 +2,7 @@ from django.urls import path
 
 from integration.views import (
     CredentialTypesListAPIView,
+    DecryptCredentialsAPIView,
     GetAllIntegrationsAPIView,
     GetIntegrationInstanceListView,
     IntegrationCreateAPIView,
@@ -32,6 +33,7 @@ urlpatterns = [
         GetAllIntegrationsAPIView.as_view(),
         name="get-all-integrations",
     ),
+    path("decrypt/", DecryptCredentialsAPIView.as_view(), name="decrypt-credentials"),
     path(
         "credentials/<int:pk>/update/",
         UpdateCredentialView.as_view(),
