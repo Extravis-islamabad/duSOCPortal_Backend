@@ -219,6 +219,29 @@ class AllTenantsAPIView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
+class NonActiveTenantsAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        logger.info(f"All tenants request by user: {request.user.username}")
+        tenants = Tenant.objects.filter(
+            created_by=request.user, tenant__is_active=False, tenant__is_deleted=True
+        ).order_by("-created_at")
+
+        paginator = PageNumberPagination()
+        paginator.page_size = PaginationConstants.PAGE_SIZE
+
+        paginated_tenants = paginator.paginate_queryset(tenants, request)
+        serializer = AllTenantDetailSerializer(paginated_tenants, many=True)
+
+        logger.success(
+            f"Retrieved {tenants.count()} tenants for user: {request.user.username}"
+        )
+
+        return paginator.get_paginated_response(serializer.data)
+
+
 class SyncIBMQradarDataAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
