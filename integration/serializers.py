@@ -1,6 +1,8 @@
+from cryptography.fernet import Fernet
 from django.core.validators import validate_ipv46_address
 from rest_framework import serializers
 
+from common.constants import EncryptedKeyConstants
 from common.modules.cortex_soar import CortexSOAR
 from common.modules.cyware import Cyware
 from common.modules.ibm_qradar import IBMQradar
@@ -16,6 +18,8 @@ from .models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
+
+fernet = Fernet(EncryptedKeyConstants.ENCRYPTED_KEY.encode())
 
 
 class IntegrationCredentialsSerializer(serializers.ModelSerializer):
@@ -58,6 +62,23 @@ class GetIntegrationCredentialsSerializer(serializers.ModelSerializer):
 
     def get_credential_type_text(self, obj):
         return dict(CredentialTypes.choices).get(obj.credential_type)
+
+    def encrypt(self, value):
+        return fernet.encrypt(value.encode()).decode() if value else None
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        for field in [
+            "password",
+            "api_key",
+            "access_key",
+            "secret_key",
+            "base_url",
+            "ip_address",
+            "username",
+        ]:
+            rep[field] = self.encrypt(rep.get(field)) if rep.get(field) else None
+        return rep
 
 
 class IntegrationSerializer(serializers.ModelSerializer):

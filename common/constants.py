@@ -154,3 +154,10 @@ class CywareConstants:
     CUSTOM_FIELDS_ENDPOINT = "api/csap/v1/list_additional_fields/"
     CATEGORIES_ENDPOINT = "api/csap/v1/list_category/"
     ALERT_DETAIL_ENDPOINT = "api/csap/v1/get_alert_detail/"
+
+
+class EncryptedKeyConstants:
+    ENCRYPTED_KEY = os.getenv("ENCRYPTED_KEY", None)
+    if ENCRYPTED_KEY is None:
+        logger.warning("Encrypted key is not set...")
+        raise ValueError("Encrypted key is not set...")
