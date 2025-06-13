@@ -202,7 +202,9 @@ class AllTenantsAPIView(APIView):
 
     def get(self, request):
         logger.info(f"All tenants request by user: {request.user.username}")
-        tenants = Tenant.objects.filter(created_by=request.user).order_by("-created_at")
+        tenants = Tenant.objects.filter(
+            created_by=request.user, tenant__is_active=True, tenant__is_deleted=False
+        ).order_by("-created_at")
 
         paginator = PageNumberPagination()
         paginator.page_size = PaginationConstants.PAGE_SIZE
