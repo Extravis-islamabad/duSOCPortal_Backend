@@ -47,8 +47,11 @@ class GetIntegrationCredentialsSerializer(serializers.ModelSerializer):
             "credential_type",
             "credential_type_text",
             "username",
-            # "password",
-            # "api_key",
+            "password",
+            "api_key",
+            "base_url",
+            "access_key",
+            "secret_key",
             "ip_address",
             "port",
         ]
