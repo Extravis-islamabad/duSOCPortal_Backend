@@ -285,6 +285,88 @@ class GetTenantAssetsList(APIView):
             )
 
 
+# class TenantITSMTicketsView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         itsm_integrations = tenant.integrations.filter(
+#             integration_type=IntegrationTypes.ITSM_INTEGRATION,
+#             itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
+#             status=True,
+#         )
+#         if not itsm_integrations.exists():
+#             return Response(
+#                 {"error": "No active ITSM integration configured for tenant."},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+#         itsm_tenant_ids = tenant.itsm_tenants.values_list("id", flat=True)
+
+#         tickets = DuITSMFinalTickets.objects.filter(itsm_tenant__in=itsm_tenant_ids)
+
+#         # Parse start_date and end_date from query params
+#         start_date_str = request.query_params.get("start_date")
+#         end_date_str = request.query_params.get("end_date")
+
+#         date_format_in_db = "%b %d, %Y %I:%M %p"  # e.g., "Apr 17, 2025 10:42 PM"
+#         date_format_filter = "%Y-%m-%d"  # e.g., "2025-04-17"
+
+#         def parse_ticket_date(ticket):
+#             try:
+#                 return datetime.strptime(ticket.creation_date, date_format_in_db).date()
+#             except Exception:
+#                 return None
+
+#         if start_date_str:
+#             try:
+#                 start_date = datetime.strptime(
+#                     start_date_str, date_format_filter
+#                 ).date()
+#                 tickets = [
+#                     t
+#                     for t in tickets
+#                     if (dt := parse_ticket_date(t)) and dt >= start_date
+#                 ]
+#             except ValueError:
+#                 return Response(
+#                     {"error": "Invalid start_date format. Use YYYY-MM-DD."}, status=400
+#                 )
+
+#         if end_date_str:
+#             try:
+#                 end_date = datetime.strptime(end_date_str, date_format_filter).date()
+#                 tickets = [
+#                     t
+#                     for t in tickets
+#                     if (dt := parse_ticket_date(t)) and dt <= end_date
+#                 ]
+#             except ValueError:
+#                 return Response(
+#                     {"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400
+#                 )
+#             tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
+#         else:
+#             # No filtering needed, just order in queryset
+#             tickets = list(tickets)
+#             tickets.sort(
+#                 key=lambda t: parse_ticket_date(t) or datetime.min.date(), reverse=True
+#             )
+#             # tickets = tickets.order_by("creation_date")
+#         # tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
+#         # Pagination
+#         paginator = PageNumberPagination()
+#         paginator.page_size = PaginationConstants.PAGE_SIZE
+#         paginated_tickets = paginator.paginate_queryset(tickets, request)
+
+#         serializer = DuITSMTicketsSerializer(paginated_tickets, many=True)
+#         return paginator.get_paginated_response(serializer.data)
 class TenantITSMTicketsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -311,9 +393,14 @@ class TenantITSMTicketsView(APIView):
 
         tickets = DuITSMFinalTickets.objects.filter(itsm_tenant__in=itsm_tenant_ids)
 
-        # Parse start_date and end_date from query params
+        # Parse query parameters for filters
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
+        id_filter = request.query_params.get("id")
+        name_filter = request.query_params.get("name")
+        subject_filter = request.query_params.get("subject")
+        status_filter = request.query_params.get("status")
+        created_by_filter = request.query_params.get("created_by")
 
         date_format_in_db = "%b %d, %Y %I:%M %p"  # e.g., "Apr 17, 2025 10:42 PM"
         date_format_filter = "%Y-%m-%d"  # e.g., "2025-04-17"
@@ -324,14 +411,36 @@ class TenantITSMTicketsView(APIView):
             except Exception:
                 return None
 
+        # Convert tickets to a list for in-memory filtering
+        tickets = list(tickets)
+
+        # Apply filters
+        if id_filter:
+            try:
+                id_value = int(id_filter)
+                tickets = [t for t in tickets if t.id == id_value]
+            except ValueError:
+                return Response(
+                    {"error": "Invalid id format. Must be an integer."}, status=400
+                )
+
+        if name_filter:
+            tickets = [t for t in tickets if name_filter.lower() in t.account_name.lower()]
+
+        if subject_filter:
+            tickets = [t for t in tickets if subject_filter.lower() in t.subject.lower()]
+
+        if status_filter:
+            tickets = [t for t in tickets if status_filter.lower() == t.status.lower()]
+
+        if created_by_filter:
+            tickets = [t for t in tickets if created_by_filter.lower() in t.created_by_name.lower()]
+
         if start_date_str:
             try:
-                start_date = datetime.strptime(
-                    start_date_str, date_format_filter
-                ).date()
+                start_date = datetime.strptime(start_date_str, date_format_filter).date()
                 tickets = [
-                    t
-                    for t in tickets
+                    t for t in tickets
                     if (dt := parse_ticket_date(t)) and dt >= start_date
                 ]
             except ValueError:
@@ -343,23 +452,19 @@ class TenantITSMTicketsView(APIView):
             try:
                 end_date = datetime.strptime(end_date_str, date_format_filter).date()
                 tickets = [
-                    t
-                    for t in tickets
+                    t for t in tickets
                     if (dt := parse_ticket_date(t)) and dt <= end_date
                 ]
             except ValueError:
                 return Response(
                     {"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400
                 )
-            tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
-        else:
-            # No filtering needed, just order in queryset
-            tickets = list(tickets)
-            tickets.sort(
-                key=lambda t: parse_ticket_date(t) or datetime.min.date(), reverse=True
-            )
-            # tickets = tickets.order_by("creation_date")
-        # tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
+
+        # Sort tickets by creation_date (descending)
+        tickets.sort(
+            key=lambda t: parse_ticket_date(t) or datetime.min.date(), reverse=True
+        )
+
         # Pagination
         paginator = PageNumberPagination()
         paginator.page_size = PaginationConstants.PAGE_SIZE
