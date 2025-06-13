@@ -279,6 +279,12 @@ class TestIntegrationAPIView(APIView):
                 or data.get("threat_intelligence_subtype")
             )
 
+            if subtype is None:
+                return Response(
+                    {"error": "Missing required fields in the request"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             test_integration_connection(
                 integration_type, subtype, credentials_type, credentials
             )
