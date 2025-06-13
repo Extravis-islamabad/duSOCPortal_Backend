@@ -4,9 +4,9 @@ services:
   backend:
     image: backend-api
     container_name: duSOC_Backend_Container
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     command: ["sh", "./start_server.sh"]
     ports:
       - "8000:8000"
