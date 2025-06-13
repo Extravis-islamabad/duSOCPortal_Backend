@@ -14,7 +14,13 @@ services:
     depends_on:
       # db:
       #   condition: service_healthy
+      celery:
+        condition: service_started
       redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      celery-beat:
         condition: service_started
     volumes:
       - .:/app  # Optional: for live sync with host
