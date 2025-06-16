@@ -2,40 +2,35 @@ from datetime import datetime
 
 from django.core.management.base import BaseCommand
 
-from tenant.models import IBMQradarAssests  # Adjust if needed
+from tenant.models import IBMQradarOffense
 
 
 class Command(BaseCommand):
-    help = "Update converted date fields in IBMQradarAssests"
+    help = "Populate *_date fields for IBMQradarOffense model"
 
     def handle(self, *args, **kwargs):
-        def convert(ts_str):
+        offenses = IBMQradarOffense.objects.all()
+        updated = 0
+        for offense in offenses:
             try:
-                return datetime.utcfromtimestamp(int(ts_str) / 1000).date()
-            except Exception:
-                return None
-
-        updated_count = 0
-
-        for asset in IBMQradarAssests.objects.all():
-            updated = False
-
-            c = convert(asset.creation_date)
-            m = convert(asset.modified_date)
-            last_e = convert(asset.last_event_time)
-
-            if c and asset.creation_date_converted != c:
-                asset.creation_date_converted = c
-                updated = True
-            if m and asset.modified_date_converted != m:
-                asset.modified_date_converted = m
-                updated = True
-            if last_e and asset.last_event_date_converted != last_e:
-                asset.last_event_date_converted = last_e
-                updated = True
-
-            if updated:
-                asset.save()
-                updated_count += 1
-
-        self.stdout.write(self.style.SUCCESS(f"Updated {updated_count} assets."))
+                if offense.start_time:
+                    offense.start_date = datetime.utcfromtimestamp(
+                        offense.start_time / 1000
+                    ).date()
+                if offense.last_updated_time:
+                    offense.last_updated_date = datetime.utcfromtimestamp(
+                        offense.last_updated_time / 1000
+                    ).date()
+                if offense.last_persisted_time:
+                    offense.last_persisted_date = datetime.utcfromtimestamp(
+                        offense.last_persisted_time / 1000
+                    ).date()
+                if offense.first_persisted_time:
+                    offense.first_persisted_date = datetime.utcfromtimestamp(
+                        offense.first_persisted_time / 1000
+                    ).date()
+                offense.save()
+                updated += 1
+            except Exception as e:
+                self.stderr.write(f"Error processing offense {offense.id}: {e}")
+        self.stdout.write(self.style.SUCCESS(f"Updated {updated} offenses."))
