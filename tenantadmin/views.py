@@ -62,13 +62,20 @@ class TenantUpdateAPIView(APIView):
             tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found"}, status=404)
+        company_name = tenant.tenant.company_name
 
         serializer = TenantUpdateSerializer(
             tenant, data=request.data, partial=True, context={"request": request}
         )
+        related_tenants = Tenant.objects.filter(tenant__company_name=company_name)
+        data = [{"tenant_id": t.id} for t in related_tenants]
+
         if serializer.is_valid():
             serializer.save()
-            return Response({"message": "Tenant updated successfully"})
+            return Response(
+                {"message": "Tenant updated successfully", "tenants": data},
+                status=status.HTTP_200_OK,
+            )
         return Response(serializer.errors, status=400)
 
 
