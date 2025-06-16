@@ -468,9 +468,11 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             return [
                 {
                     "qradar_tenant_id": mapping.qradar_tenant.id,
-                    "event_collector_ids": list(
-                        mapping.event_collectors.values_list("id", flat=True)
-                    ),
+                    "qradar_tenant_name": mapping.qradar_tenant.name,
+                    "event_collectors": [
+                        {"id": collector.id, "name": collector.name}
+                        for collector in mapping.event_collectors.all()
+                    ],
                 }
                 for mapping in mappings
             ]
