@@ -374,6 +374,7 @@ class Tenant(models.Model):
     soar_tenants = models.ManyToManyField(DuCortexSOARTenants, blank=True)
     is_defualt_threat_intel = models.BooleanField(default=True)
     phone_number = models.CharField(max_length=20, blank=True)
+    ldap_group = models.CharField(max_length=100, blank=True)
     country = models.CharField(max_length=2, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
