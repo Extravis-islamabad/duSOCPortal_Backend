@@ -335,6 +335,8 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
 
 
 class TenantDetailSerializer(serializers.ModelSerializer):
+    itsm_tenants = serializers.SerializerMethodField()
+    soar_tenants = serializers.SerializerMethodField()
     username = serializers.CharField(source="tenant.username", read_only=True)
     email = serializers.EmailField(source="tenant.email", read_only=True)
     company_name = serializers.CharField(source="tenant.company_name", read_only=True)
@@ -387,7 +389,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "tenant_user",
             "role_info",
             "related_tenants",
-            "industry",  # ✅ new field
+            "industry",
         ]
 
     def get_permissions(self, obj):
@@ -577,6 +579,24 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             )
 
         return result
+
+    def get_itsm_tenants(self, obj):
+        try:
+            return [
+                {"id": tenant.id, "name": tenant.name}
+                for tenant in obj.itsm_tenants.all()
+            ]
+        except Exception:
+            return []
+
+    def get_soar_tenants(self, obj):
+        try:
+            return [
+                {"id": tenant.id, "name": tenant.name}
+                for tenant in obj.soar_tenants.all()
+            ]
+        except Exception:
+            return []
 
 
 class TenantPermissionSerializer(serializers.ModelSerializer):
