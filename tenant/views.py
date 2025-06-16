@@ -32,6 +32,7 @@ from integration.models import (
     SiemSubTypes,
     SoarSubTypes,
 )
+from tenant.cortex_soar_tasks import sync_requests_for_soar
 from tenant.models import (
     Alert,
     DUCortexSOARIncidentFinalModel,
@@ -62,7 +63,6 @@ from tenant.serializers import (
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
 )
-from tenant.threat_intelligence_tasks import sync_threat_alert_details
 
 
 class PermissionChoicesAPIView(APIView):
@@ -199,7 +199,8 @@ class TestView(APIView):
     def get(self, request):
         # sync_threat_intel.delay()
         # sync_threat_intel_for_tenants.delay()
-        sync_threat_alert_details.delay()
+        sync_requests_for_soar.delay()
+        # sync_threat_alert_details.delay()
         # with Cyware(
         #     base_url="https://du.cyware.com",
         #     access_key="c54d63c9-8c08-4921-adee-8a83a2112104",
