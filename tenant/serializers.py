@@ -6,7 +6,14 @@ from rest_framework import serializers
 
 from authentication.models import User
 from common.modules.cyware import Cyware
-from integration.models import Integration
+from integration.models import (
+    Integration,
+    IntegrationTypes,
+    ItsmSubTypes,
+    SiemSubTypes,
+    SoarSubTypes,
+    ThreatIntelligenceSubTypes,
+)
 
 from .models import (
     Alert,
@@ -317,6 +324,136 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
             return None
 
 
+# class TenantDetailSerializer(serializers.ModelSerializer):
+#     username = serializers.CharField(source="tenant.username", read_only=True)
+#     email = serializers.EmailField(source="tenant.email", read_only=True)
+#     company_name = serializers.CharField(source="tenant.company_name", read_only=True)
+#     permissions = serializers.SerializerMethodField()
+#     tenant_admin = serializers.SerializerMethodField()
+#     created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
+#     role = serializers.SerializerMethodField()
+#     total_incidents = serializers.SerializerMethodField()
+#     active_incidents = serializers.SerializerMethodField()
+#     tickets_count = serializers.SerializerMethodField()
+#     sla = serializers.SerializerMethodField()
+#     asset_count = serializers.SerializerMethodField()
+#     tenant_data = serializers.SerializerMethodField()
+#     qradar_tenants = serializers.SerializerMethodField()
+
+#     class Meta:
+#         model = Tenant
+#         fields = [
+#             "id",
+#             "username",
+#             "email",
+#             "company_name",
+#             "phone_number",
+#             "country",
+#             "created_at",
+#             "updated_at",
+#             "permissions",
+#             "asset_count",
+#             "total_incidents",
+#             "active_incidents",
+#             "tickets_count",
+#             "sla",
+#             "tenant_admin",
+#             "created_by_id",
+#             "role",
+#             "tenant_data",
+#             "qradar_tenants",
+#             "integrations",
+#             "itsm_tenants",
+#             "soar_tenants",
+#             "is_defualt_threat_intel",
+#         ]
+
+#     def get_permissions(self, obj):
+#         try:
+#             role = obj.roles.get()
+#             return [
+#                 {"id": perm.permission, "name": perm.permission_text}
+#                 for perm in role.role_permissions.all()
+#             ]
+#         except Exception as e:
+#             logger.error(e)
+#             return []
+
+#     def get_role(self, obj):
+#         try:
+#             role = obj.roles.get()
+#             return role.get_role_type_display()
+#         except Exception:
+#             return None
+
+#     def get_tenant_admin(self, obj):
+#         if obj.tenant:
+#             return obj.created_by.username if obj.created_by else None
+#         return None
+
+#     def get_asset_count(self, obj):
+#         try:
+#             collector_ids = TenantQradarMapping.objects.filter(tenant=obj).values_list(
+#                 "event_collectors__id", flat=True
+#             )
+#             asset_count = IBMQradarAssests.objects.filter(
+#                 event_collector__id__in=collector_ids
+#             ).aggregate(totalAssets=Count("id"))
+#             return asset_count["totalAssets"] or 0
+#         except Exception:
+#             return 0
+
+#     def get_active_incidents(self, obj):
+#         return self.get_total_incidents(obj)
+
+#     def get_sla(self, obj):
+#         try:
+#             return obj.sla.name
+#         except Exception:
+#             return 0
+
+#     def get_total_incidents(self, obj):
+#         try:
+#             soar_tenants = obj.soar_tenants.all()
+#             return DUCortexSOARIncidentFinalModel.objects.filter(
+#                 cortex_soar_tenant__in=soar_tenants
+#             ).count()
+#         except Exception:
+#             return 0
+
+#     def get_tickets_count(self, obj):
+#         try:
+#             itsm_tenants = obj.itsm_tenants.all()
+#             return DuITSMFinalTickets.objects.filter(
+#                 itsm_tenant__in=itsm_tenants
+#             ).count()
+#         except Exception:
+#             return 0
+
+#     def get_tenant_data(self, obj):
+#         return {
+#             "tenant_id": obj.tenant.id if obj.tenant else None,
+#             "tenant_username": obj.tenant.username if obj.tenant else None,
+#             "tenant_email": obj.tenant.email if obj.tenant else None,
+#             "tenant_company_name": obj.tenant.company_name if obj.tenant else None,
+#         }
+
+#     def get_qradar_tenants(self, obj):
+#         try:
+#             mappings = TenantQradarMapping.objects.filter(tenant=obj)
+#             return [
+#                 {
+#                     "qradar_tenant_id": mapping.qradar_tenant.id,
+#                     "event_collector_ids": list(
+#                         mapping.event_collectors.values_list("id", flat=True)
+#                     ),
+#                 }
+#                 for mapping in mappings
+#             ]
+#         except Exception:
+#             return []
+
+
 class TenantDetailSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="tenant.username", read_only=True)
     email = serializers.EmailField(source="tenant.email", read_only=True)
@@ -332,6 +469,8 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     asset_count = serializers.SerializerMethodField()
     tenant_data = serializers.SerializerMethodField()
     qradar_tenants = serializers.SerializerMethodField()
+    integrations = serializers.SerializerMethodField()
+    ldap_group = serializers.CharField(read_only=True)
 
     class Meta:
         model = Tenant
@@ -359,6 +498,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "itsm_tenants",
             "soar_tenants",
             "is_defualt_threat_intel",
+            "ldap_group",
         ]
 
     def get_permissions(self, obj):
@@ -368,8 +508,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
                 {"id": perm.permission, "name": perm.permission_text}
                 for perm in role.role_permissions.all()
             ]
-        except Exception as e:
-            logger.error(e)
+        except Exception:
             return []
 
     def get_role(self, obj):
@@ -391,8 +530,8 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             )
             asset_count = IBMQradarAssests.objects.filter(
                 event_collector__id__in=collector_ids
-            ).aggregate(totalAssets=Count("id"))
-            return asset_count["totalAssets"] or 0
+            ).count()
+            return asset_count
         except Exception:
             return 0
 
@@ -445,6 +584,39 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             ]
         except Exception:
             return []
+
+    def get_integrations(self, obj):
+        integrations = obj.integrations.all()
+        result = []
+        for integration in integrations:
+            data = {
+                "id": integration.id,
+                "instance_name": integration.instance_name,
+                "integration_type": integration.integration_type,
+                "integration_type_text": IntegrationTypes(
+                    integration.integration_type
+                ).label,
+                "siem_subtype": integration.siem_subtype,
+                "siem_subtype_text": SiemSubTypes(integration.siem_subtype).label
+                if integration.siem_subtype
+                else None,
+                "soar_subtype": integration.soar_subtype,
+                "soar_subtype_text": SoarSubTypes(integration.soar_subtype).label
+                if integration.soar_subtype
+                else None,
+                "itsm_subtype": integration.itsm_subtype,
+                "itsm_subtype_text": ItsmSubTypes(integration.itsm_subtype).label
+                if integration.itsm_subtype
+                else None,
+                "threat_intelligence_subtype": integration.threat_intelligence_subtype,
+                "threat_intelligence_subtype_text": ThreatIntelligenceSubTypes(
+                    integration.threat_intelligence_subtype
+                ).label
+                if integration.threat_intelligence_subtype
+                else None,
+            }
+            result.append(data)
+        return result
 
 
 class TenantPermissionSerializer(serializers.ModelSerializer):
