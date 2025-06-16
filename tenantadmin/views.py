@@ -169,6 +169,27 @@ class TenantDeleteAPIView(APIView):
         )
 
 
+class ReactivateTenantUsersAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, tenant_id):
+        try:
+            tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found"}, status=404)
+
+        # Reactivate the tenant's user account
+        User.objects.filter(id=tenant.tenant.id).update(
+            is_deleted=False, is_active=True
+        )
+
+        return Response(
+            {"message": f"User for tenant ID '{tenant_id}' reactivated."},
+            status=200,
+        )
+
+
 class TenantDetailAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]

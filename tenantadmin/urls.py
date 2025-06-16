@@ -3,6 +3,7 @@ from django.urls import path
 from tenantadmin.views import (
     AllTenantsAPIView,
     NonActiveTenantsAPIView,
+    ReactivateTenantUsersAPIView,
     SyncCortexSOARDataAPIView,
     SyncIBMQradarDataAPIView,
     SyncITSMDataAPIView,
@@ -34,6 +35,11 @@ urlpatterns = [
         "delete_tenant/<int:tenant_id>/",
         TenantDeleteAPIView.as_view(),
         name="tenant-delete",
+    ),
+    path(
+        "reactivate_tenant/<int:tenant_id>/",
+        ReactivateTenantUsersAPIView.as_view(),
+        name="reactivate-tenant",
     ),
     path("sync_qradar/", SyncIBMQradarDataAPIView.as_view(), name="sync-ibm-qradar"),
     path("sync_soar/", SyncCortexSOARDataAPIView.as_view(), name="sync-cortex-soar"),
