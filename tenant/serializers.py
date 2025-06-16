@@ -504,7 +504,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     def get_logo_url(self, obj):
         user = obj.tenant
         if user and user.profile_picture and hasattr(user.profile_picture, "url"):
-            return user.profile_picture
+            return self.context["request"].build_absolute_uri(user.profile_picture.url)
         return None
 
     def get_tenant_user(self, obj):

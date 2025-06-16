@@ -140,7 +140,7 @@ class TenantDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = TenantDetailSerializer(tenant)
+        serializer = TenantDetailSerializer(tenant, context={"request": request})
         logger.success(
             f"Tenant details retrieved: {tenant.tenant.username} (ID: {tenant.id})"
         )
