@@ -246,12 +246,14 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
     asset_count = serializers.SerializerMethodField()
     created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
     role = serializers.SerializerMethodField()
+    company_name = serializers.CharField(source="tenant.company_name", read_only=True)
 
     class Meta:
         model = Tenant
         fields = [
             "id",
             "username",
+            "company_name",
             "email",
             "phone_number",
             "created_at",
