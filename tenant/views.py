@@ -365,6 +365,7 @@ class GetTenantAssetsList(APIView):
 #         paginator.page_size = PaginationConstants.PAGE_SIZE
 #         paginated_tickets = paginator.paginate_queryset(tickets, request)
 
+
 #         serializer = DuITSMTicketsSerializer(paginated_tickets, many=True)
 #         return paginator.get_paginated_response(serializer.data)
 class TenantITSMTicketsView(APIView):
@@ -425,22 +426,33 @@ class TenantITSMTicketsView(APIView):
                 )
 
         if name_filter:
-            tickets = [t for t in tickets if name_filter.lower() in t.account_name.lower()]
+            tickets = [
+                t for t in tickets if name_filter.lower() in t.account_name.lower()
+            ]
 
         if subject_filter:
-            tickets = [t for t in tickets if subject_filter.lower() in t.subject.lower()]
+            tickets = [
+                t for t in tickets if subject_filter.lower() in t.subject.lower()
+            ]
 
         if status_filter:
             tickets = [t for t in tickets if status_filter.lower() == t.status.lower()]
 
         if created_by_filter:
-            tickets = [t for t in tickets if created_by_filter.lower() in t.created_by_name.lower()]
+            tickets = [
+                t
+                for t in tickets
+                if created_by_filter.lower() in t.created_by_name.lower()
+            ]
 
         if start_date_str:
             try:
-                start_date = datetime.strptime(start_date_str, date_format_filter).date()
+                start_date = datetime.strptime(
+                    start_date_str, date_format_filter
+                ).date()
                 tickets = [
-                    t for t in tickets
+                    t
+                    for t in tickets
                     if (dt := parse_ticket_date(t)) and dt >= start_date
                 ]
             except ValueError:
@@ -452,7 +464,8 @@ class TenantITSMTicketsView(APIView):
             try:
                 end_date = datetime.strptime(end_date_str, date_format_filter).date()
                 tickets = [
-                    t for t in tickets
+                    t
+                    for t in tickets
                     if (dt := parse_ticket_date(t)) and dt <= end_date
                 ]
             except ValueError:

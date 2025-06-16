@@ -477,6 +477,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         required=True,
         write_only=True,
     )
+    ldap_group = serializers.CharField(required=True, write_only=True)
     qradar_tenants = QradarTenantInputSerializer(
         many=True, required=False, write_only=True
     )
@@ -506,6 +507,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         model = Tenant
         fields = [
             "ldap_users",
+            "ldap_group",
             "phone_number",
             "country",
             "qradar_tenants",
@@ -530,6 +532,12 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"ldap_users": "At least one LDAP user is required"}
             )
+        ldap_group = data.get("ldap_group")
+        if not ldap_group:
+            raise serializers.ValidationError(
+                {"ldap_group": "At least one LDAP group is required"}
+            )
+
         existing_usernames = User.objects.filter(
             username__in=[u["username"] for u in ldap_users]
         ).values_list("username", flat=True)
@@ -601,6 +609,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
+        ldap_group = validated_data.pop("ldap_group")
         ldap_users = validated_data.pop("ldap_users")
         role_permissions = validated_data.pop("role_permissions", [])
         integration_ids = validated_data.pop("integration_ids", [])
@@ -634,6 +643,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 tenant = Tenant.objects.create(
                     tenant=user,
                     created_by=created_by,
+                    ldap_group=ldap_group,
                     is_defualt_threat_intel=is_defualt_threat_intel,
                     **validated_data,
                 )
