@@ -96,12 +96,14 @@ class Cyware:
         hashed = hmac.new(self.secret_key.encode(), to_sign.encode(), hashlib.sha1)
         return base64.b64encode(hashed.digest()).decode()
 
-    def get_alert_list(self, page: int = 1, page_size: int = 20):
+    def get_alert_list(
+        self, page: int = 1, page_size: int = 20, timeout=SSLConstants.TIMEOUT
+    ):
         params = self.params.copy()
         params.update({"page": page, "page_size": page_size})
         url = f"{self.base_url}/api/csap/v1/list_alert/?{urllib.parse.urlencode(params, doseq=True)}"
         try:
-            return requests.get(url, timeout=SSLConstants.TIMEOUT)
+            return requests.get(url, timeout=timeout)
         except Exception as e:
             logger.error(f"Failed to fetch alerts: {str(e)}")
 

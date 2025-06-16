@@ -71,7 +71,7 @@ class CortexSOAR:
         logger.info(f"CortexSOAR._get_accounts() took: {time.time() - start} seconds")
         return data
 
-    def _get_accounts(self):
+    def _get_accounts(self, timeout=SSLConstants.TIMEOUT):
         """
         Fetches the list of accounts from the CortexSOAR instance.
 
@@ -92,7 +92,7 @@ class CortexSOAR:
                 endpoint,
                 headers=self.headers,
                 verify=SSLConstants.VERIFY,
-                timeout=SSLConstants.TIMEOUT,
+                timeout=timeout,
             )
         except Exception as e:
             logger.error(f"CortexSOAR._get_accounts() failed with exception : {str(e)}")

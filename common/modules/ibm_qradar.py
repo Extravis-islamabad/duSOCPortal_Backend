@@ -85,7 +85,7 @@ class IBMQradar:
             return f"https://{self.ip_address}:{self.port}"
         return f"https://{self.ip_address}"
 
-    def test_integration(self):
+    def test_integration(self, timeout=SSLConstants.TIMEOUT):
         """
         Tests the integration with the IBM QRadar instance.
 
@@ -110,7 +110,7 @@ class IBMQradar:
                     self.password,
                 ),
                 verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=SSLConstants.TIMEOUT,
+                timeout=timeout,
             )
             if response.status_code != 200:
                 logger.warning(

@@ -88,7 +88,7 @@ class ITSM:
         logger.info(f"ITSM._get_accounts() took: {time.time() - start} seconds")
         return accounts
 
-    def _get_accounts(self):
+    def _get_accounts(self, timeout=SSLConstants.TIMEOUT):
         """
         Fetches the list of accounts from the ITSM instance.
 
@@ -129,7 +129,7 @@ class ITSM:
                     headers=self.headers,
                     params=params,
                     verify=SSLConstants.VERIFY,
-                    timeout=SSLConstants.TIMEOUT,
+                    timeout=timeout,
                 )
             except Exception as e:
                 logger.error(f"ITSM._get_accounts() failed with exception: {str(e)}")
