@@ -203,6 +203,16 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
                     )
 
             if is_defualt_threat_intel is False and threat_intelligence and base_url:
+                with Cyware(
+                    base_url=base_url,
+                    secret_key=secret_key,
+                    access_key=access_key,
+                ) as cyware:
+                    response = cyware.get_alert_list(timeout=5)
+                    if response.status_code != 200:
+                        raise serializers.ValidationError(
+                            "Cyware integration is not accessible."
+                        )
                 ti_obj, _ = ThreatIntelligenceTenant.objects.get_or_create(
                     base_url=base_url,
                     defaults={
