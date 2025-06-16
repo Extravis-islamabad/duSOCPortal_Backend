@@ -44,7 +44,7 @@ def test_integration_connection(
                 ip_address=credentials.get("ip_address"),
                 port=credentials.get("port"),
             ) as ibm_qradar:
-                if not ibm_qradar.test_integration():
+                if not ibm_qradar.test_integration(timeout=5):
                     raise serializers.ValidationError(
                         "QRadar integration is not accessible."
                     )
@@ -63,7 +63,7 @@ def test_integration_connection(
                 port=credentials.get("port"),
                 token=credentials.get("api_key"),
             ) as itsm:
-                if not itsm._get_accounts():
+                if not itsm._get_accounts(timeout=5):
                     raise serializers.ValidationError(
                         "ManageEngine integration is not accessible."
                     )
@@ -82,7 +82,7 @@ def test_integration_connection(
                 port=credentials.get("port"),
                 token=credentials.get("api_key"),
             ) as soar:
-                if not soar._get_accounts():
+                if not soar._get_accounts(timeout=5):
                     raise serializers.ValidationError(
                         "Cortex SOAR integration is not accessible."
                     )
@@ -101,7 +101,7 @@ def test_integration_connection(
                 secret_key=credentials.get("secret_key"),
                 access_key=credentials.get("access_key"),
             ) as cyware:
-                response = cyware.get_alert_list()
+                response = cyware.get_alert_list(timeout=5)
                 if response.status_code != 200:
                     raise serializers.ValidationError(
                         "Cyware integration is not accessible."
