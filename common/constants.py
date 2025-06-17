@@ -1,4 +1,5 @@
 import os
+from enum import Enum
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -161,3 +162,10 @@ class EncryptedKeyConstants:
     if ENCRYPTED_KEY is None:
         logger.warning("Encrypted key is not set...")
         raise ValueError("Encrypted key is not set...")
+
+
+class FilterType(Enum):
+    TODAY = 1
+    WEEK = 2
+    MONTH = 3
+    YEAR = 4
