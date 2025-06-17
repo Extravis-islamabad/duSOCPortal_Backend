@@ -1547,3 +1547,9 @@ class CywareTenantCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = CywareTenantCategories
         fields = "__all__"
+
+
+class RecentIncidentsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DUCortexSOARIncidentFinalModel
+        fields = "__all__"
