@@ -89,7 +89,10 @@ def trigger_integration_tasks(
             instance.integration.integration_type
             == IntegrationTypes.THREAT_INTELLIGENCE
         ):
-            if instance.integration.siem_subtype == ThreatIntelligenceSubTypes.CYWARE:
+            if (
+                instance.integration.threat_intelligence_subtype
+                == ThreatIntelligenceSubTypes.CYWARE
+            ):
                 if instance.credential_type == CredentialTypes.SECRET_KEY_ACCESS_KEY:
                     sync_threat_intel_with_signal.delay(
                         access_key=instance.access_key,
