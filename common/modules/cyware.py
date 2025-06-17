@@ -20,6 +20,7 @@ from tenant.models import (
     CywareCustomField,
     CywareGroup,
     CywareTag,
+    CywareTenantCustomField,
     CywareTenantGroup,
     CywareTenantTag,
     ThreatIntelligenceTenantAlerts,
@@ -550,6 +551,26 @@ class Cyware:
         except Exception as e:
             logger.error(f"Cyware.get_custom_fields() Failed to list tags: {str(e)}")
 
+    def transform_custom_fields_for_tenants(self, data: list, threat_intel_id) -> list:
+        """
+        Transforms raw custom/system field JSON data into CustomField model instances.
+        """
+        fields = []
+        for group in data:
+            is_system = group.get("key") == "system"
+            for item in group.get("values", []):
+                field = CywareTenantCustomField(
+                    threat_intelligence_id=threat_intel_id,
+                    db_id=item.get("field_id"),
+                    field_name=item.get("field_name"),
+                    field_label=item.get("field_label"),
+                    field_type=item.get("field_type"),
+                    field_description=item.get("field_description", ""),
+                    is_system=is_system,
+                )
+                fields.append(field)
+        return fields
+
     def transform_custom_fields(self, data: list, integration) -> list:
         """
         Transforms raw custom/system field JSON data into CustomField model instances.
@@ -569,6 +590,43 @@ class Cyware:
                 )
                 fields.append(field)
         return fields
+
+    def insert_custom_fields_for_tenants(self, fields: list):
+        """
+        Inserts or updates CustomField records in the DB.
+        """
+        start = time.time()
+        logger.info(f"Cyware.insert_custom_fields_for_tenants() started : {start}")
+
+        if not fields:
+            logger.warning("No custom fields to insert")
+            return
+
+        logger.info(f"Inserting/Updating {len(fields)} custom fields")
+
+        try:
+            with transaction.atomic():
+                CywareTenantCustomField.objects.bulk_create(
+                    fields,
+                    update_conflicts=True,
+                    update_fields=[
+                        "field_name",
+                        "field_label",
+                        "field_type",
+                        "field_description",
+                        "is_system",
+                        "updated_at",
+                    ],
+                    unique_fields=["db_id"],
+                )
+            logger.info(
+                f"Inserted/Updated {len(fields)} custom fields in {time.time() - start:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Cyware.insert_custom_fields_for_tenants() Failed to insert custom fields: {str(e)}"
+            )
 
     def insert_custom_fields(self, fields: list):
         """
