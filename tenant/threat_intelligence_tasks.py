@@ -237,6 +237,28 @@ def sync_threat_intel_custom_fields_for_tenants():
 
 
 @shared_task
+def sync_threat_intel_categories_for_tenants():
+    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at").first()
+    if not results:
+        return
+
+    if isinstance(results, ThreatIntelligenceTenant):
+        results = [results]
+
+    for result in results:
+        with Cyware(
+            access_key=result.access_key,
+            secret_key=result.secret_key,
+            base_url=result.base_url,
+        ) as cyware:
+            categories = cyware.get_categories()
+            transformed_data = cyware.transform_categories_for_tenants(
+                data=categories, threat_intel_id=result.id
+            )
+            cyware.insert_categories_for_tenants(categories=transformed_data)
+
+
+@shared_task
 def sync_threat_intel_all():
     sync_threat_intel.delay()
     sync_threat_tags.delay()
