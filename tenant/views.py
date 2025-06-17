@@ -62,7 +62,7 @@ from tenant.serializers import (
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
 )
-from tenant.threat_intelligence_tasks import sync_threat_alert_details
+from tenant.threat_intelligence_tasks import sync_threat_intel_for_tenants
 
 
 class PermissionChoicesAPIView(APIView):
@@ -199,7 +199,7 @@ class TestView(APIView):
     def get(self, request):
         # sync_threat_intel.delay()
         # sync_threat_intel_for_tenants.delay()
-        sync_threat_alert_details.delay()
+        sync_threat_intel_for_tenants()
         # with Cyware(
         #     base_url="https://du.cyware.com",
         #     access_key="c54d63c9-8c08-4921-adee-8a83a2112104",
@@ -285,89 +285,6 @@ class GetTenantAssetsList(APIView):
             )
 
 
-# class TenantITSMTicketsView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response(
-#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-#             )
-
-#         itsm_integrations = tenant.integrations.filter(
-#             integration_type=IntegrationTypes.ITSM_INTEGRATION,
-#             itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
-#             status=True,
-#         )
-#         if not itsm_integrations.exists():
-#             return Response(
-#                 {"error": "No active ITSM integration configured for tenant."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-#         itsm_tenant_ids = tenant.itsm_tenants.values_list("id", flat=True)
-
-#         tickets = DuITSMFinalTickets.objects.filter(itsm_tenant__in=itsm_tenant_ids)
-
-#         # Parse start_date and end_date from query params
-#         start_date_str = request.query_params.get("start_date")
-#         end_date_str = request.query_params.get("end_date")
-
-#         date_format_in_db = "%b %d, %Y %I:%M %p"  # e.g., "Apr 17, 2025 10:42 PM"
-#         date_format_filter = "%Y-%m-%d"  # e.g., "2025-04-17"
-
-#         def parse_ticket_date(ticket):
-#             try:
-#                 return datetime.strptime(ticket.creation_date, date_format_in_db).date()
-#             except Exception:
-#                 return None
-
-#         if start_date_str:
-#             try:
-#                 start_date = datetime.strptime(
-#                     start_date_str, date_format_filter
-#                 ).date()
-#                 tickets = [
-#                     t
-#                     for t in tickets
-#                     if (dt := parse_ticket_date(t)) and dt >= start_date
-#                 ]
-#             except ValueError:
-#                 return Response(
-#                     {"error": "Invalid start_date format. Use YYYY-MM-DD."}, status=400
-#                 )
-
-#         if end_date_str:
-#             try:
-#                 end_date = datetime.strptime(end_date_str, date_format_filter).date()
-#                 tickets = [
-#                     t
-#                     for t in tickets
-#                     if (dt := parse_ticket_date(t)) and dt <= end_date
-#                 ]
-#             except ValueError:
-#                 return Response(
-#                     {"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400
-#                 )
-#             tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
-#         else:
-#             # No filtering needed, just order in queryset
-#             tickets = list(tickets)
-#             tickets.sort(
-#                 key=lambda t: parse_ticket_date(t) or datetime.min.date(), reverse=True
-#             )
-#             # tickets = tickets.order_by("creation_date")
-#         # tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
-#         # Pagination
-#         paginator = PageNumberPagination()
-#         paginator.page_size = PaginationConstants.PAGE_SIZE
-#         paginated_tickets = paginator.paginate_queryset(tickets, request)
-
-
-#         serializer = DuITSMTicketsSerializer(paginated_tickets, many=True)
-#         return paginator.get_paginated_response(serializer.data)
 class TenantITSMTicketsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1130,255 +1047,6 @@ class IncidentsView(APIView):
 
     def get(self, request):
         try:
-            tenant = Tenant.objects.get(tenant=request.user)
-        except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found."}, status=404)
-
-        soar_integrations = tenant.integrations.filter(
-            integration_type=IntegrationTypes.SOAR_INTEGRATION,
-            soar_subtype=SoarSubTypes.CORTEX_SOAR,
-            status=True,
-        )
-        if not soar_integrations.exists():
-            return Response(
-                {"error": "No active SOAR integration configured for tenant."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        soar_tenants = tenant.soar_tenants.all()
-        if not soar_tenants:
-            return Response({"error": "No SOAR tenants found."}, status=404)
-
-        soar_ids = [t.id for t in soar_tenants]
-
-        filter_type = request.query_params.get("filter", "all")
-        start_date_str = request.query_params.get("start_date")
-        end_date_str = request.query_params.get("end_date")
-
-        try:
-            queryset = DUCortexSOARIncidentFinalModel.objects.filter(
-                cortex_soar_tenant__in=soar_ids
-            )
-
-            # Apply date range filter with validation
-            start_date = None
-            end_date = None
-            date_format = "%Y-%m-%d"
-            if start_date_str:
-                try:
-                    start_date = make_aware(
-                        datetime.strptime(start_date_str, date_format)
-                    ).date()
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid start_date format. Use YYYY-MM-DD."},
-                        status=400,
-                    )
-
-            if end_date_str:
-                try:
-                    end_date = make_aware(
-                        datetime.strptime(end_date_str, date_format)
-                    ).date()  # + timedelta(days=1)
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid end_date format. Use YYYY-MM-DD."},
-                        status=400,
-                    )
-
-            if start_date and end_date and start_date > end_date:
-                return Response(
-                    {"error": "start_date cannot be greater than end_date."}, status=400
-                )
-
-            if start_date:
-                queryset = queryset.filter(created__date__gte=start_date)
-
-            if end_date:
-                queryset = queryset.filter(created__date__lte=end_date)
-
-            if filter_type != "all":
-                if filter_type == "unassigned":
-                    queryset = queryset.filter(owner__isnull=True)
-                elif filter_type == "pending":
-                    queryset = queryset.filter(status="Pending")
-                elif filter_type == "false-positive":
-                    queryset = queryset.filter(status="False Positive")
-                elif filter_type == "closed":
-                    queryset = queryset.filter(status="Closed")
-                elif filter_type == "error":
-                    queryset = queryset.filter(status="Error")
-
-            queryset = queryset.values(
-                "id",
-                "db_id",
-                "account",
-                "name",
-                "status",
-                "severity",
-                "incident_priority",
-                "incident_phase",
-                "created",
-                "owner",
-                "playbook_id",
-                "occured",
-                "sla",
-            ).order_by("-created")
-
-            incidents = []
-            # severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
-            for row in queryset:
-                # priority = row["incident_priority"] or severity_map.get(
-                #     row["severity"], "P4"
-                # )
-                created_date = (
-                    row["created"].strftime("%Y-%m-%d %I:%M %p")
-                    if row["created"]
-                    else "N/A"
-                )
-                occurred_date = (
-                    row["occured"].strftime("%Y-%m-%d %I:%M %p")
-                    if row["occured"]
-                    else "N/A"
-                )
-
-                incidents.append(
-                    {
-                        "id": f"{row['id']}",
-                        "db_id": row["db_id"],
-                        "account": row["account"],
-                        "name": row["name"],
-                        "description": row["name"].strip().split(" ", 1)[1],
-                        "status": row["status"],
-                        "severity": row["severity"],
-                        "priority": row["incident_priority"],
-                        "phase": row["incident_phase"],
-                        # "priority": priority,
-                        "created": created_date,
-                        "assignee": row["owner"],
-                        "playbook": row["playbook_id"],
-                        "occurred": occurred_date,
-                        "sla": row["sla"],
-                    }
-                )
-
-            return Response({"incidents": incidents}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            logger.error("Error in IncidentsView: %s", str(e))
-            return Response(
-                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-
-# class IncidentsView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-
-#         soar_tenants = tenant.soar_tenants.all()
-#         if not soar_tenants:
-#             return Response({"error": "No SOAR tenants found."}, status=404)
-
-#         soar_ids = [t.id for t in soar_tenants]
-
-#         if not soar_ids:
-#             return Response({"error": "No SOAR tenants found."}, status=404)
-
-#         # Get filter_type from query parameter, default to 'all'
-#         filter_type = request.query_params.get("filter", "all")
-
-#         try:
-#             # Base queryset
-#             queryset = DUCortexSOARIncidentFinalModel.objects.filter(
-#                 cortex_soar_tenant__in=soar_ids
-#             ).values(
-#                 "id",
-#                 "db_id",
-#                 "account",
-#                 "name",
-#                 "status",
-#                 "severity",
-#                 "incident_priority",
-#                 "created",
-#                 "owner",
-#                 "playbook_id",
-#                 "occured",
-#                 "sla",
-#             )
-
-#             # Apply filters
-#             if filter_type != "all":
-#                 if filter_type == "unassigned":
-#                     queryset = queryset.filter(owner__isnull=True)
-#                 elif filter_type == "pending":
-#                     queryset = queryset.filter(status="Pending")
-#                 elif filter_type == "false-positive":
-#                     queryset = queryset.filter(status="False Positive")
-#                 elif filter_type == "closed":
-#                     queryset = queryset.filter(status="Closed")
-#                 elif filter_type == "error":
-#                     queryset = queryset.filter(status="Error")
-
-#             # Order by created DESC
-#             queryset = queryset.order_by("-created")
-
-#             # Transform data
-#             incidents = []
-#             severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
-#             for row in queryset:
-#                 # Determine priority
-#                 priority = row["incident_priority"] or severity_map.get(
-#                     row["severity"], "P4"
-#                 )
-
-#                 # Format dates
-#                 created_date = (
-#                     row["created"].strftime("%Y-%m-%d %I:%M %p")
-#                     if row["created"]
-#                     else "N/A"
-#                 )
-#                 occurred_date = (
-#                     row["occured"].strftime("%Y-%m-%d %I:%M %p")
-#                     if row["occured"]
-#                     else "N/A"
-#                 )
-
-#                 incidents.append(
-#                     {
-#                         "id": f"{row['id']}",
-#                         "db_id": row["db_id"],
-#                         "account": row["account"],
-#                         "name": row["name"],
-#                         "status": row["status"],
-#                         "priority": priority,
-#                         "created": created_date,
-#                         "assignee": row["owner"],
-#                         "playbook": row["playbook_id"],
-#                         "occurred": occurred_date,
-#                         "sla": row["sla"],
-#                     }
-#                 )
-
-#             return Response({"incidents": incidents}, status=status.HTTP_200_OK)
-
-#         except Exception as e:
-#             logger.error("Error in IncidentsView: %s", str(e))
-#             return Response(
-#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
-
-
-class IncidentsView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsTenant]
-
-    def get(self, request):
-        try:
             # Step 1: Get current tenant
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
@@ -1447,7 +1115,9 @@ class IncidentsView(APIView):
             filters &= Q(name__icontains=name_filter)
 
         if description_filter:
-            filters &= Q(name__icontains=description_filter)  # Description derived from name
+            filters &= Q(
+                name__icontains=description_filter
+            )  # Description derived from name
 
         if status_filter:
             filters &= Q(status__iexact=status_filter)
@@ -1458,7 +1128,8 @@ class IncidentsView(APIView):
                 filters &= Q(severity=severity_value)
             except ValueError:
                 return Response(
-                    {"error": "Invalid severity format. Must be an integer."}, status=400
+                    {"error": "Invalid severity format. Must be an integer."},
+                    status=400,
                 )
 
         if priority_filter:
@@ -1512,7 +1183,8 @@ class IncidentsView(APIView):
                     queryset = queryset.filter(created__date__gte=start_date)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid start_date format. Use YYYY-MM-DD."}, status=400
+                        {"error": "Invalid start_date format. Use YYYY-MM-DD."},
+                        status=400,
                     )
 
             if end_date_str:
@@ -1523,7 +1195,8 @@ class IncidentsView(APIView):
                     queryset = queryset.filter(created__date__lte=end_date)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400
+                        {"error": "Invalid end_date format. Use YYYY-MM-DD."},
+                        status=400,
                     )
 
             if occurred_start_str:
@@ -1534,7 +1207,8 @@ class IncidentsView(APIView):
                     queryset = queryset.filter(occured__date__gte=occurred_start)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid occurred_start format. Use YYYY-MM-DD."}, status=400
+                        {"error": "Invalid occurred_start format. Use YYYY-MM-DD."},
+                        status=400,
                     )
 
             if occurred_end_str:
@@ -1545,7 +1219,8 @@ class IncidentsView(APIView):
                     queryset = queryset.filter(occured__date__lte=occurred_end)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid occurred_end format. Use YYYY-MM-DD."}, status=400
+                        {"error": "Invalid occurred_end format. Use YYYY-MM-DD."},
+                        status=400,
                     )
 
             # Step 9: Validate date ranges
@@ -1556,7 +1231,8 @@ class IncidentsView(APIView):
 
             if occurred_start and occurred_end and occurred_start > occurred_end:
                 return Response(
-                    {"error": "occurred_start cannot be greater than occurred_end."}, status=400
+                    {"error": "occurred_start cannot be greater than occurred_end."},
+                    status=400,
                 )
 
             # Step 10: Query incidents
@@ -1628,7 +1304,8 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-            
+
+
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1989,134 +1666,6 @@ class OffenseStatsAPIView(APIView):
             )
 
 
-# class OffenseDetailsByTenantAPIView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-
-#         siem_integrations = tenant.integrations.filter(
-#             integration_type=IntegrationTypes.SIEM_INTEGRATION,
-#             siem_subtype=SiemSubTypes.IBM_QRADAR,
-#             status=True,
-#         )
-#         if not siem_integrations.exists():
-#             return Response(
-#                 {"error": "No active SEIM integration configured for tenant."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-#         try:
-#             tenant = request.user
-
-#             # Get tenant mappings
-#             mappings = TenantQradarMapping.objects.filter(
-#                 tenant__tenant=tenant
-#             ).values_list("event_collectors__id", "qradar_tenant__id")
-
-#             if not mappings:
-#                 return Response(
-#                     {"error": "No mappings found for the tenant."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-
-#             collector_ids, tenant_ids = zip(*mappings)
-
-#             assets = IBMQradarAssests.objects.filter(
-#                 event_collector__id__in=collector_ids
-#             ).values_list("id", flat=True)
-
-#             if not assets:
-#                 return Response(
-#                     {"error": "No assets found for the given collectors."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-
-#             # Get filters from query params
-#             start_date_str = request.query_params.get("start_date")
-#             end_date_str = request.query_params.get("end_date")
-#             status_filter = request.query_params.get("status")
-#             severity_filter = request.query_params.get("severity")
-#             db_id_filter = request.query_params.get("id")
-
-#             # Base filters
-#             filters = Q(assests__id__in=assets) & Q(
-#                 qradar_tenant_domain__id__in=tenant_ids
-#             )
-
-#             # Parse and apply date filters
-#             if start_date_str:
-#                 try:
-#                     start_date = parse_date(start_date_str)
-#                     if start_date:
-#                         filters &= Q(start_date__gte=start_date)
-#                     else:
-#                         raise ValueError
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid start_date format. Use YYYY-MM-DD."},
-#                         status=400,
-#                     )
-
-#             if end_date_str:
-#                 try:
-#                     end_date = parse_date(end_date_str)
-#                     if end_date:
-#                         filters &= Q(start_date__lte=end_date)
-#                     else:
-#                         raise ValueError
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
-#                         status=400,
-#                     )
-
-#             # Validate date range
-#             if start_date_str and end_date_str and end_date < start_date:
-#                 return Response(
-#                     {"error": "end_date must be after or equal to start_date."},
-#                     status=400,
-#                 )
-
-#             # Additional filters
-#             if status_filter:
-#                 filters &= Q(status__icontains=status_filter)
-
-#             if severity_filter:
-#                 filters &= Q(severity=severity_filter)
-
-#             if db_id_filter:
-#                 filters &= Q(db_id=db_id_filter)
-
-#             offenses = (
-#                 IBMQradarOffense.objects.filter(filters)
-#                 .values(
-#                     "id",
-#                     "db_id",
-#                     "description",
-#                     "severity",
-#                     "status",
-#                     "start_date",
-#                     "start_time",
-#                 )
-#                 .distinct()
-#             )
-
-#             return Response(
-#                 {"offenses": list(offenses), "count": len(offenses)},
-#                 status=status.HTTP_200_OK,
-#             )
-
-#         except Exception as e:
-#             return Response(
-#                 {"error": f"Something went wrong: {str(e)}"},
-#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             )
-
-
 class OffenseDetailsByTenantAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2242,7 +1791,9 @@ class OffenseDetailsByTenantAPIView(APIView):
             paginated_offenses = paginator.paginate_queryset(offenses, request)
 
             # Step 11: Return paginated response
-            return paginator.get_paginated_response({"offenses": list(paginated_offenses)})
+            return paginator.get_paginated_response(
+                {"offenses": list(paginated_offenses)}
+            )
 
         except Exception as e:
             logger.error("Error in OffenseDetailsByTenantAPIView: %s", str(e))
@@ -2250,6 +1801,8 @@ class OffenseDetailsByTenantAPIView(APIView):
                 {"error": f"Something went wrong: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
 class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2769,49 +2322,6 @@ class EPSCountValuesByDomainAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
-# class AlertListView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             # Get the tenant object for the logged-in user
-#             tenant = Tenant.objects.get(tenant=request.user)
-
-#             # Determine which integration(s) to use
-#             if tenant.is_defualt_threat_intel:
-#                 integrations = tenant.integrations.filter(
-#                     integration_type=IntegrationTypes.THREAT_INTELLIGENCE
-#                 )
-#             else:
-#                 ti = ThreatIntelligenceTenant.objects.filter(tenant=tenant).first()
-#                 if not ti:
-#                     return Response({"error": "No custom threat intelligence found."}, status=404)
-
-#                 integrations = Integration.objects.filter(
-#                     threat_intelligence_subtype=ti.threat_intelligence,
-#                     credentials__base_url=ti.base_url
-#                 )
-
-#             alerts = Alert.objects.filter(integration__in=integrations).order_by("-published_time")
-#             serialized_alerts = [
-#                 {
-#                     "id": alert.id,
-#                     "title": alert.title,
-#                     "status": alert.status,
-#                     "published_time": alert.published_time,
-#                 }
-#                 for alert in alerts
-#             ]
-
-#             return Response({"alerts": serialized_alerts}, status=200)
-
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-#         except Exception as e:
-#             return Response({"error": str(e)}, status=500)
 
 
 class AlertListView(APIView):
