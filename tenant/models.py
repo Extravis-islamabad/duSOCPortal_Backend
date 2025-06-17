@@ -469,6 +469,27 @@ class CywareTenantGroup(models.Model):
         return self.group_name
 
 
+class CywareTenantCustomField(models.Model):
+    threat_intelligence = models.ForeignKey(
+        ThreatIntelligenceTenant, on_delete=models.CASCADE
+    )
+    db_id = models.CharField(unique=True, max_length=64)
+    field_name = models.CharField(max_length=255)
+    field_label = models.CharField(max_length=255)
+    field_type = models.CharField(max_length=50)
+    field_description = models.TextField(blank=True, null=True)
+    is_system = models.BooleanField(default=False)  # True = system, False = custom
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "cyware_custom_fields_tenant"
+
+    def __str__(self):
+        return self.field_label
+
+
 class Alert(models.Model):
     db_id = models.CharField(max_length=64, unique=True)
     title = models.TextField()
