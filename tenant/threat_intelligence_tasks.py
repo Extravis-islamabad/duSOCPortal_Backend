@@ -7,7 +7,11 @@ from integration.models import (
     IntegrationTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.models import Alert, ThreatIntelligenceTenant
+from tenant.models import (
+    Alert,
+    ThreatIntelligenceTenant,
+    ThreatIntelligenceTenantAlerts,
+)
 
 
 @shared_task
@@ -152,7 +156,7 @@ def sync_threat_alert_details():
 
 @shared_task
 def sync_threat_intel_for_tenants():
-    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at").first()
+    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at")
     if not results:
         return
 
@@ -172,12 +176,9 @@ def sync_threat_intel_for_tenants():
 
 @shared_task
 def sync_threat_intel_tags_for_tenants():
-    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at").first()
+    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at")
     if not results:
         return
-
-    if isinstance(results, ThreatIntelligenceTenant):
-        results = [results]
 
     for result in results:
         with Cyware(
@@ -194,12 +195,9 @@ def sync_threat_intel_tags_for_tenants():
 
 @shared_task
 def sync_threat_intel_groups_for_tenants():
-    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at").first()
+    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at")
     if not results:
         return
-
-    if isinstance(results, ThreatIntelligenceTenant):
-        results = [results]
 
     for result in results:
         with Cyware(
@@ -216,12 +214,9 @@ def sync_threat_intel_groups_for_tenants():
 
 @shared_task
 def sync_threat_intel_custom_fields_for_tenants():
-    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at").first()
+    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at")
     if not results:
         return
-
-    if isinstance(results, ThreatIntelligenceTenant):
-        results = [results]
 
     for result in results:
         with Cyware(
@@ -238,12 +233,9 @@ def sync_threat_intel_custom_fields_for_tenants():
 
 @shared_task
 def sync_threat_intel_categories_for_tenants():
-    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at").first()
+    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at")
     if not results:
         return
-
-    if isinstance(results, ThreatIntelligenceTenant):
-        results = [results]
 
     for result in results:
         with Cyware(
@@ -259,6 +251,33 @@ def sync_threat_intel_categories_for_tenants():
 
 
 @shared_task
+def sync_threat_alert_details_for_tenants():
+    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at")
+    if not results:
+        return
+
+    for result in results:
+        with Cyware(
+            access_key=result.access_key,
+            secret_key=result.secret_key,
+            base_url=result.base_url,
+        ) as cyware:
+            alerts = (
+                ThreatIntelligenceTenantAlerts.objects.filter(
+                    threat_intelligence=result.id
+                )
+                .all()
+                .order_by("-created_at")
+            )
+            for alert in alerts:
+                data = cyware.get_alert_detail(short_id=alert.db_id)
+                alert_object = cyware.transform_alert_detail_for_tenants(
+                    data=data, threat_intel_id=result.id, alert_id=alert.id
+                )
+                cyware.insert_alert_detail_for_tenants(alert_obj=alert_object)
+
+
+@shared_task
 def sync_threat_intel_all():
     sync_threat_intel.delay()
     sync_threat_tags.delay()
@@ -267,3 +286,8 @@ def sync_threat_intel_all():
     sync_threat_categories.delay()
     sync_threat_alert_details.delay()
     sync_threat_intel_for_tenants.delay()
+    sync_threat_intel_tags_for_tenants.delay()
+    sync_threat_intel_groups_for_tenants.delay()
+    sync_threat_intel_custom_fields_for_tenants.delay()
+    sync_threat_intel_categories_for_tenants.delay()
+    sync_threat_alert_details_for_tenants.delay()
