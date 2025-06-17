@@ -2,6 +2,7 @@
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from loguru import logger
 
 from tenant.cortex_soar_tasks import sync_cortex_soar_tenants, sync_soar_data
 from tenant.ibm_qradar_tasks import (
@@ -11,7 +12,11 @@ from tenant.ibm_qradar_tasks import (
     sync_qradar_tenants,
 )
 from tenant.itsm_tasks import sync_itsm, sync_itsm_tenants
-from tenant.threat_intelligence_tasks import sync_threat_intel_with_signal
+from tenant.models import ThreatIntelligenceTenant
+from tenant.threat_intelligence_tasks import (
+    sync_custom_cyware,
+    sync_threat_intel_with_signal,
+)
 
 from .models import (
     CredentialTypes,
@@ -100,3 +105,15 @@ def trigger_integration_tasks(
                         base_url=instance.base_url,
                         integration_id=instance.integration.id,
                     )
+
+
+@receiver(post_save, sender=ThreatIntelligenceTenant)
+def ingest_custom_cyware(sender, instance: ThreatIntelligenceTenant, created, **kwargs):
+    if created:
+        logger.info("Ingesting custom Cyware data")
+        sync_custom_cyware.delay(
+            access_key=instance.access_key,
+            secret_key=instance.secret_key,
+            base_url=instance.base_url,
+            threat_intel_id=instance.id,
+        )
