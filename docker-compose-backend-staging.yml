@@ -98,6 +98,9 @@ services:
   celery-intel:
     image: backend-api
     container_name: duSOC_Celery_Cyware
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "cyware", "--loglevel=info"]
     env_file:
       - .env
