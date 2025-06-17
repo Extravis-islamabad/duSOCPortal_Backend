@@ -15,6 +15,9 @@ app.conf.broker_transport_options = {
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
+app.conf.task_routes = {
+    "tenant.threat_intelligence_tasks.*": {"queue": "cyware"},
+}
 
 app.conf.beat_schedule = {
     "qradar-sync-tasks": {
@@ -32,13 +35,16 @@ app.conf.beat_schedule = {
     "threat-intelligence-sync-tasks": {
         "task": "tenant.threat_intelligence_tasks.default_cyware",
         "schedule": crontab(minute="*/5"),
+        "options": {"queue": "cyware"},
     },
     "threat-intelligence-tenant-sync-tasks": {
         "task": "tenant.threat_intelligence_tasks.custom_cyware",
         "schedule": crontab(minute="*/5"),
+        "options": {"queue": "cyware"},
     },
     "threat-intelligence-all-sync-tasks": {
         "task": "tenant.threat_intelligence_tasks.sync_threat_intel_all",
         "schedule": crontab(minute="*/30"),
+        "options": {"queue": "cyware"},
     },
 }
