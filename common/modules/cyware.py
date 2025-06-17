@@ -20,6 +20,7 @@ from tenant.models import (
     CywareCustomField,
     CywareGroup,
     CywareTag,
+    CywareTenantTag,
     ThreatIntelligenceTenantAlerts,
 )
 
@@ -385,6 +386,55 @@ class Cyware:
             )
             tags.append(tag)
         return tags
+
+    def transform_tags_for_tenants(self, data: list, threat_intel_id: int) -> list:
+        """
+        Transforms raw tag JSON data into CywareTag model instances.
+        """
+        tags = []
+        for item in data:
+            tag = CywareTenantTag(
+                threat_intelligence_id=threat_intel_id,
+                db_id=item.get("tag_id"),
+                tag_name=item.get("tag_name"),
+                tag_slug=item.get("tag_slug"),
+                is_active=item.get("is_active", True),
+            )
+            tags.append(tag)
+        return tags
+
+    def insert_tags_for_tenants(self, tags: list):
+        """
+        Inserts or updates CywareTag records in the DB.
+        """
+        start = time.time()
+        logger.info(f"Cyware.insert_tags() started : {start}")
+
+        if not tags:
+            logger.warning("No tags to insert")
+            return
+
+        logger.info(f"Inserting/Updating {len(tags)} tags")
+
+        try:
+            with transaction.atomic():
+                CywareTenantTag.objects.bulk_create(
+                    tags,
+                    update_conflicts=True,
+                    update_fields=[
+                        "tag_name",
+                        "tag_slug",
+                        "is_active",
+                        "updated_at",
+                    ],
+                    unique_fields=["db_id"],
+                )
+            logger.info(
+                f"Inserted/Updated {len(tags)} tags in {time.time() - start:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(f"Cyware.insert_tags() Failed to insert tags: {str(e)}")
 
     def insert_tags(self, tags: list):
         """
