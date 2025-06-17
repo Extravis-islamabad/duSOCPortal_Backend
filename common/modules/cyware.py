@@ -20,6 +20,7 @@ from tenant.models import (
     CywareCustomField,
     CywareGroup,
     CywareTag,
+    CywareTenantCategories,
     CywareTenantCustomField,
     CywareTenantGroup,
     CywareTenantTag,
@@ -683,6 +684,84 @@ class Cyware:
             return data["results"]
         except Exception as e:
             logger.error(f"Cyware.get_categories() Failed to list tags: {str(e)}")
+
+    def transform_categories_for_tenants(self, data: list, threat_intel_id) -> list:
+        """
+        Transforms raw category JSON data into CywareTenantCategories model instances.
+        """
+        cyware_mappings = DBMappings.get_db_id_to_id_mapping(CywareTenantCustomField)
+        categories = []
+
+        for item in data:
+            category = CywareTenantCategories(
+                threat_intelligence_id=threat_intel_id,
+                db_id=item.get("category_id"),
+                category_name=item.get("category_name"),
+            )
+
+            # Collect related field IDs using db_id mapping
+            def extract_field_ids(field_list):
+                return [
+                    cyware_mappings[field["field_id"]]
+                    for field in field_list
+                    if field.get("field_id") in cyware_mappings
+                ]
+
+            # Attach as temporary attributes for later use in insert step
+            category._additional_fields = extract_field_ids(
+                item.get("additional_fields", [])
+            )
+            category._threat_indicator_fields = extract_field_ids(
+                item.get("threat_indicator_fields", [])
+            )
+            category._required_fields = extract_field_ids(
+                item.get("required_fields", [])
+            )
+
+            categories.append(category)
+
+        return categories
+
+    def insert_categories_for_tenants(self, categories: list):
+        """
+        Inserts or updates CywareTenantCategories and assigns M2M fields
+        from pre-transformed field ID lists.
+        """
+        start = time.time()
+        logger.info(f"Cyware.insert_categories_for_tenants() started : {start}")
+
+        if not categories:
+            logger.warning("No categories to insert")
+            return
+
+        logger.info(f"Inserting/Updating {len(categories)} categories")
+
+        try:
+            with transaction.atomic():
+                for category in categories:
+                    obj, _ = CywareTenantCategories.objects.update_or_create(
+                        db_id=category.db_id,
+                        threat_intelligence_id=category.threat_intelligence_id,
+                        defaults={
+                            "category_name": category.category_name,
+                        },
+                    )
+
+                    # Set M2M fields using extracted IDs
+                    obj.additional_fields.set(
+                        getattr(category, "_additional_fields", [])
+                    )
+                    obj.threat_indicator_fields.set(
+                        getattr(category, "_threat_indicator_fields", [])
+                    )
+                    obj.required_fields.set(getattr(category, "_required_fields", []))
+
+            logger.info(
+                f"Inserted/Updated {len(categories)} categories in {time.time() - start:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(f"Cyware.insert_categories_for_tenants() Failed: {str(e)}")
 
     def transform_categories(self, data: list, integration) -> list:
         """
