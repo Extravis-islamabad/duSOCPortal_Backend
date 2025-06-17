@@ -95,6 +95,22 @@ services:
     environment:
       - C_FORCE_ROOT=true  # Allows Celery to run as root in the container (optional, use with caution)
 
+  celery-intel:
+    image: backend-api
+    container_name: duSOC_Celery_Cyware
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "cyware", "--loglevel=info"]
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      - C_FORCE_ROOT=true
+
   celery-beat:
     image: backend-api
     container_name: duSOC_Celery_Beat_Container
