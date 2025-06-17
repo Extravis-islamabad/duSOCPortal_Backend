@@ -193,6 +193,28 @@ def sync_threat_intel_tags_for_tenants():
 
 
 @shared_task
+def sync_threat_intel_groups_for_tenants():
+    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at").first()
+    if not results:
+        return
+
+    if isinstance(results, ThreatIntelligenceTenant):
+        results = [results]
+
+    for result in results:
+        with Cyware(
+            access_key=result.access_key,
+            secret_key=result.secret_key,
+            base_url=result.base_url,
+        ) as cyware:
+            groups = cyware.get_list_groups()
+            transformed_data = cyware.transform_groups_for_tenants(
+                data=groups, threat_intel_id=result.id
+            )
+            cyware.insert_groups_for_tenants(groups=transformed_data)
+
+
+@shared_task
 def sync_threat_intel_all():
     sync_threat_intel.delay()
     sync_threat_tags.delay()
