@@ -490,6 +490,29 @@ class CywareTenantCustomField(models.Model):
         return self.field_label
 
 
+class CywareTenantCategories(models.Model):
+    threat_intelligence = models.ForeignKey(
+        ThreatIntelligenceTenant, on_delete=models.CASCADE
+    )
+    db_id = models.CharField(max_length=64, unique=True)
+    category_name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    threat_indicator_fields = models.ManyToManyField(
+        CywareTenantCustomField, related_name="threat_categories_tenant", blank=True
+    )
+    additional_fields = models.ManyToManyField(
+        CywareTenantCustomField, related_name="additional_categories_tenant", blank=True
+    )
+    required_fields = models.ManyToManyField(
+        CywareTenantCustomField, related_name="required_categories_tenant", blank=True
+    )
+
+    class Meta:
+        db_table = "cyware_categories_tenant"
+
+
 class Alert(models.Model):
     db_id = models.CharField(max_length=64, unique=True)
     title = models.TextField()
