@@ -6,6 +6,12 @@ from celery.schedules import crontab
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "sockportal__backend.settings")
 
 app = Celery("sockportal__backend")
+
+app.conf.broker_transport_options = {
+    "confirm_publish": True,  # To enable publisher confirmations
+    "ack_timeout": 86400000,  # Set the ack timeout in milliseconds (e.g., 1 hour)
+}
+
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
@@ -24,11 +30,11 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute="*/5"),
     },
     "threat-intelligence-sync-tasks": {
-        "task": "tenant.threat_intelligence_tasks.sync_threat_intel",
+        "task": "tenant.threat_intelligence_tasks.default_cyware",
         "schedule": crontab(minute="*/5"),
     },
     "threat-intelligence-tenant-sync-tasks": {
-        "task": "tenant.threat_intelligence_tasks.sync_threat_intel_for_tenants",
+        "task": "tenant.threat_intelligence_tasks.custom_cyware",
         "schedule": crontab(minute="*/5"),
     },
     "threat-intelligence-all-sync-tasks": {
