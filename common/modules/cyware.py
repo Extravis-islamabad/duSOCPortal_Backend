@@ -20,6 +20,7 @@ from tenant.models import (
     CywareCustomField,
     CywareGroup,
     CywareTag,
+    CywareTenantGroup,
     CywareTenantTag,
     ThreatIntelligenceTenantAlerts,
 )
@@ -310,6 +311,65 @@ class Cyware:
             )
             groups.append(group)
         return groups
+
+    def transform_groups_for_tenants(self, data: list, threat_intel_id: int) -> list:
+        """
+        Transforms raw group JSON data into CywareGroup model instances.
+        """
+        groups = []
+        for item in data:
+            group = CywareTenantGroup(
+                threat_intelligence_id=threat_intel_id,
+                db_id=item.get("group_id"),
+                group_name=item.get("group_name"),
+                group_tlp=item.get("group_tlp"),
+                group_type=item.get("group_type"),
+                allowed_for_intel_submission=item.get(
+                    "allowed_for_intel_submission", False
+                ),
+                allowed_for_rfi_submission=item.get(
+                    "allowed_for_rfi_submission", False
+                ),
+            )
+            groups.append(group)
+        return groups
+
+    def insert_groups_for_tenants(self, groups: list):
+        """
+        Inserts or updates CywareTenantGroup records in the DB.
+        """
+        start = time.time()
+        logger.info(f"Cyware.insert_groups_for_tenants() started : {start}")
+
+        if not groups:
+            logger.warning("No groups to insert")
+            return
+
+        logger.info(f"Inserting/Updating {len(groups)} groups")
+
+        try:
+            with transaction.atomic():
+                CywareTenantGroup.objects.bulk_create(
+                    groups,
+                    update_conflicts=True,
+                    update_fields=[
+                        "group_name",
+                        "group_tlp",
+                        "group_type",
+                        "allowed_for_intel_submission",
+                        "allowed_for_rfi_submission",
+                        "updated_at",
+                    ],
+                    unique_fields=["db_id"],
+                )
+            logger.info(
+                f"Inserted/Updated {len(groups)} groups in {time.time() - start:.2f}s"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Cyware.insert_groups_for_tenants() Failed to insert groups: {str(e)}"
+            )
 
     def insert_groups(self, groups: list):
         """
