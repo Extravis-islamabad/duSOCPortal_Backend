@@ -1,5 +1,5 @@
 # authentication/views.py
-
+from django.db.models import Count
 from loguru import logger
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
@@ -175,6 +175,72 @@ class AllTenantsAPIView(APIView):
         )
 
         return paginator.get_paginated_response(serializer.data)
+
+
+class TenantsByCompanyAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        company_name = request.query_params.get("company_name")
+
+        if not company_name:
+            return Response(
+                {"error": "company_name is required as a query parameter."}, status=400
+            )
+
+        logger.info(
+            f"Tenants by company '{company_name}' requested by user: {request.user.username}"
+        )
+
+        tenants = Tenant.objects.filter(
+            created_by=request.user,
+            tenant__is_active=True,
+            tenant__is_deleted=False,
+            tenant__company_name__iexact=company_name,
+        ).order_by("-created_at")
+
+        paginator = PageNumberPagination()
+        paginator.page_size = PaginationConstants.PAGE_SIZE
+
+        paginated_tenants = paginator.paginate_queryset(tenants, request)
+        serializer = AllTenantDetailSerializer(paginated_tenants, many=True)
+
+        logger.success(
+            f"Retrieved {tenants.count()} tenants for company: {company_name}"
+        )
+
+        return paginator.get_paginated_response(serializer.data)
+
+
+class DistinctCompaniesAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        companies = (
+            Tenant.objects.filter(
+                created_by=request.user,
+                tenant__is_active=True,
+                tenant__is_deleted=False,
+                tenant__company_name__isnull=False,
+            )
+            .values("tenant__company_name")
+            .annotate(tenant_count=Count("id"))
+            .order_by("tenant__company_name")
+        )
+
+        # Format the response
+        result = [
+            {
+                "name": entry["tenant__company_name"],
+                "tenant_count": entry["tenant_count"],
+            }
+            for entry in companies
+            if entry["tenant__company_name"]
+        ]
+
+        return Response({"companies": result}, status=200)
 
 
 class NonActiveTenantsAPIView(APIView):
