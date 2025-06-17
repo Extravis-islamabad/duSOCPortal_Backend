@@ -1131,255 +1131,6 @@ class IncidentsView(APIView):
 
     def get(self, request):
         try:
-            tenant = Tenant.objects.get(tenant=request.user)
-        except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found."}, status=404)
-
-        soar_integrations = tenant.integrations.filter(
-            integration_type=IntegrationTypes.SOAR_INTEGRATION,
-            soar_subtype=SoarSubTypes.CORTEX_SOAR,
-            status=True,
-        )
-        if not soar_integrations.exists():
-            return Response(
-                {"error": "No active SOAR integration configured for tenant."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        soar_tenants = tenant.soar_tenants.all()
-        if not soar_tenants:
-            return Response({"error": "No SOAR tenants found."}, status=404)
-
-        soar_ids = [t.id for t in soar_tenants]
-
-        filter_type = request.query_params.get("filter", "all")
-        start_date_str = request.query_params.get("start_date")
-        end_date_str = request.query_params.get("end_date")
-
-        try:
-            queryset = DUCortexSOARIncidentFinalModel.objects.filter(
-                cortex_soar_tenant__in=soar_ids
-            )
-
-            # Apply date range filter with validation
-            start_date = None
-            end_date = None
-            date_format = "%Y-%m-%d"
-            if start_date_str:
-                try:
-                    start_date = make_aware(
-                        datetime.strptime(start_date_str, date_format)
-                    ).date()
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid start_date format. Use YYYY-MM-DD."},
-                        status=400,
-                    )
-
-            if end_date_str:
-                try:
-                    end_date = make_aware(
-                        datetime.strptime(end_date_str, date_format)
-                    ).date()  # + timedelta(days=1)
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid end_date format. Use YYYY-MM-DD."},
-                        status=400,
-                    )
-
-            if start_date and end_date and start_date > end_date:
-                return Response(
-                    {"error": "start_date cannot be greater than end_date."}, status=400
-                )
-
-            if start_date:
-                queryset = queryset.filter(created__date__gte=start_date)
-
-            if end_date:
-                queryset = queryset.filter(created__date__lte=end_date)
-
-            if filter_type != "all":
-                if filter_type == "unassigned":
-                    queryset = queryset.filter(owner__isnull=True)
-                elif filter_type == "pending":
-                    queryset = queryset.filter(status="Pending")
-                elif filter_type == "false-positive":
-                    queryset = queryset.filter(status="False Positive")
-                elif filter_type == "closed":
-                    queryset = queryset.filter(status="Closed")
-                elif filter_type == "error":
-                    queryset = queryset.filter(status="Error")
-
-            queryset = queryset.values(
-                "id",
-                "db_id",
-                "account",
-                "name",
-                "status",
-                "severity",
-                "incident_priority",
-                "incident_phase",
-                "created",
-                "owner",
-                "playbook_id",
-                "occured",
-                "sla",
-            ).order_by("-created")
-
-            incidents = []
-            # severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
-            for row in queryset:
-                # priority = row["incident_priority"] or severity_map.get(
-                #     row["severity"], "P4"
-                # )
-                created_date = (
-                    row["created"].strftime("%Y-%m-%d %I:%M %p")
-                    if row["created"]
-                    else "N/A"
-                )
-                occurred_date = (
-                    row["occured"].strftime("%Y-%m-%d %I:%M %p")
-                    if row["occured"]
-                    else "N/A"
-                )
-
-                incidents.append(
-                    {
-                        "id": f"{row['id']}",
-                        "db_id": row["db_id"],
-                        "account": row["account"],
-                        "name": row["name"],
-                        "description": row["name"].strip().split(" ", 1)[1],
-                        "status": row["status"],
-                        "severity": row["severity"],
-                        "priority": row["incident_priority"],
-                        "phase": row["incident_phase"],
-                        # "priority": priority,
-                        "created": created_date,
-                        "assignee": row["owner"],
-                        "playbook": row["playbook_id"],
-                        "occurred": occurred_date,
-                        "sla": row["sla"],
-                    }
-                )
-
-            return Response({"incidents": incidents}, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            logger.error("Error in IncidentsView: %s", str(e))
-            return Response(
-                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-
-# class IncidentsView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-
-#         soar_tenants = tenant.soar_tenants.all()
-#         if not soar_tenants:
-#             return Response({"error": "No SOAR tenants found."}, status=404)
-
-#         soar_ids = [t.id for t in soar_tenants]
-
-#         if not soar_ids:
-#             return Response({"error": "No SOAR tenants found."}, status=404)
-
-#         # Get filter_type from query parameter, default to 'all'
-#         filter_type = request.query_params.get("filter", "all")
-
-#         try:
-#             # Base queryset
-#             queryset = DUCortexSOARIncidentFinalModel.objects.filter(
-#                 cortex_soar_tenant__in=soar_ids
-#             ).values(
-#                 "id",
-#                 "db_id",
-#                 "account",
-#                 "name",
-#                 "status",
-#                 "severity",
-#                 "incident_priority",
-#                 "created",
-#                 "owner",
-#                 "playbook_id",
-#                 "occured",
-#                 "sla",
-#             )
-
-#             # Apply filters
-#             if filter_type != "all":
-#                 if filter_type == "unassigned":
-#                     queryset = queryset.filter(owner__isnull=True)
-#                 elif filter_type == "pending":
-#                     queryset = queryset.filter(status="Pending")
-#                 elif filter_type == "false-positive":
-#                     queryset = queryset.filter(status="False Positive")
-#                 elif filter_type == "closed":
-#                     queryset = queryset.filter(status="Closed")
-#                 elif filter_type == "error":
-#                     queryset = queryset.filter(status="Error")
-
-#             # Order by created DESC
-#             queryset = queryset.order_by("-created")
-
-#             # Transform data
-#             incidents = []
-#             severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
-#             for row in queryset:
-#                 # Determine priority
-#                 priority = row["incident_priority"] or severity_map.get(
-#                     row["severity"], "P4"
-#                 )
-
-#                 # Format dates
-#                 created_date = (
-#                     row["created"].strftime("%Y-%m-%d %I:%M %p")
-#                     if row["created"]
-#                     else "N/A"
-#                 )
-#                 occurred_date = (
-#                     row["occured"].strftime("%Y-%m-%d %I:%M %p")
-#                     if row["occured"]
-#                     else "N/A"
-#                 )
-
-#                 incidents.append(
-#                     {
-#                         "id": f"{row['id']}",
-#                         "db_id": row["db_id"],
-#                         "account": row["account"],
-#                         "name": row["name"],
-#                         "status": row["status"],
-#                         "priority": priority,
-#                         "created": created_date,
-#                         "assignee": row["owner"],
-#                         "playbook": row["playbook_id"],
-#                         "occurred": occurred_date,
-#                         "sla": row["sla"],
-#                     }
-#                 )
-
-#             return Response({"incidents": incidents}, status=status.HTTP_200_OK)
-
-#         except Exception as e:
-#             logger.error("Error in IncidentsView: %s", str(e))
-#             return Response(
-#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
-
-
-class IncidentsView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsTenant]
-
-    def get(self, request):
-        try:
             # Step 1: Get current tenant
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
@@ -1448,7 +1199,9 @@ class IncidentsView(APIView):
             filters &= Q(name__icontains=name_filter)
 
         if description_filter:
-            filters &= Q(name__icontains=description_filter)  # Description derived from name
+            filters &= Q(
+                name__icontains=description_filter
+            )  # Description derived from name
 
         if status_filter:
             filters &= Q(status__iexact=status_filter)
@@ -1459,7 +1212,8 @@ class IncidentsView(APIView):
                 filters &= Q(severity=severity_value)
             except ValueError:
                 return Response(
-                    {"error": "Invalid severity format. Must be an integer."}, status=400
+                    {"error": "Invalid severity format. Must be an integer."},
+                    status=400,
                 )
 
         if priority_filter:
@@ -1513,7 +1267,8 @@ class IncidentsView(APIView):
                     queryset = queryset.filter(created__date__gte=start_date)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid start_date format. Use YYYY-MM-DD."}, status=400
+                        {"error": "Invalid start_date format. Use YYYY-MM-DD."},
+                        status=400,
                     )
 
             if end_date_str:
@@ -1524,7 +1279,8 @@ class IncidentsView(APIView):
                     queryset = queryset.filter(created__date__lte=end_date)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400
+                        {"error": "Invalid end_date format. Use YYYY-MM-DD."},
+                        status=400,
                     )
 
             if occurred_start_str:
@@ -1535,7 +1291,8 @@ class IncidentsView(APIView):
                     queryset = queryset.filter(occured__date__gte=occurred_start)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid occurred_start format. Use YYYY-MM-DD."}, status=400
+                        {"error": "Invalid occurred_start format. Use YYYY-MM-DD."},
+                        status=400,
                     )
 
             if occurred_end_str:
@@ -1546,7 +1303,8 @@ class IncidentsView(APIView):
                     queryset = queryset.filter(occured__date__lte=occurred_end)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid occurred_end format. Use YYYY-MM-DD."}, status=400
+                        {"error": "Invalid occurred_end format. Use YYYY-MM-DD."},
+                        status=400,
                     )
 
             # Step 9: Validate date ranges
@@ -1557,7 +1315,8 @@ class IncidentsView(APIView):
 
             if occurred_start and occurred_end and occurred_start > occurred_end:
                 return Response(
-                    {"error": "occurred_start cannot be greater than occurred_end."}, status=400
+                    {"error": "occurred_start cannot be greater than occurred_end."},
+                    status=400,
                 )
 
             # Step 10: Query incidents
@@ -1629,7 +1388,8 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-            
+
+
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2243,7 +2003,9 @@ class OffenseDetailsByTenantAPIView(APIView):
             paginated_offenses = paginator.paginate_queryset(offenses, request)
 
             # Step 11: Return paginated response
-            return paginator.get_paginated_response({"offenses": list(paginated_offenses)})
+            return paginator.get_paginated_response(
+                {"offenses": list(paginated_offenses)}
+            )
 
         except Exception as e:
             logger.error("Error in OffenseDetailsByTenantAPIView: %s", str(e))
@@ -2251,6 +2013,8 @@ class OffenseDetailsByTenantAPIView(APIView):
                 {"error": f"Something went wrong: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
 class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2867,9 +2631,6 @@ class AlertListView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
-
-
-
 # Updated API view for recent incidents
 class RecentIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -2877,14 +2638,14 @@ class RecentIncidentsView(APIView):
 
     def get(self, request):
         """
-        Retrieve two lists: up to 5 incidents with status='1' (Open) and up to 5 incidents 
-        with status='2' (Closed), ordered by created date (descending), filtered by SOAR 
-        tenant IDs and a time period (Today=1, Week=2, Month=3, Year=4). Only accessible 
+        Retrieve two lists: up to 5 incidents with status='1' (Open) and up to 5 incidents
+        with status='2' (Closed), ordered by created date (descending), filtered by SOAR
+        tenant IDs and a time period (Today=1, Week=2, Month=3, Year=4). Only accessible
         by authenticated users with valid tenant permissions and active SOAR integration.
-        
+
         Query Parameters:
             filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year (default: 3)
-        
+
         Returns:
             Dictionary with two lists: 'open' (status='1') and 'closed' (status='2')
         """
@@ -2913,21 +2674,23 @@ class RecentIncidentsView(APIView):
             soar_tenants = tenant.soar_tenants.all()
             if not soar_tenants:
                 return Response(
-                    {"error": "No SOAR tenants found."}, 
-                    status=status.HTTP_404_NOT_FOUND
+                    {"error": "No SOAR tenants found."},
+                    status=status.HTTP_404_NOT_FOUND,
                 )
 
             soar_ids = [t.id for t in soar_tenants]
 
             # Step 4: Get filter_type from query params (default to MONTH)
-            filter_type_param = request.query_params.get('filter_type', '3')
+            filter_type_param = request.query_params.get("filter_type", "3")
             try:
                 filter_type_value = int(filter_type_param)
                 filter_type = FilterType(filter_type_value)
             except (ValueError, KeyError):
                 return Response(
-                    {"error": "Invalid filter_type. Use 1 (Today), 2 (Week), 3 (Month), or 4 (Year)."},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {
+                        "error": "Invalid filter_type. Use 1 (Today), 2 (Week), 3 (Month), or 4 (Year)."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # Step 5: Determine date filter
@@ -2943,32 +2706,24 @@ class RecentIncidentsView(APIView):
 
             # Step 6: Query for incidents with status='1' (Open)
             open_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                status='1',
-                cortex_soar_tenant_id__in=soar_ids,
-                created__gte=start_date
-            ).order_by('-created')[:5]
-            
+                status="1", cortex_soar_tenant_id__in=soar_ids, created__gte=start_date
+            ).order_by("-created")[:5]
+
             # Step 7: Query for incidents with status='2' (Closed)
             closed_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                status='2',
-                cortex_soar_tenant_id__in=soar_ids,
-                created__gte=start_date
-            ).order_by('-created')[:5]
-            
+                status="2", cortex_soar_tenant_id__in=soar_ids, created__gte=start_date
+            ).order_by("-created")[:5]
+
             # Step 8: Serialize both sets of incidents
             open_serializer = RecentIncidentsSerializer(open_incidents, many=True)
             closed_serializer = RecentIncidentsSerializer(closed_incidents, many=True)
-            
+
             # Step 9: Return response with two lists
             return Response(
-                {
-                    'open': open_serializer.data,
-                    'closed': closed_serializer.data
-                },
-                status=status.HTTP_200_OK
+                {"open": open_serializer.data, "closed": closed_serializer.data},
+                status=status.HTTP_200_OK,
             )
         except Exception as e:
             return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
