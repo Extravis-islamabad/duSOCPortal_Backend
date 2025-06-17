@@ -44,6 +44,58 @@ def sync_threat_intel_with_signal(access_key, secret_key, base_url, integration_
 
 
 @shared_task
+def sync_custom_cyware(access_key, secret_key, base_url, threat_intel_id):
+    with Cyware(
+        access_key=access_key, secret_key=secret_key, base_url=base_url
+    ) as cyware:
+        all_alerts = cyware.fetch_all_alerts(page_size=1000)
+        transformed_data = cyware.transform_alert(all_alerts, threat_intel_id)
+        cyware.insert_alerts(transformed_data)
+
+        tags = cyware.get_list_tags()
+        transformed_data = cyware.transform_tags_for_tenants(
+            data=tags,
+            threat_intel_id=threat_intel_id,
+        )
+        cyware.insert_tags_for_tenants(tags=transformed_data)
+
+        groups = cyware.get_list_groups()
+        transformed_data = cyware.transform_groups_for_tenants(
+            data=groups,
+            threat_intel_id=threat_intel_id,
+        )
+        cyware.insert_groups_for_tenants(groups=transformed_data)
+
+        custom_fields = cyware.get_custom_fields()
+        transformed_data = cyware.transform_custom_fields_for_tenants(
+            data=custom_fields,
+            threat_intel_id=threat_intel_id,
+        )
+        cyware.insert_custom_fields_for_tenants(fields=transformed_data)
+
+        categories = cyware.get_categories()
+        transformed_data = cyware.transform_categories_for_tenants(
+            data=categories,
+            threat_intel_id=threat_intel_id,
+        )
+        cyware.insert_categories_for_tenants(categories=transformed_data)
+
+        alerts = (
+            ThreatIntelligenceTenantAlerts.objects.filter(
+                threat_intelligence=threat_intel_id
+            )
+            .all()
+            .order_by("-created_at")
+        )
+        for alert in alerts:
+            data = cyware.get_alert_detail(short_id=alert.db_id)
+            alert_object = cyware.transform_alert_detail_for_tenants(
+                data=data, threat_intel_id=threat_intel_id, alert_id=alert.id
+            )
+            cyware.insert_alert_detail_for_tenants(alert_obj=alert_object)
+
+
+@shared_task
 def sync_threat_tags():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.THREAT_INTELLIGENCE,
@@ -285,6 +337,26 @@ def sync_threat_intel_all():
     sync_threat_custom_fields.delay()
     sync_threat_categories.delay()
     sync_threat_alert_details.delay()
+    sync_threat_intel_for_tenants.delay()
+    sync_threat_intel_tags_for_tenants.delay()
+    sync_threat_intel_groups_for_tenants.delay()
+    sync_threat_intel_custom_fields_for_tenants.delay()
+    sync_threat_intel_categories_for_tenants.delay()
+    sync_threat_alert_details_for_tenants.delay()
+
+
+@shared_task
+def default_cyware():
+    sync_threat_intel.delay()
+    sync_threat_tags.delay()
+    sync_threat_groups.delay()
+    sync_threat_custom_fields.delay()
+    sync_threat_categories.delay()
+    sync_threat_alert_details.delay()
+
+
+@shared_task
+def custom_cyware():
     sync_threat_intel_for_tenants.delay()
     sync_threat_intel_tags_for_tenants.delay()
     sync_threat_intel_groups_for_tenants.delay()
