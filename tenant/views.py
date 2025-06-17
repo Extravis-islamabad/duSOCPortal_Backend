@@ -32,7 +32,6 @@ from integration.models import (
     SiemSubTypes,
     SoarSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_requests_for_soar
 from tenant.models import (
     Alert,
     DUCortexSOARIncidentFinalModel,
@@ -63,6 +62,7 @@ from tenant.serializers import (
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
 )
+from tenant.threat_intelligence_tasks import sync_threat_alert_details
 
 
 class PermissionChoicesAPIView(APIView):
@@ -199,8 +199,7 @@ class TestView(APIView):
     def get(self, request):
         # sync_threat_intel.delay()
         # sync_threat_intel_for_tenants.delay()
-        sync_requests_for_soar.delay()
-        # sync_threat_alert_details.delay()
+        sync_threat_alert_details.delay()
         # with Cyware(
         #     base_url="https://du.cyware.com",
         #     access_key="c54d63c9-8c08-4921-adee-8a83a2112104",
@@ -1374,6 +1373,262 @@ class IncidentsView(APIView):
 #             )
 
 
+class IncidentsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            # Step 1: Get current tenant
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        # Step 2: Check for active SOAR integration
+        soar_integrations = tenant.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.CORTEX_SOAR,
+            status=True,
+        )
+        if not soar_integrations.exists():
+            return Response(
+                {"error": "No active SOAR integration configured for tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Step 3: Get SOAR tenant IDs
+        soar_tenants = tenant.soar_tenants.all()
+        if not soar_tenants:
+            return Response({"error": "No SOAR tenants found."}, status=404)
+
+        soar_ids = [t.id for t in soar_tenants]
+
+        # Step 4: Parse query parameters for filters
+        id_filter = request.query_params.get("id")
+        db_id_filter = request.query_params.get("db_id")
+        account_filter = request.query_params.get("account")
+        name_filter = request.query_params.get("name")
+        description_filter = request.query_params.get("description")
+        status_filter = request.query_params.get("status")
+        severity_filter = request.query_params.get("severity")
+        priority_filter = request.query_params.get("priority")
+        phase_filter = request.query_params.get("phase")
+        assignee_filter = request.query_params.get("assignee")
+        playbook_filter = request.query_params.get("playbook")
+        sla_filter = request.query_params.get("sla")
+        filter_type = request.query_params.get("filter", "all")
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+        occurred_start_str = request.query_params.get("occurred_start")
+        occurred_end_str = request.query_params.get("occurred_end")
+
+        date_format = "%Y-%m-%d"  # Expected format for date inputs
+
+        # Step 5: Initialize filters with Q object
+        filters = Q(cortex_soar_tenant__in=soar_ids)
+
+        # Step 6: Apply non-date filters
+        if id_filter:
+            filters &= Q(id=id_filter)
+
+        if db_id_filter:
+            try:
+                db_id_value = int(db_id_filter)
+                filters &= Q(db_id=db_id_value)
+            except ValueError:
+                return Response(
+                    {"error": "Invalid db_id format. Must be an integer."}, status=400
+                )
+
+        if account_filter:
+            filters &= Q(account__icontains=account_filter)
+
+        if name_filter:
+            filters &= Q(name__icontains=name_filter)
+
+        if description_filter:
+            filters &= Q(name__icontains=description_filter)  # Description derived from name
+
+        if status_filter:
+            filters &= Q(status__iexact=status_filter)
+
+        if severity_filter:
+            try:
+                severity_value = int(severity_filter)
+                filters &= Q(severity=severity_value)
+            except ValueError:
+                return Response(
+                    {"error": "Invalid severity format. Must be an integer."}, status=400
+                )
+
+        if priority_filter:
+            filters &= Q(incident_priority__iexact=priority_filter)
+
+        if phase_filter:
+            filters &= Q(incident_phase__iexact=phase_filter)
+
+        if assignee_filter:
+            filters &= Q(owner__iexact=assignee_filter)
+
+        if playbook_filter:
+            filters &= Q(playbook_id=playbook_filter)
+
+        if sla_filter:
+            try:
+                sla_value = int(sla_filter)
+                filters &= Q(sla=sla_value)
+            except ValueError:
+                return Response(
+                    {"error": "Invalid sla format. Must be an integer."}, status=400
+                )
+
+        # Step 7: Apply filter_type only if status_filter and assignee_filter are not provided
+        if filter_type != "all" and not (status_filter or assignee_filter):
+            if filter_type == "unassigned":
+                filters &= Q(owner__isnull=True)
+            elif filter_type == "pending":
+                filters &= Q(status="Pending")
+            elif filter_type == "false-positive":
+                filters &= Q(status="False Positive")
+            elif filter_type == "closed":
+                filters &= Q(status="Closed")
+            elif filter_type == "error":
+                filters &= Q(status="Error")
+
+        # Step 8: Apply date filters with validation
+        try:
+            queryset = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+
+            start_date = None
+            end_date = None
+            occurred_start = None
+            occurred_end = None
+
+            if start_date_str:
+                try:
+                    start_date = make_aware(
+                        datetime.strptime(start_date_str, date_format)
+                    ).date()
+                    queryset = queryset.filter(created__date__gte=start_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid start_date format. Use YYYY-MM-DD."}, status=400
+                    )
+
+            if end_date_str:
+                try:
+                    end_date = make_aware(
+                        datetime.strptime(end_date_str, date_format)
+                    ).date()
+                    queryset = queryset.filter(created__date__lte=end_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400
+                    )
+
+            if occurred_start_str:
+                try:
+                    occurred_start = make_aware(
+                        datetime.strptime(occurred_start_str, date_format)
+                    ).date()
+                    queryset = queryset.filter(occured__date__gte=occurred_start)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid occurred_start format. Use YYYY-MM-DD."}, status=400
+                    )
+
+            if occurred_end_str:
+                try:
+                    occurred_end = make_aware(
+                        datetime.strptime(occurred_end_str, date_format)
+                    ).date()
+                    queryset = queryset.filter(occured__date__lte=occurred_end)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid occurred_end format. Use YYYY-MM-DD."}, status=400
+                    )
+
+            # Step 9: Validate date ranges
+            if start_date and end_date and start_date > end_date:
+                return Response(
+                    {"error": "start_date cannot be greater than end_date."}, status=400
+                )
+
+            if occurred_start and occurred_end and occurred_start > occurred_end:
+                return Response(
+                    {"error": "occurred_start cannot be greater than occurred_end."}, status=400
+                )
+
+            # Step 10: Query incidents
+            queryset = queryset.values(
+                "id",
+                "db_id",
+                "account",
+                "name",
+                "status",
+                "severity",
+                "incident_priority",
+                "incident_phase",
+                "created",
+                "owner",
+                "playbook_id",
+                "occured",
+                "sla",
+            ).order_by("-created")
+
+            # Step 11: Process incidents
+            incidents = []
+            for row in queryset:
+                created_date = (
+                    row["created"].strftime("%Y-%m-%d %I:%M %p")
+                    if row["created"]
+                    else "N/A"
+                )
+                occurred_date = (
+                    row["occured"].strftime("%Y-%m-%d %I:%M %p")
+                    if row["occured"]
+                    else "N/A"
+                )
+
+                description = (
+                    row["name"].strip().split(" ", 1)[1]
+                    if len(row["name"].strip().split(" ", 1)) > 1
+                    else row["name"]
+                )
+
+                incidents.append(
+                    {
+                        "id": f"{row['id']}",
+                        "db_id": row["db_id"],
+                        "account": row["account"],
+                        "name": row["name"],
+                        "description": description,
+                        "status": row["status"],
+                        "severity": row["severity"],
+                        "priority": row["incident_priority"],
+                        "phase": row["incident_phase"],
+                        "created": created_date,
+                        "assignee": row["owner"],
+                        "playbook": row["playbook_id"],
+                        "occurred": occurred_date,
+                        "sla": row["sla"],
+                    }
+                )
+
+            # Step 12: Pagination
+            paginator = PageNumberPagination()
+            paginator.page_size = PaginationConstants.PAGE_SIZE
+            paginated_incidents = paginator.paginate_queryset(incidents, request)
+
+            # Step 13: Return paginated response
+            return paginator.get_paginated_response({"incidents": paginated_incidents})
+
+        except Exception as e:
+            logger.error("Error in IncidentsView: %s", str(e))
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
