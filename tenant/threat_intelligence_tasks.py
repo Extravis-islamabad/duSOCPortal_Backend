@@ -152,7 +152,12 @@ def sync_threat_alert_details():
 
 @shared_task
 def sync_threat_intel_for_tenants():
-    results = ThreatIntelligenceTenant.objects.all()
+    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at").first()
+    if not results:
+        return
+
+    if isinstance(results, ThreatIntelligenceTenant):
+        results = [results]
 
     for result in results:
         with Cyware(
@@ -163,6 +168,28 @@ def sync_threat_intel_for_tenants():
             all_alerts = cyware.fetch_all_alerts(page_size=1000)
             transformed_data = cyware.transform_alert_for_tenants(all_alerts, result.id)
             cyware.insert_tenant_alerts(transformed_data)
+
+
+@shared_task
+def sync_threat_intel_tags_for_tenants():
+    results = ThreatIntelligenceTenant.objects.all().order_by("-created_at").first()
+    if not results:
+        return
+
+    if isinstance(results, ThreatIntelligenceTenant):
+        results = [results]
+
+    for result in results:
+        with Cyware(
+            access_key=result.access_key,
+            secret_key=result.secret_key,
+            base_url=result.base_url,
+        ) as cyware:
+            tags = cyware.get_list_tags()
+            transformed_data = cyware.transform_tags_for_tenants(
+                data=tags, threat_intel_id=result.id
+            )
+            cyware.insert_tags_for_tenants(tags=transformed_data)
 
 
 @shared_task
