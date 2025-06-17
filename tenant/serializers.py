@@ -17,16 +17,6 @@ from integration.models import (
 
 from .models import (
     Alert,
-    CywareAlertDetails,
-    CywareCategories,
-    CywareCustomField,
-    CywareGroup,
-    CywareTag,
-    CywareTenantAlertDetails,
-    CywareTenantCategories,
-    CywareTenantCustomField,
-    CywareTenantGroup,
-    CywareTenantTag,
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
@@ -1457,93 +1447,9 @@ class AlertSerializer(serializers.ModelSerializer):
         ]
 
 
-class CywareCustomFieldSerializer(serializers.ModelSerializer):
+
+# Serializer for the incident model
+class RecentIncidentsSerializer(serializers.ModelSerializer):
     class Meta:
-        model = CywareCustomField
-        fields = "__all__"
-
-
-class CywareGroupSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CywareGroup
-        fields = "__all__"
-
-
-class CywareTagSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CywareTag
-        fields = "__all__"
-
-
-class CywareCategoriesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CywareCategories
-        fields = "__all__"
-
-
-class CywareAlertDetailsSerializer(serializers.ModelSerializer):
-    card_groups = CywareGroupSerializer(many=True, read_only=True)
-    recipient_groups = CywareGroupSerializer(many=True, read_only=True)
-    card_tag = CywareTagSerializer(many=True, read_only=True)
-    card_category = CywareCategoriesSerializer(read_only=True)
-
-    class Meta:
-        model = CywareAlertDetails
-        fields = "__all__"
-
-
-class CywareCategoriesSerializer(serializers.ModelSerializer):
-    threat_indicator_fields = CywareCustomFieldSerializer(many=True, read_only=True)
-    additional_fields = CywareCustomFieldSerializer(many=True, read_only=True)
-    required_fields = CywareCustomFieldSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = CywareCategories
-        fields = "__all__"
-
-
-class CywareTenantCustomFieldSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CywareTenantCustomField
-        fields = "__all__"
-
-
-class CywareTenantGroupSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CywareTenantGroup
-        fields = "__all__"
-
-
-class CywareTenantTagSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CywareTenantTag
-        fields = "__all__"
-
-
-class CywareTenantCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CywareTenantCategories
-        fields = "__all__"
-
-
-class CywareTenantAlertDetailsSerializer(serializers.ModelSerializer):
-    card_groups = CywareTenantGroupSerializer(many=True, read_only=True)
-    recipient_groups = CywareTenantGroupSerializer(many=True, read_only=True)
-    card_tag = CywareTenantTagSerializer(many=True, read_only=True)
-    card_category = CywareTenantCategorySerializer(read_only=True)
-
-    class Meta:
-        model = CywareTenantAlertDetails
-        fields = "__all__"
-
-
-class CywareTenantCategorySerializer(serializers.ModelSerializer):
-    threat_indicator_fields = CywareTenantCustomFieldSerializer(
-        many=True, read_only=True
-    )
-    additional_fields = CywareTenantCustomFieldSerializer(many=True, read_only=True)
-    required_fields = CywareTenantCustomFieldSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = CywareTenantCategories
+        model = DUCortexSOARIncidentFinalModel
         fields = "__all__"
