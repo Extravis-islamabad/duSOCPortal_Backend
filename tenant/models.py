@@ -428,7 +428,7 @@ class ThreatIntelligenceTenantAlerts(models.Model):
         return f"{self.title} ({self.db_id})"
 
     class Meta:
-        db_table = "cyware_custom_tenant_alerts"
+        db_table = "cyware_alerts_tenant"
 
 
 class CywareTenantTag(models.Model):
@@ -511,6 +511,48 @@ class CywareTenantCategories(models.Model):
 
     class Meta:
         db_table = "cyware_categories_tenant"
+
+
+class CywareTenantAlertDetails(models.Model):
+    threat_intelligence = models.ForeignKey(
+        ThreatIntelligenceTenant, on_delete=models.CASCADE
+    )
+    alert = models.ForeignKey(ThreatIntelligenceTenantAlerts, on_delete=models.CASCADE)
+    short_id = models.CharField(max_length=64, unique=True)
+    title = models.CharField(max_length=512)
+    content = models.TextField()
+    status = models.CharField(max_length=32)
+    tlp = models.CharField(max_length=32)
+    published_time = models.DateTimeField(null=True, blank=True)
+    push_required = models.BooleanField(default=False)
+    push_email_notification = models.BooleanField(default=False)
+    tracking_id = models.CharField(max_length=255, null=True, blank=True)
+
+    card_groups = models.ManyToManyField(
+        CywareTenantGroup, blank=True, related_name="card_alerts_tenant"
+    )
+    recipient_groups = models.ManyToManyField(
+        CywareTenantGroup, blank=True, related_name="recipient_alerts_tenant"
+    )
+
+    card_tag = models.ManyToManyField(
+        CywareTenantTag, blank=True, related_name="tagged_alerts_tenant"
+    )
+    card_category = models.ForeignKey(
+        CywareTenantCategories, blank=True, on_delete=models.CASCADE, null=True
+    )
+
+    card_image = models.URLField(null=True, blank=True)
+    card_info = models.TextField(null=True, blank=True)
+    event = models.JSONField(null=True, blank=True)
+    intel_id = models.CharField(max_length=255, null=True, blank=True)
+    rfi_id = models.CharField(max_length=255, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "cyware_alert_details_tenant"
 
 
 class Alert(models.Model):
