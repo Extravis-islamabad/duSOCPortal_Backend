@@ -407,7 +407,7 @@ class ThreatIntelligenceTenant(models.Model):
 
     class Meta:
         unique_together = ("access_key", "secret_key", "base_url")
-        db_table = "threat_intelligence_tenants"
+        db_table = "cyware_tenants_tool_integration"
 
 
 class ThreatIntelligenceTenantAlerts(models.Model):
@@ -425,7 +425,7 @@ class ThreatIntelligenceTenantAlerts(models.Model):
         return f"{self.title} ({self.db_id})"
 
     class Meta:
-        db_table = "threat_intelligence_tenant_alerts"
+        db_table = "cyware_custom_tenant_alerts"
 
 
 class Alert(models.Model):
@@ -441,7 +441,7 @@ class Alert(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["db_id"])]
-        db_table = "threat_intelligence_alerts"
+        db_table = "cyware_alerts"
 
     def __str__(self):
         return f"{self.title} ({self.db_id})"
