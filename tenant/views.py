@@ -26,14 +26,20 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import PaginationConstants
+from common.modules.cyware import Cyware
 from integration.models import (
+    Integration,
+    IntegrationCredentials,
     IntegrationTypes,
     ItsmSubTypes,
     SiemSubTypes,
     SoarSubTypes,
+    ThreatIntelligenceSubTypes,
 )
 from tenant.models import (
     Alert,
+    CywareAlertDetails,
+    CywareTenantAlertDetails,
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
@@ -52,6 +58,8 @@ from tenant.models import (
 )
 from tenant.serializers import (
     AlertSerializer,
+    CywareAlertDetailsSerializer,
+    CywareTenantAlertDetailsSerializer,
     DUCortexSOARIncidentSerializer,
     DuCortexSOARTenantsSerializer,
     DuIbmQradarTenantsSerializer,
@@ -62,7 +70,7 @@ from tenant.serializers import (
     IBMQradarEventCollectorSerializer,
     TenantRoleSerializer,
 )
-from tenant.threat_intelligence_tasks import sync_threat_intel_for_tenants
+from tenant.threat_intelligence_tasks import sync_threat_alert_details_for_tenants
 
 
 class PermissionChoicesAPIView(APIView):
@@ -199,7 +207,8 @@ class TestView(APIView):
     def get(self, request):
         # sync_threat_intel.delay()
         # sync_threat_intel_for_tenants.delay()
-        sync_threat_intel_for_tenants()
+        # sync_threat_intel_for_tenants()
+        sync_threat_alert_details_for_tenants()
         # with Cyware(
         #     base_url="https://du.cyware.com",
         #     access_key="c54d63c9-8c08-4921-adee-8a83a2112104",
@@ -2374,3 +2383,134 @@ class AlertListView(APIView):
 
         serializer = AlertSerializer(paginated_qs, many=True)
         return paginator.get_paginated_response(serializer.data)
+
+
+class AlertDetailView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request, alert_id):
+        user = request.user
+
+        try:
+            tenant = Tenant.objects.get(tenant=user)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        if tenant.is_defualt_threat_intel:
+            # Default TI mode (CywareAlertDetails)
+            try:
+                alert = Alert.objects.get(id=alert_id)
+                alert_details = CywareAlertDetails.objects.get(alert=alert)
+                serializer = CywareAlertDetailsSerializer(alert_details)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            except (Alert.DoesNotExist, CywareAlertDetails.DoesNotExist):
+                # Fallback to fetch from Cyware API
+                try:
+                    integration = Integration.objects.filter(
+                        integration_type=IntegrationTypes.THREAT_INTELLIGENCE,
+                        threat_intelligence_subtype=ThreatIntelligenceSubTypes.CYWARE,
+                    ).first()
+
+                    if not integration:
+                        return Response(
+                            {"error": "Cyware integration not found."},
+                            status=status.HTTP_404_NOT_FOUND,
+                        )
+
+                    credentials = IntegrationCredentials.objects.filter(
+                        integration=integration
+                    ).first()
+                    if (
+                        not credentials
+                        or not credentials.access_key
+                        or not credentials.secret_key
+                        or not credentials.base_url
+                    ):
+                        return Response(
+                            {"error": "Valid Cyware credentials not found."},
+                            status=status.HTTP_404_NOT_FOUND,
+                        )
+
+                    with Cyware(
+                        base_url=credentials.base_url,
+                        access_key=credentials.access_key,
+                        secret_key=credentials.secret_key,
+                    ) as cyware:
+                        data = cyware.get_alert_detail(short_id=alert_id)
+                        if not data:
+                            return Response(
+                                {"error": "Alert not found in Cyware API."},
+                                status=status.HTTP_404_NOT_FOUND,
+                            )
+
+                        transformed_data = cyware.transform_alert_detail(data=data)
+                        cyware.insert_alert_detail(alert_obj=transformed_data)
+
+                        alert = Alert.objects.get(db_id=alert_id)
+                        alert_details = CywareAlertDetails.objects.get(alert=alert)
+                        serializer = CywareAlertDetailsSerializer(alert_details)
+                        return Response(serializer.data, status=status.HTTP_200_OK)
+
+                except Exception as e:
+                    return Response(
+                        {"error": f"Cyware API Error: {str(e)}"},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+
+        else:
+            # Custom TI mode (CywareTenantAlertDetails)
+            ti_entry = ThreatIntelligenceTenant.objects.filter(tenants=tenant).first()
+            if not ti_entry:
+                return Response(
+                    {"error": "Threat Intelligence configuration not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            try:
+                alert = ThreatIntelligenceTenantAlerts.objects.get(id=alert_id)
+                alert_details = CywareTenantAlertDetails.objects.get(
+                    alert=alert, threat_intelligence=ti_entry
+                )
+                serializer = CywareTenantAlertDetailsSerializer(alert_details)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            except (
+                ThreatIntelligenceTenantAlerts.DoesNotExist,
+                CywareTenantAlertDetails.DoesNotExist,
+            ):
+                try:
+                    alert = ThreatIntelligenceTenantAlerts.objects.get(id=alert_id)
+                    with Cyware(
+                        base_url=ti_entry.base_url,
+                        access_key=ti_entry.access_key,
+                        secret_key=ti_entry.secret_key,
+                    ) as cyware:
+                        data = cyware.get_alert_detail(short_id=alert.db_id)
+                        if not data:
+                            return Response(
+                                {"error": "Alert not found in Cyware API."},
+                                status=status.HTTP_404_NOT_FOUND,
+                            )
+
+                        transformed_data = cyware.transform_alert_detail_for_tenants(
+                            data=data, threat_intel_id=ti_entry.id, alert_id=alert_id
+                        )
+                        cyware.insert_alert_detail_for_tenants(
+                            alert_obj=transformed_data
+                        )
+
+                        alert_details = CywareTenantAlertDetails.objects.get(
+                            alert=alert, threat_intelligence=ti_entry
+                        )
+                        serializer = CywareTenantAlertDetailsSerializer(alert_details)
+                        return Response(serializer.data, status=status.HTTP_200_OK)
+
+                except Exception as e:
+                    return Response(
+                        {"error": f"Cyware tenant API error: {str(e)}"},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
