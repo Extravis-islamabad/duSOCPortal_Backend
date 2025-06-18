@@ -40,6 +40,7 @@ from tenant.models import (
     Alert,
     CywareAlertDetails,
     CywareTenantAlertDetails,
+    DefaultSoarSlaMetric,
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
@@ -49,6 +50,7 @@ from tenant.models import (
     IBMQradarEPS,
     IBMQradarEventCollector,
     IBMQradarOffense,
+    SlaLevelChoices,
     Tenant,
     TenantPermissionChoices,
     TenantQradarMapping,
@@ -71,7 +73,6 @@ from tenant.serializers import (
     RecentIncidentsSerializer,
     TenantRoleSerializer,
 )
-from tenant.threat_intelligence_tasks import sync_threat_alert_details
 
 
 class PermissionChoicesAPIView(APIView):
@@ -206,9 +207,21 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
+        sla_defaults = {
+            SlaLevelChoices.P1: (15, 30, 4 * 60),
+            SlaLevelChoices.P2: (30, 45, 8 * 60),
+            SlaLevelChoices.P3: (45, 90, 24 * 60),
+            SlaLevelChoices.P4: (60, 120, 48 * 60),
+        }
+
+        for level, (tta, ttn, ttdn) in sla_defaults.items():
+            DefaultSoarSlaMetric.objects.update_or_create(
+                sla_level=level,
+                defaults={"tta_minutes": tta, "ttn_minutes": ttn, "ttdn_minutes": ttdn},
+            )
         # sync_threat_intel.delay()
         # sync_threat_intel_for_tenants.delay()
-        sync_threat_alert_details.delay()
+        # sync_threat_alert_details.delay()
         # with Cyware(
         #     base_url="https://du.cyware.com",
         #     access_key="c54d63c9-8c08-4921-adee-8a83a2112104",
