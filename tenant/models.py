@@ -384,10 +384,26 @@ class Tenant(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class VolumeTypeChoices(models.IntegerChoices):
+    EPS = 1, "EPS"
+    GB_PER_DAY = 2, "GB/D"
+
+
 class TenantQradarMapping(models.Model):
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
     event_collectors = models.ManyToManyField(IBMQradarEventCollector, blank=True)
+    contracted_volume_type = models.IntegerField(
+        choices=VolumeTypeChoices.choices,
+        null=True,
+        blank=True,
+        help_text="Type of contracted volume: EPS or GB/day",
+    )
+    contracted_volume = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Value of contracted volume based on the selected type",
+    )
 
     class Meta:
         unique_together = ("tenant", "qradar_tenant")
