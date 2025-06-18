@@ -222,15 +222,113 @@ class TestView(APIView):
         return Response({"message": "Hello, world!"})
 
 
+# class GetTenantAssetsList(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             # Step 1: Get current tenant
+#             tenant = Tenant.objects.select_related("tenant").get(tenant=request.user)
+
+#             siem_integrations = tenant.integrations.filter(
+#                 integration_type=IntegrationTypes.SIEM_INTEGRATION,
+#                 siem_subtype=SiemSubTypes.IBM_QRADAR,
+#                 status=True,
+#             )
+#             if not siem_integrations.exists():
+#                 return Response(
+#                     {"error": "No active SEIM integration configured for tenant."},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+#             # Step 2: Get mapped collector IDs
+#             collector_ids = (
+#                 TenantQradarMapping.objects.filter(tenant=tenant)
+#                 .prefetch_related("event_collectors")
+#                 .values_list("event_collectors__id", flat=True)
+#             )
+
+#             if not collector_ids:
+#                 return Response(
+#                     {"detail": "No Event Collectors mapped to this tenant."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             # Step 3: Parse date filters
+#             start_date_str = request.query_params.get("start_date")
+#             end_date_str = request.query_params.get("end_date")
+#             start_date = parse_date(start_date_str) if start_date_str else None
+#             end_date = parse_date(end_date_str) if end_date_str else None
+
+#             if start_date and end_date and start_date > end_date:
+#                 return Response(
+#                     {"error": "start_date cannot be greater than end_date."},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             # Step 4: Filter assets
+#             filters = Q(event_collector_id__in=collector_ids)
+#             if start_date:
+#                 filters &= Q(creation_date_converted__gte=start_date)
+#             if end_date:
+#                 filters &= Q(creation_date_converted__lte=end_date)
+
+#             assets = (
+#                 IBMQradarAssests.objects.filter(filters)
+#                 .select_related("event_collector", "log_source_type")
+#                 .order_by("-creation_date_converted")
+#             )
+
+#             # Step 5: Pagination
+#             paginator = PageNumberPagination()
+#             paginator.page_size = PaginationConstants.PAGE_SIZE
+#             result_page = paginator.paginate_queryset(assets, request)
+
+#             # Step 6: Serialization
+#             serializer = IBMQradarAssestsSerializer(result_page, many=True)
+#             return paginator.get_paginated_response(serializer.data)
+
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+# Updated GetTenantAssetsList view
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
     def get(self, request):
+        """
+        Retrieve IBM QRadar assets filtered by:
+        - Event collector IDs mapped to the tenant
+        - Optional query parameters: name, id, db_id, status, log_source_type, enabled, last_event_start_date, average_eps, start_date, end_date
+        
+        Query Parameters:
+            name (str): Partial match on asset name (case-insensitive)
+            id (int): Exact match on asset ID
+            db_id (int): Exact match on db_id
+            status (str): Exact match on status (case-insensitive)
+            log_source_type (str): Partial match on log source type (case-insensitive)
+            enabled (bool): Exact match on enabled status (true/false)
+            last_event_start_date (YYYY-MM-DD): Exact match on last event start date
+            average_eps (float): Exact match on average EPS
+            start_date (YYYY-MM-DD): Assets created on or after this date
+            end_date (YYYY-MM-DD): Assets created on or before this date
+        
+        Returns:
+            Paginated response with count, next, previous, and results
+        """
         try:
-            # Step 1: Get current tenant
+            # Step 1: Validate tenant
             tenant = Tenant.objects.select_related("tenant").get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
+        try:
+            # Step 2: Check for active SIEM integration
             siem_integrations = tenant.integrations.filter(
                 integration_type=IntegrationTypes.SIEM_INTEGRATION,
                 siem_subtype=SiemSubTypes.IBM_QRADAR,
@@ -238,23 +336,101 @@ class GetTenantAssetsList(APIView):
             )
             if not siem_integrations.exists():
                 return Response(
-                    {"error": "No active SEIM integration configured for tenant."},
+                    {"error": "No active SIEM integration configured for tenant."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            # Step 2: Get mapped collector IDs
+
+            # Step 3: Get mapped collector IDs
             collector_ids = (
                 TenantQradarMapping.objects.filter(tenant=tenant)
                 .prefetch_related("event_collectors")
                 .values_list("event_collectors__id", flat=True)
             )
-
             if not collector_ids:
                 return Response(
                     {"detail": "No Event Collectors mapped to this tenant."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            # Step 3: Parse date filters
+            # Step 4: Build filters
+            filters = Q(event_collector_id__in=collector_ids)
+
+            # Name filter
+            name = request.query_params.get("name")
+            if name:
+                filters &= Q(name__icontains=name)
+
+            # ID filter
+            id_filter = request.query_params.get("id")
+            if id_filter:
+                try:
+                    id_value = int(id_filter)
+                    filters &= Q(id=id_value)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid id format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # DB ID filter
+            db_id = request.query_params.get("db_id")
+            if db_id:
+                try:
+                    db_id_value = int(db_id)
+                    filters &= Q(db_id=db_id_value)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid db_id format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Status filter
+            status = request.query_params.get("status")
+            if status:
+                filters &= Q(status__iexact=status)
+
+            # Log source type filter
+            log_source_type = request.query_params.get("log_source_type")
+            if log_source_type:
+                filters &= Q(log_source_type__name__icontains=log_source_type)
+
+            # Enabled filter
+            enabled = request.query_params.get("enabled")
+            if enabled is not None:
+                try:
+                    enabled_value = enabled.lower() == 'true'
+                    filters &= Q(enabled=enabled_value)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid enabled format. Must be true or false."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Last event start date filter
+            last_event_start_date = request.query_params.get("last_event_start_date")
+            if last_event_start_date:
+                try:
+                    last_event_date = parse_date(last_event_start_date)
+                    filters &= Q(last_event_start_time__date=last_event_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid last_event_start_date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Average EPS filter
+            average_eps = request.query_params.get("average_eps")
+            if average_eps:
+                try:
+                    eps_value = float(average_eps)
+                    filters &= Q(average_eps=eps_value)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid average_eps format. Must be a number."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Start and end date filters for creation_date_converted
             start_date_str = request.query_params.get("start_date")
             end_date_str = request.query_params.get("end_date")
             start_date = parse_date(start_date_str) if start_date_str else None
@@ -266,31 +442,31 @@ class GetTenantAssetsList(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Step 4: Filter assets
-            filters = Q(event_collector_id__in=collector_ids)
             if start_date:
                 filters &= Q(creation_date_converted__gte=start_date)
             if end_date:
                 filters &= Q(creation_date_converted__lte=end_date)
 
+            # Step 5: Apply filters and sort
             assets = (
                 IBMQradarAssests.objects.filter(filters)
                 .select_related("event_collector", "log_source_type")
                 .order_by("-creation_date_converted")
             )
 
-            # Step 5: Pagination
+            # Step 6: Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
             result_page = paginator.paginate_queryset(assets, request)
 
-            # Step 6: Serialization
+            # Step 7: Serialization
             serializer = IBMQradarAssestsSerializer(result_page, many=True)
             return paginator.get_paginated_response(serializer.data)
 
-        except Tenant.DoesNotExist:
+        except Exception as e:
             return Response(
-                {"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
