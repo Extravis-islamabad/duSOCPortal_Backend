@@ -13,7 +13,7 @@ from common.constants import PaginationConstants
 from tenant.cortex_soar_tasks import sync_soar_data
 from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
 from tenant.itsm_tasks import sync_itsm
-from tenant.models import Tenant
+from tenant.models import Tenant, VolumeTypeChoices
 from tenant.serializers import (
     AllTenantDetailSerializer,
     TenantCreateSerializer,
@@ -291,3 +291,14 @@ class SyncITSMDataAPIView(APIView):
     def get(self, request):
         sync_itsm.delay()
         return Response({"message": "Sync process for ITSM SOAR data started."})
+
+
+class VolumeTypeChoicesAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        choices = [
+            {"id": choice.value, "label": choice.label} for choice in VolumeTypeChoices
+        ]
+        return Response(choices, status=status.HTTP_200_OK)

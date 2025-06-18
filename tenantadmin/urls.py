@@ -13,6 +13,7 @@ from tenantadmin.views import (
     TenantDetailAPIView,
     TenantsByCompanyAPIView,
     TenantUpdateAPIView,
+    VolumeTypeChoicesAPIView,
 )
 
 urlpatterns = [
@@ -52,4 +53,5 @@ urlpatterns = [
     path("sync_qradar/", SyncIBMQradarDataAPIView.as_view(), name="sync-ibm-qradar"),
     path("sync_soar/", SyncCortexSOARDataAPIView.as_view(), name="sync-cortex-soar"),
     path("sync_itsm/", SyncITSMDataAPIView.as_view(), name="sync-itsm"),
+    path("volume-types/", VolumeTypeChoicesAPIView.as_view(), name="volume-types"),
 ]
