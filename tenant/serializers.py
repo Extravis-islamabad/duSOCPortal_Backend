@@ -40,6 +40,7 @@ from .models import (
     TenantRole,
     TenantRolePermissions,
     ThreatIntelligenceTenant,
+    VolumeTypeChoices,
 )
 
 
@@ -633,6 +634,10 @@ class QradarTenantInputSerializer(serializers.Serializer):
     event_collector_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, default=[]
     )
+    contracted_volume_type = serializers.ChoiceField(
+        choices=VolumeTypeChoices.choices, required=True
+    )
+    contracted_volume = serializers.FloatField(required=True)
 
 
 class TenantCreateSerializer(serializers.ModelSerializer):
@@ -737,6 +742,12 @@ class TenantCreateSerializer(serializers.ModelSerializer):
 
         if "qradar_tenants" in data:
             for qt in data["qradar_tenants"]:
+                if "contracted_volume_type" not in qt or "contracted_volume" not in qt:
+                    raise serializers.ValidationError(
+                        {
+                            "qradar_tenants": "Both 'contracted_volume_type' and 'contracted_volume' are required for each QRadar tenant"
+                        }
+                    )
                 if not DuIbmQradarTenants.objects.filter(
                     id=qt["qradar_tenant_id"]
                 ).exists():
@@ -853,7 +864,10 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                         id=qt["qradar_tenant_id"]
                     )
                     mapping = TenantQradarMapping.objects.create(
-                        tenant=tenant, qradar_tenant=qradar_tenant
+                        tenant=tenant,
+                        qradar_tenant=qradar_tenant,
+                        contracted_volume_type=qt["contracted_volume_type"],
+                        contracted_volume=qt["contracted_volume"],
                     )
                     mapping.event_collectors.set(
                         IBMQradarEventCollector.objects.filter(
