@@ -132,6 +132,4 @@ urlpatterns = [
         name="recent-incidents",
     ),
     path("api/all-incidents/", AllIncidentsView.as_view(), name="all-incidents"),
-    
-
 ]

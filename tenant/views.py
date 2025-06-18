@@ -222,78 +222,6 @@ class TestView(APIView):
         return Response({"message": "Hello, world!"})
 
 
-# class GetTenantAssetsList(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             # Step 1: Get current tenant
-#             tenant = Tenant.objects.select_related("tenant").get(tenant=request.user)
-
-#             siem_integrations = tenant.integrations.filter(
-#                 integration_type=IntegrationTypes.SIEM_INTEGRATION,
-#                 siem_subtype=SiemSubTypes.IBM_QRADAR,
-#                 status=True,
-#             )
-#             if not siem_integrations.exists():
-#                 return Response(
-#                     {"error": "No active SEIM integration configured for tenant."},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-#             # Step 2: Get mapped collector IDs
-#             collector_ids = (
-#                 TenantQradarMapping.objects.filter(tenant=tenant)
-#                 .prefetch_related("event_collectors")
-#                 .values_list("event_collectors__id", flat=True)
-#             )
-
-#             if not collector_ids:
-#                 return Response(
-#                     {"detail": "No Event Collectors mapped to this tenant."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-
-#             # Step 3: Parse date filters
-#             start_date_str = request.query_params.get("start_date")
-#             end_date_str = request.query_params.get("end_date")
-#             start_date = parse_date(start_date_str) if start_date_str else None
-#             end_date = parse_date(end_date_str) if end_date_str else None
-
-#             if start_date and end_date and start_date > end_date:
-#                 return Response(
-#                     {"error": "start_date cannot be greater than end_date."},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-
-#             # Step 4: Filter assets
-#             filters = Q(event_collector_id__in=collector_ids)
-#             if start_date:
-#                 filters &= Q(creation_date_converted__gte=start_date)
-#             if end_date:
-#                 filters &= Q(creation_date_converted__lte=end_date)
-
-#             assets = (
-#                 IBMQradarAssests.objects.filter(filters)
-#                 .select_related("event_collector", "log_source_type")
-#                 .order_by("-creation_date_converted")
-#             )
-
-#             # Step 5: Pagination
-#             paginator = PageNumberPagination()
-#             paginator.page_size = PaginationConstants.PAGE_SIZE
-#             result_page = paginator.paginate_queryset(assets, request)
-
-#             # Step 6: Serialization
-#             serializer = IBMQradarAssestsSerializer(result_page, many=True)
-#             return paginator.get_paginated_response(serializer.data)
-
-#         except Tenant.DoesNotExist:
-#             return Response(
-#                 {"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-#             )
-
-# Updated GetTenantAssetsList view
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -303,7 +231,7 @@ class GetTenantAssetsList(APIView):
         Retrieve IBM QRadar assets filtered by:
         - Event collector IDs mapped to the tenant
         - Optional query parameters: name, id, db_id, status, log_source_type, enabled, last_event_start_date, average_eps, start_date, end_date
-        
+
         Query Parameters:
             name (str): Partial match on asset name (case-insensitive)
             id (int): Exact match on asset ID
@@ -315,7 +243,7 @@ class GetTenantAssetsList(APIView):
             average_eps (float): Exact match on average EPS
             start_date (YYYY-MM-DD): Assets created on or after this date
             end_date (YYYY-MM-DD): Assets created on or before this date
-        
+
         Returns:
             Paginated response with count, next, previous, and results
         """
@@ -369,7 +297,7 @@ class GetTenantAssetsList(APIView):
                 except ValueError:
                     return Response(
                         {"error": "Invalid id format. Must be an integer."},
-                        status=status.HTTP_400_BAD_REQUEST
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             # DB ID filter
@@ -381,13 +309,13 @@ class GetTenantAssetsList(APIView):
                 except ValueError:
                     return Response(
                         {"error": "Invalid db_id format. Must be an integer."},
-                        status=status.HTTP_400_BAD_REQUEST
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             # Status filter
-            status = request.query_params.get("status")
-            if status:
-                filters &= Q(status__iexact=status)
+            status_filter = request.query_params.get("status")
+            if status_filter:
+                filters &= Q(status__iexact=status_filter)
 
             # Log source type filter
             log_source_type = request.query_params.get("log_source_type")
@@ -398,12 +326,12 @@ class GetTenantAssetsList(APIView):
             enabled = request.query_params.get("enabled")
             if enabled is not None:
                 try:
-                    enabled_value = enabled.lower() == 'true'
+                    enabled_value = enabled.lower() == "true"
                     filters &= Q(enabled=enabled_value)
                 except ValueError:
                     return Response(
                         {"error": "Invalid enabled format. Must be true or false."},
-                        status=status.HTTP_400_BAD_REQUEST
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             # Last event start date filter
@@ -414,8 +342,10 @@ class GetTenantAssetsList(APIView):
                     filters &= Q(last_event_start_time__date=last_event_date)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid last_event_start_date format. Use YYYY-MM-DD."},
-                        status=status.HTTP_400_BAD_REQUEST
+                        {
+                            "error": "Invalid last_event_start_date format. Use YYYY-MM-DD."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             # Average EPS filter
@@ -427,7 +357,7 @@ class GetTenantAssetsList(APIView):
                 except ValueError:
                     return Response(
                         {"error": "Invalid average_eps format. Must be a number."},
-                        status=status.HTTP_400_BAD_REQUEST
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             # Start and end date filters for creation_date_converted
@@ -465,8 +395,7 @@ class GetTenantAssetsList(APIView):
 
         except Exception as e:
             return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
@@ -682,7 +611,7 @@ class TenantITSMTicketsView(APIView):
         Retrieve ITSM tickets filtered by:
         - ITSM tenant IDs
         - Optional query parameters: account_name, db_id, id, subject, status, created_by, start_date, end_date
-        
+
         Query Parameters:
             account_name (str): Partial match on account_name (case-insensitive)
             db_id (int): Exact match on db_id
@@ -692,7 +621,7 @@ class TenantITSMTicketsView(APIView):
             created_by (str): Partial match on created_by_name (case-insensitive)
             start_date (YYYY-MM-DD): Tickets created on or after this date
             end_date (YYYY-MM-DD): Tickets created on or before this date
-        
+
         Returns:
             Paginated response with count, next, previous, and results
         """
@@ -721,8 +650,8 @@ class TenantITSMTicketsView(APIView):
             itsm_tenant_ids = tenant.itsm_tenants.values_list("id", flat=True)
             if not itsm_tenant_ids:
                 return Response(
-                    {"error": "No ITSM tenants found."}, 
-                    status=status.HTTP_404_NOT_FOUND
+                    {"error": "No ITSM tenants found."},
+                    status=status.HTTP_404_NOT_FOUND,
                 )
 
             # Step 4: Build filters
@@ -742,7 +671,7 @@ class TenantITSMTicketsView(APIView):
                 except ValueError:
                     return Response(
                         {"error": "Invalid db_id format. Must be an integer."},
-                        status=status.HTTP_400_BAD_REQUEST
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             # ID filter
@@ -754,7 +683,7 @@ class TenantITSMTicketsView(APIView):
                 except ValueError:
                     return Response(
                         {"error": "Invalid id format. Must be an integer."},
-                        status=status.HTTP_400_BAD_REQUEST
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             # Subject filter
@@ -782,7 +711,7 @@ class TenantITSMTicketsView(APIView):
                 except ValueError:
                     return Response(
                         {"error": "Invalid start_date format. Use YYYY-MM-DD."},
-                        status=status.HTTP_400_BAD_REQUEST
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             end_date_str = request.query_params.get("end_date")
@@ -793,11 +722,13 @@ class TenantITSMTicketsView(APIView):
                 except ValueError:
                     return Response(
                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
-                        status=status.HTTP_400_BAD_REQUEST
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             # Step 5: Apply filters and sort
-            tickets = DuITSMFinalTickets.objects.filter(filters).order_by('-creation_date')
+            tickets = DuITSMFinalTickets.objects.filter(filters).order_by(
+                "-creation_date"
+            )
 
             # Step 6: Pagination
             paginator = PageNumberPagination()
@@ -810,8 +741,7 @@ class TenantITSMTicketsView(APIView):
 
         except Exception as e:
             return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
@@ -3219,7 +3149,7 @@ class AllIncidentsView(APIView):
         - SOAR tenant
         - optional filter_type (1–4)
         - optional severity (0–6)
-        
+
         Returns:
             {
                 "data": [...],
@@ -3246,7 +3176,9 @@ class AllIncidentsView(APIView):
                     filter_enum = FilterType(int(filter_type))
                     now = timezone.now()
                     if filter_enum == FilterType.TODAY:
-                        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                        start_date = now.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
                     elif filter_enum == FilterType.WEEK:
                         start_date = now - timedelta(days=7)
                     elif filter_enum == FilterType.MONTH:
@@ -3255,7 +3187,12 @@ class AllIncidentsView(APIView):
                         start_date = now - timedelta(days=365)
                     filters &= Q(created__gte=start_date)
                 except Exception:
-                    return Response({"error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."}, status=400)
+                    return Response(
+                        {
+                            "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
+                        },
+                        status=400,
+                    )
 
             # Handle severity
             severity = request.query_params.get("severity")
@@ -3266,33 +3203,34 @@ class AllIncidentsView(APIView):
                         raise ValueError
                     filters &= Q(severity=severity_int)
                 except ValueError:
-                    return Response({"error": "Invalid severity. Must be between 0 and 6."}, status=400)
+                    return Response(
+                        {"error": "Invalid severity. Must be between 0 and 6."},
+                        status=400,
+                    )
 
             # Apply filters
             incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
             print(incidents_qs.values("severity").annotate(count=Count("id")))
-            
 
             # Prepare summary counts
-            severity_counts = incidents_qs.values('severity').annotate(count=Count('severity'))
-            summary = {SEVERITY_LABELS.get(item['severity'], f"Unknown ({item['severity']})"): item['count'] for item in severity_counts}
+            severity_counts = incidents_qs.values("severity").annotate(
+                count=Count("severity")
+            )
+            summary = {
+                SEVERITY_LABELS.get(
+                    item["severity"], f"Unknown ({item['severity']})"
+                ): item["count"]
+                for item in severity_counts
+            }
 
             # Limit to top 10
-            incidents = incidents_qs.order_by('-created')[:10]
+            incidents = incidents_qs.order_by("-created")[:10]
 
             serializer = RecentIncidentsSerializer(incidents, many=True)
 
-            return Response(
-                {
-                    "data": serializer.data,
-                    "summary": summary
-                },
-                status=200
-            )
+            return Response({"data": serializer.data, "summary": summary}, status=200)
 
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
         except Exception as e:
             return Response({"error": str(e)}, status=500)
-        
-        
