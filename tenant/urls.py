@@ -1,8 +1,8 @@
 from django.urls import path
 
 from tenant.views import (
-    AlertDetailView,
     AlertListView,
+    AllIncidentsView,
     DashboardView,
     DuCortexSOARTenantsListView,
     DuIbmQradarTenantsListView,
@@ -123,15 +123,15 @@ urlpatterns = [
         AlertListView.as_view(),
         name="get-threat-intelligence",
     ),
-    path(
-        "alerts/<str:alert_id>/details/",
-        AlertDetailView.as_view(),
-        name="alert-details",
-    ),
+    #     path("test/", TestView.as_view(), name="test"),
+    # ]
     path("test/", TestView.as_view(), name="test"),
     path(
         "api/recent-incidents/",
         RecentIncidentsView.as_view(),
         name="recent-incidents",
     ),
+    path("api/all-incidents/", AllIncidentsView.as_view(), name="all-incidents"),
+    
+
 ]

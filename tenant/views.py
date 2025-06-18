@@ -25,7 +25,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.permissions import IsAdminUser, IsTenant
-from common.constants import FilterType, PaginationConstants
+from common.constants import SEVERITY_LABELS, FilterType, PaginationConstants
 from common.modules.cyware import Cyware
 from integration.models import (
     Integration,
@@ -2888,3 +2888,92 @@ class RecentIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class AllIncidentsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        """
+        Retrieve up to 10 incidents filtered by:
+        - SOAR tenant
+        - optional filter_type (1–4)
+        - optional severity (0–6)
+        
+        Returns:
+            {
+                "data": [...],
+                "summary": {
+                    "Unknown": 3,
+                    "Low": 2,
+                    ...
+                }
+            }
+        """
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+            soar_ids = tenant.soar_tenants.values_list("id", flat=True)
+
+            if not soar_ids:
+                return Response({"error": "No SOAR tenants found."}, status=404)
+
+            filters = Q(cortex_soar_tenant__in=soar_ids)
+
+            # Handle filter_type
+            filter_type = request.query_params.get("filter_type")
+            if filter_type:
+                try:
+                    filter_enum = FilterType(int(filter_type))
+                    now = timezone.now()
+                    if filter_enum == FilterType.TODAY:
+                        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    elif filter_enum == FilterType.WEEK:
+                        start_date = now - timedelta(days=7)
+                    elif filter_enum == FilterType.MONTH:
+                        start_date = now - timedelta(days=30)
+                    elif filter_enum == FilterType.YEAR:
+                        start_date = now - timedelta(days=365)
+                    filters &= Q(created__gte=start_date)
+                except Exception:
+                    return Response({"error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."}, status=400)
+
+            # Handle severity
+            severity = request.query_params.get("severity")
+            if severity is not None:
+                try:
+                    severity_int = int(severity)
+                    if severity_int not in range(0, 7):
+                        raise ValueError
+                    filters &= Q(severity=severity_int)
+                except ValueError:
+                    return Response({"error": "Invalid severity. Must be between 0 and 6."}, status=400)
+
+            # Apply filters
+            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+            print(incidents_qs.values("severity").annotate(count=Count("id")))
+            
+
+            # Prepare summary counts
+            severity_counts = incidents_qs.values('severity').annotate(count=Count('severity'))
+            summary = {SEVERITY_LABELS.get(item['severity'], f"Unknown ({item['severity']})"): item['count'] for item in severity_counts}
+
+            # Limit to top 10
+            incidents = incidents_qs.order_by('-created')[:10]
+
+            serializer = RecentIncidentsSerializer(incidents, many=True)
+
+            return Response(
+                {
+                    "data": serializer.data,
+                    "summary": summary
+                },
+                status=200
+            )
+
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+        
+        
