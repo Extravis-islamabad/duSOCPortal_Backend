@@ -928,6 +928,9 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     soar_tenant = DuCortexSOARTenants.objects.get(
                         id=soar["soar_tenant_id"]
                     )
+                    tenant.soar_tenants.set(
+                        DuCortexSOARTenants.objects.filter(id=soar["soar_tenant_id"])
+                    )
                     if not is_default_sla:
                         for override in soar.get("sla_overrides", []):
                             SoarTenantSlaMetric.objects.create(
