@@ -379,6 +379,7 @@ class Tenant(models.Model):
     phone_number = models.CharField(max_length=20, blank=True)
     industry = models.CharField(max_length=100, blank=True)
     ldap_group = models.CharField(max_length=100, blank=True)
+    is_default_sla = models.BooleanField(default=False)
     country = models.CharField(max_length=2, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -766,3 +767,27 @@ class DefaultSoarSlaMetric(models.Model):
 
     def __str__(self):
         return f"Default SLA - {self.get_sla_level_display()}"
+
+
+class SoarTenantSlaMetric(models.Model):
+    tenant = models.ForeignKey(
+        Tenant, on_delete=models.CASCADE, related_name="soar_sla_metrics"
+    )
+    soar_tenant = models.ForeignKey(
+        DuCortexSOARTenants, on_delete=models.CASCADE, related_name="sla_metrics"
+    )
+
+    sla_level = models.IntegerField(choices=SlaLevelChoices.choices)
+
+    tta_minutes = models.PositiveIntegerField(help_text="Time to Acknowledge")
+    ttn_minutes = models.PositiveIntegerField(help_text="Time to Notify")
+    ttdn_minutes = models.PositiveIntegerField(help_text="Time to Detect/Neutralize")
+
+    class Meta:
+        db_table = "soar_tenant_sla_metrics"
+        unique_together = ("tenant", "soar_tenant", "sla_level")
+
+    def __str__(self):
+        return (
+            f"SLA - {self.tenant} - {self.soar_tenant} - {self.get_sla_level_display()}"
+        )
