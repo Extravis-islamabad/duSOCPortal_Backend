@@ -1,6 +1,7 @@
 from django.urls import path
 
 from tenant.views import (
+    AlertDetailView,
     AlertListView,
     AllIncidentsView,
     DashboardView,
@@ -130,6 +131,11 @@ urlpatterns = [
         "api/recent-incidents/",
         RecentIncidentsView.as_view(),
         name="recent-incidents",
+    ),
+    path(
+        "alerts/<str:alert_id>/details/",
+        AlertDetailView.as_view(),
+        name="alert-details",
     ),
     path("api/all-incidents/", AllIncidentsView.as_view(), name="all-incidents"),
 ]
