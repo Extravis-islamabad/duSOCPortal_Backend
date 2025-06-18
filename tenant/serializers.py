@@ -28,6 +28,7 @@ from .models import (
     CywareTenantGroup,
     CywareTenantTag,
     DUCortexSOARIncidentFinalModel,
+    DefaultSoarSlaMetric,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMFinalTickets,
@@ -490,6 +491,9 @@ class TenantDetailSerializer(serializers.ModelSerializer):
                         {"id": collector.id, "name": collector.name}
                         for collector in mapping.event_collectors.all()
                     ],
+                "contracted_volume_type": mapping.get_contracted_volume_type_display()
+                if mapping.contracted_volume_type else None,
+                "contracted_volume": mapping.contracted_volume,
                 }
                 for mapping in mappings
             ]
@@ -1671,3 +1675,21 @@ class CywareTenantCategorySerializer(serializers.ModelSerializer):
         model = CywareTenantCategories
 
         fields = "__all__"
+
+
+
+
+
+# Serializers
+class IncidentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DUCortexSOARIncidentFinalModel
+        fields = [
+            'id', 'db_id', 'created', 'severity', 'status',
+            'incident_tta', 'incident_ttn', 'incident_ttdn'
+        ]
+
+class SlaMetricSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DefaultSoarSlaMetric
+        fields = ['sla_level', 'tta_minutes', 'ttn_minutes', 'ttdn_minutes']
