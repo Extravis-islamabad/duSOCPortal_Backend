@@ -379,7 +379,7 @@ class Tenant(models.Model):
     phone_number = models.CharField(max_length=20, blank=True)
     industry = models.CharField(max_length=100, blank=True)
     ldap_group = models.CharField(max_length=100, blank=True)
-    is_default_sla = models.BooleanField(default=False)
+    is_default_sla = models.BooleanField(default=True)
     country = models.CharField(max_length=2, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
