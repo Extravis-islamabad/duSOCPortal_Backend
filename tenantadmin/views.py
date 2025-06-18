@@ -13,7 +13,7 @@ from common.constants import PaginationConstants
 from tenant.cortex_soar_tasks import sync_soar_data
 from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
 from tenant.itsm_tasks import sync_itsm
-from tenant.models import Tenant, VolumeTypeChoices
+from tenant.models import SlaLevelChoices, Tenant, VolumeTypeChoices
 from tenant.serializers import (
     AllTenantDetailSerializer,
     TenantCreateSerializer,
@@ -302,3 +302,13 @@ class VolumeTypeChoicesAPIView(APIView):
             {"id": choice.value, "label": choice.label} for choice in VolumeTypeChoices
         ]
         return Response(choices, status=status.HTTP_200_OK)
+
+
+class SlaLevelsAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        return Response(
+            [{"value": level.value, "label": level.label} for level in SlaLevelChoices]
+        )

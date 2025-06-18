@@ -5,6 +5,7 @@ from tenantadmin.views import (
     DistinctCompaniesAPIView,
     NonActiveTenantsAPIView,
     ReactivateTenantUsersAPIView,
+    SlaLevelsAPIView,
     SyncCortexSOARDataAPIView,
     SyncIBMQradarDataAPIView,
     SyncITSMDataAPIView,
@@ -54,4 +55,5 @@ urlpatterns = [
     path("sync_soar/", SyncCortexSOARDataAPIView.as_view(), name="sync-cortex-soar"),
     path("sync_itsm/", SyncITSMDataAPIView.as_view(), name="sync-itsm"),
     path("volume-types/", VolumeTypeChoicesAPIView.as_view(), name="volume-types"),
+    path("sla_levels/", SlaLevelsAPIView.as_view(), name="sla_levels"),
 ]
