@@ -744,3 +744,25 @@ class TenantRolePermissions(models.Model):
     def save(self, *args, **kwargs):
         self.permission_text = TenantPermissionChoices(self.permission).label
         super().save(*args, **kwargs)
+
+
+class SlaLevelChoices(models.IntegerChoices):
+    P1 = 4, "P1 - Critical"
+    P2 = 3, "P2 - High"
+    P3 = 2, "P3 - Medium"
+    P4 = 1, "P4 - Low"
+
+
+class DefaultSoarSlaMetric(models.Model):
+    sla_level = models.IntegerField(choices=SlaLevelChoices.choices, unique=True)
+    tta_minutes = models.IntegerField(help_text="Time to Acknowledge")
+    ttn_minutes = models.IntegerField(help_text="Time to Notify")
+    ttdn_minutes = models.IntegerField(help_text="Time to Detection/Neutralization")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "default_soar_sla_metrics"
+
+    def __str__(self):
+        return f"Default SLA - {self.get_sla_level_display()}"
