@@ -368,7 +368,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     total_incidents = serializers.SerializerMethodField()
     active_incidents = serializers.SerializerMethodField()
     tickets_count = serializers.SerializerMethodField()
-    sla = serializers.SerializerMethodField()
+    # sla = serializers.SerializerMethodField()
     asset_count = serializers.SerializerMethodField()
     tenant_data = serializers.SerializerMethodField()
     qradar_tenants = serializers.SerializerMethodField()
@@ -395,7 +395,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "total_incidents",
             "active_incidents",
             "tickets_count",
-            "sla",
+            # "sla",
             "tenant_admin",
             "created_by_id",
             "role",
@@ -616,46 +616,82 @@ class TenantDetailSerializer(serializers.ModelSerializer):
         except Exception:
             return []
 
+    # def get_soar_tenants(self, obj):
+    #     try:
+    #         return [
+    #             {"id": tenant.id, "name": tenant.name}
+    #             for tenant in obj.soar_tenants.all()
+    #         ]
+    #     except Exception:
+    #         return []
+
     def get_soar_tenants(self, obj):
         try:
-            return [
-                {"id": tenant.id, "name": tenant.name}
-                for tenant in obj.soar_tenants.all()
-            ]
-        except Exception:
-            return []
-
-    def get_sla(self, obj):
-        try:
-            if obj.is_default_sla:
-                metrics = DefaultSoarSlaMetric.objects.all()
-            else:
-                metrics = SoarTenantSlaMetric.objects.filter(tenant=obj)
-
+            tenants = obj.soar_tenants.all()
             result = []
-            for metric in metrics:
-                result.append(
+
+            for tenant in tenants:
+                if obj.is_default_sla:
+                    metrics = DefaultSoarSlaMetric.objects.all()
+                else:
+                    metrics = SoarTenantSlaMetric.objects.filter(
+                        tenant=obj, soar_tenant=tenant
+                    )
+
+                sla_overrides = [
                     {
-                        "sla_level": {
-                            "id": metric.sla_level,
-                            "text": SlaLevelChoices(metric.sla_level).label,
-                        },
+                        "sla_level": metric.sla_level,
+                        "sla_level_text": SlaLevelChoices(metric.sla_level).label,
                         "tta_minutes": metric.tta_minutes,
                         "ttn_minutes": metric.ttn_minutes,
                         "ttdn_minutes": metric.ttdn_minutes,
-                        **(
-                            {
-                                "soar_tenant_id": metric.soar_tenant.id,
-                                "soar_tenant_name": metric.soar_tenant.name,
-                            }
-                            if hasattr(metric, "soar_tenant")
-                            else {}
-                        ),
+                    }
+                    for metric in metrics
+                ]
+
+                result.append(
+                    {
+                        "soar_tenant_id": tenant.id,
+                        "soar_tenant_name": tenant.name,
+                        "sla_overrides": sla_overrides,
                     }
                 )
+
             return result
         except Exception:
             return []
+
+    # def get_sla(self, obj):
+    #     try:
+    #         if obj.is_default_sla:
+    #             metrics = DefaultSoarSlaMetric.objects.all()
+    #         else:
+    #             metrics = SoarTenantSlaMetric.objects.filter(tenant=obj)
+
+    #         result = []
+    #         for metric in metrics:
+    #             result.append(
+    #                 {
+    #                     "sla_level": {
+    #                         "id": metric.sla_level,
+    #                         "text": SlaLevelChoices(metric.sla_level).label,
+    #                     },
+    #                     "tta_minutes": metric.tta_minutes,
+    #                     "ttn_minutes": metric.ttn_minutes,
+    #                     "ttdn_minutes": metric.ttdn_minutes,
+    #                     **(
+    #                         {
+    #                             "soar_tenant_id": metric.soar_tenant.id,
+    #                             "soar_tenant_name": metric.soar_tenant.name,
+    #                         }
+    #                         if hasattr(metric, "soar_tenant")
+    #                         else {}
+    #                     ),
+    #                 }
+    #             )
+    #         return result
+    #     except Exception:
+    #         return []
 
 
 class TenantPermissionSerializer(serializers.ModelSerializer):
