@@ -20,10 +20,10 @@ from tenant.views import (
     OwnerDistributionView,
     PermissionChoicesAPIView,
     RecentIncidentsView,
-    SLAComplianceView,
-    SLASeverityIncidentsView,
     SeverityDistributionView,
+    SLAComplianceView,
     SLAIncidentsView,
+    SLASeverityIncidentsView,
     SLAStatusView,
     TenantAPIView,
     TenantCortexSOARIncidentsAPIView,
@@ -151,5 +151,9 @@ urlpatterns = [
         SLAComplianceView.as_view(),
         name="sla-compliance",  # Name for the new route
     ),
-    path("api/sla-severity-incidents-graph/", SLASeverityIncidentsView.as_view(), name="sla-severity-incidents-graph"),
+    path(
+        "api/sla-severity-incidents-graph/",
+        SLASeverityIncidentsView.as_view(),
+        name="sla-severity-incidents-graph",
+    ),
 ]
