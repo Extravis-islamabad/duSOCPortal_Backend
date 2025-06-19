@@ -4183,3 +4183,237 @@ class SLAIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+
+
+
+# SLAComplianceView
+class SLAComplianceView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        """
+        Retrieve overall SLA compliance details, including:
+        - Overall SLA compliance percentage
+        - Count of breached incidents
+        - Count of incidents that met the SLA target
+
+        Returns:
+            Response with overall compliance details
+        """
+        try:
+            # Step 1: Validate tenant
+            tenant = Tenant.objects.get(tenant=request.user)
+            logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            # Step 2: Get SOAR tenant IDs
+            soar_tenants = tenant.soar_tenants.all()
+            if not soar_tenants:
+                return Response(
+                    {"error": "No SOAR tenants found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            soar_ids = [t.id for t in soar_tenants]
+
+            # Step 3: Build filters
+            filters = Q(cortex_soar_tenant_id__in=soar_ids)
+
+            # Step 4: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
+            incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                filters,
+                incident_tta__isnull=False,
+                incident_ttdn__isnull=False,
+                incident_ttn__isnull=False,
+            )
+
+            # Step 5: Fetch SLA metrics based on tenant's is_default_sla value
+            if tenant.is_default_sla:
+                sla_metrics = DefaultSoarSlaMetric.objects.all()
+            else:
+                sla_metrics = SoarTenantSlaMetric.objects.filter(
+                    soar_tenant__in=soar_tenants
+                )
+
+            sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+            # Step 6: Calculate the total number of incidents, incidents that met the SLA, and breached incidents
+            total_incident_count = 0
+            met_sla_count = 0
+            breached_sla_count = 0
+
+            for incident in incidents:
+                total_incident_count += 1
+
+                # Get SLA metrics for severity
+                sla_metric = sla_metrics_dict.get(incident.severity)
+                if not sla_metric:
+                    continue
+
+                # Calculate deltas and check breaches
+                created = incident.created
+                any_breach = False
+
+                if incident.incident_tta and created:
+                    tta_delta = (incident.incident_tta - created).total_seconds() / 60
+                    if tta_delta > sla_metric.tta_minutes:
+                        any_breach = True
+
+                if incident.incident_ttn and created:
+                    ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+                    if ttn_delta > sla_metric.ttn_minutes:
+                        any_breach = True
+
+                if incident.incident_ttdn and created:
+                    ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+                    if ttdn_delta > sla_metric.ttdn_minutes:
+                        any_breach = True
+
+                if any_breach:
+                    breached_sla_count += 1
+                else:
+                    met_sla_count += 1
+
+            # Step 7: Calculate overall SLA compliance percentage
+            overall_sla_compliance_percentage = (
+                (met_sla_count / total_incident_count) * 100 if total_incident_count > 0 else 0
+            )
+            overall_sla_compliance_percentage = round(overall_sla_compliance_percentage, 2)
+
+            # Step 8: Return response with overall SLA compliance details
+            overall_sla_compliance = {
+                "total_breached_incidents": breached_sla_count,
+                "total_met_target_incidents": met_sla_count,
+                "overall_compliance_percentage": overall_sla_compliance_percentage,
+            }
+
+            return Response(overall_sla_compliance)
+
+        except Exception as e:
+            logger.error(f"Error in SLAComplianceView: {str(e)}")
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+
+
+# SLASeverityIncidentsView
+class SLASeverityIncidentsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        """
+        Retrieve incident counts for each severity level (P1, P2, P3, P4),
+        including total incidents and completed incidents (those that met the SLA target).
+
+        Returns:
+            Response with total incidents and completed incidents for each severity level
+        """
+        try:
+            # Step 1: Validate tenant
+            tenant = Tenant.objects.get(tenant=request.user)
+            logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            # Step 2: Get SOAR tenant IDs
+            soar_tenants = tenant.soar_tenants.all()
+            if not soar_tenants:
+                return Response(
+                    {"error": "No SOAR tenants found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            soar_ids = [t.id for t in soar_tenants]
+
+            # Step 3: Build filters
+            filters = Q(cortex_soar_tenant_id__in=soar_ids)
+
+            # Step 4: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
+            incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                filters,
+                incident_tta__isnull=False,
+                incident_ttdn__isnull=False,
+                incident_ttn__isnull=False,
+            )
+
+            # Step 5: Fetch SLA metrics based on tenant's is_default_sla value
+            if tenant.is_default_sla:
+                sla_metrics = DefaultSoarSlaMetric.objects.all()
+            else:
+                sla_metrics = SoarTenantSlaMetric.objects.filter(
+                    soar_tenant__in=soar_tenants
+                )
+
+            sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+            # Step 6: Initialize counts for P1, P2, P3, and P4
+            severity_counts = {
+                "p1_critical": {"total_incidents": 0, "completed_incidents": 0},
+                "p1_high": {"total_incidents": 0, "completed_incidents": 0},
+                "p3_medium": {"total_incidents": 0, "completed_incidents": 0},
+                "p4_low": {"total_incidents": 0, "completed_incidents": 0},
+            }
+
+            # Step 7: Process incidents by severity
+            for incident in incidents:
+                severity = incident.severity
+                if severity == SlaLevelChoices.P1:
+                    severity_label = "p1_critical"
+                elif severity == SlaLevelChoices.P2:
+                    severity_label = "p1_high"
+                elif severity == SlaLevelChoices.P3:
+                    severity_label = "p3_medium"
+                elif severity == SlaLevelChoices.P4:
+                    severity_label = "p4_low"
+                else:
+                    continue  # Skip incidents with an unknown severity level
+
+                # Get SLA metrics for the incident's severity level
+                sla_metric = sla_metrics_dict.get(severity)
+                if not sla_metric:
+                    continue
+
+                # Calculate deltas and check if the incident met the SLA target
+                created = incident.created
+                any_breach = False
+
+                # Check if the incident met the SLA for tta, ttn, ttdn
+                if incident.incident_tta and created:
+                    tta_delta = (incident.incident_tta - created).total_seconds() / 60
+                    if tta_delta > sla_metric.tta_minutes:
+                        any_breach = True
+
+                if incident.incident_ttn and created:
+                    ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+                    if ttn_delta > sla_metric.ttn_minutes:
+                        any_breach = True
+
+                if incident.incident_ttdn and created:
+                    ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+                    if ttdn_delta > sla_metric.ttdn_minutes:
+                        any_breach = True
+
+                # Update counts based on whether the incident met the SLA target
+                severity_counts[severity_label]["total_incidents"] += 1
+                if not any_breach:
+                    severity_counts[severity_label]["completed_incidents"] += 1
+
+            # Step 8: Return response with total and completed incidents per severity level
+            return Response(severity_counts)
+
+        except Exception as e:
+            logger.error(f"Error in SLASeverityIncidentsView: {str(e)}")
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
