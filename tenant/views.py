@@ -3932,6 +3932,7 @@ class AllIncidentsView(APIView):
 #                 {"sla_details": sla_details, "incident_counts": incident_counts}
 #             )
 
+
 #         except Exception as e:
 #             logger.error(f"Error in SLAIncidentsView:{str(e)}")
 #             return Response(
@@ -4054,14 +4055,15 @@ class SLAIncidentsView(APIView):
                     SlaLevelChoices.P3: "p3_medium",
                     SlaLevelChoices.P4: "p4_low",
                 }.get(metric.sla_level, f"severity_{metric.sla_level}")
-                
+
+                # TODO : No need to define the text again
                 severity_label = {
                     SlaLevelChoices.P1: "P1 - Critical",
                     SlaLevelChoices.P2: "P2 - High",
                     SlaLevelChoices.P3: "P3 - Medium",
                     SlaLevelChoices.P4: "P4 - Low",
                 }.get(metric.sla_level, f"Severity {metric.sla_level}")
-                
+
                 sla_details[priority_key] = {
                     "severity_level": metric.sla_level,
                     "severity_label": severity_label,  # Added severity_label
@@ -4152,7 +4154,9 @@ class SLAIncidentsView(APIView):
                     "met_sla_count": met_sla_count,
                     "breached_sla_count": breached_sla_count,
                     "breached_sla_percentage": breached_sla_percentage,
-                    "sla_met_percentage": sla_met_percentage.get(severity, 0.0),  # SLA Met Percentage
+                    "sla_met_percentage": sla_met_percentage.get(
+                        severity, 0.0
+                    ),  # SLA Met Percentage
                     "tta_minutes": sla_metrics_dict.get(severity).tta_minutes,
                     "ttn_minutes": sla_metrics_dict.get(severity).ttn_minutes,
                     "ttdn_minutes": sla_metrics_dict.get(severity).ttdn_minutes,
@@ -4166,7 +4170,9 @@ class SLAIncidentsView(APIView):
                 "total_met_target_incidents": met_sla_count,
                 "overall_compliance_percentage": round(
                     (met_sla_count / total_incident_count) * 100, 2
-                ) if total_incident_count > 0 else 0,
+                )
+                if total_incident_count > 0
+                else 0,
             }
 
             # Step 11: Return response with overall SLA compliance
