@@ -4424,7 +4424,6 @@ class SLASeverityIncidentsView(APIView):
             )
 
 
-
 # SLASeverityMetricsView
 class SLASeverityMetricsView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -4480,7 +4479,7 @@ class SLASeverityMetricsView(APIView):
                 SlaLevelChoices.P1: "p1_critical",
                 SlaLevelChoices.P2: "p2_high",
                 SlaLevelChoices.P3: "p3_medium",
-                SlaLevelChoices.P4: "p4_low"
+                SlaLevelChoices.P4: "p4_low",
             }
 
             for level, key in severity_keys.items():
@@ -4496,7 +4495,9 @@ class SLASeverityMetricsView(APIView):
                     "ttdn_minutes": sla_metric.ttdn_minutes,
                     "target_sla": f"TTA: {sla_metric.tta_minutes} mins, TTN: {sla_metric.ttn_minutes} mins, TTDN: {sla_metric.ttdn_minutes} mins",
                     "compliance_percentage": 0,  # Placeholder for now
-                    "status": "Met" if sla_metric.tta_minutes <= 0 else "Breached"  # Placeholder for actual logic
+                    "status": "Met"
+                    if sla_metric.tta_minutes <= 0
+                    else "Breached",  # Placeholder for actual logic
                 }
 
                 # Get incidents for this severity level and calculate compliance
@@ -4518,17 +4519,23 @@ class SLASeverityMetricsView(APIView):
 
                     # Check if the incident met the SLA for tta, ttn, ttdn
                     if incident.incident_tta and created:
-                        tta_delta = (incident.incident_tta - created).total_seconds() / 60
+                        tta_delta = (
+                            incident.incident_tta - created
+                        ).total_seconds() / 60
                         if tta_delta > sla_metric.tta_minutes:
                             any_breach = True
 
                     if incident.incident_ttn and created:
-                        ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+                        ttn_delta = (
+                            incident.incident_ttn - created
+                        ).total_seconds() / 60
                         if ttn_delta > sla_metric.ttn_minutes:
                             any_breach = True
 
                     if incident.incident_ttdn and created:
-                        ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+                        ttdn_delta = (
+                            incident.incident_ttdn - created
+                        ).total_seconds() / 60
                         if ttdn_delta > sla_metric.ttdn_minutes:
                             any_breach = True
 

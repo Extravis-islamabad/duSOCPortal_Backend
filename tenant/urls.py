@@ -157,5 +157,9 @@ urlpatterns = [
         SLASeverityIncidentsView.as_view(),
         name="sla-severity-incidents-graph",
     ),
-    path("api/sla-severity-metrics-dashboard/", SLASeverityMetricsView.as_view(), name="sla-severity-metrics"),
+    path(
+        "api/sla-severity-metrics-dashboard/",
+        SLASeverityMetricsView.as_view(),
+        name="sla-severity-metrics",
+    ),
 ]
