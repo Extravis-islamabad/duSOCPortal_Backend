@@ -4423,3 +4423,133 @@ class SLASeverityIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+
+# SLASeverityMetricsView
+class SLASeverityMetricsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        """
+        Retrieve SLA metrics for each severity level (P1, P2, P3, P4), including:
+        - TTA time
+        - TTN time
+        - TTDN time
+        - Target SLA
+        - Compliance percentage
+        - SLA status (whether SLA is met or breached)
+
+        Returns:
+            Response with SLA metrics and compliance data for each severity level
+        """
+        try:
+            # Step 1: Validate tenant
+            tenant = Tenant.objects.get(tenant=request.user)
+            logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            # Step 2: Get SOAR tenant IDs
+            soar_tenants = tenant.soar_tenants.all()
+            if not soar_tenants:
+                return Response(
+                    {"error": "No SOAR tenants found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            soar_ids = [t.id for t in soar_tenants]
+
+            # Step 3: Fetch SLA metrics based on tenant's is_default_sla value
+            if tenant.is_default_sla:
+                sla_metrics = DefaultSoarSlaMetric.objects.all()
+            else:
+                sla_metrics = SoarTenantSlaMetric.objects.filter(
+                    soar_tenant__in=soar_tenants
+                )
+
+            sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+            # Step 4: Calculate incidents compliance
+            compliance_data = {}
+
+            # Severity levels and corresponding keys
+            severity_keys = {
+                SlaLevelChoices.P1: "p1_critical",
+                SlaLevelChoices.P2: "p2_high",
+                SlaLevelChoices.P3: "p3_medium",
+                SlaLevelChoices.P4: "p4_low"
+            }
+
+            for level, key in severity_keys.items():
+                # Get SLA metric for the current severity level (P1, P2, P3, P4)
+                sla_metric = sla_metrics_dict.get(level)
+                if not sla_metric:
+                    continue
+
+                # SLA Metric Details
+                compliance_data[key] = {
+                    "tta_minutes": sla_metric.tta_minutes,
+                    "ttn_minutes": sla_metric.ttn_minutes,
+                    "ttdn_minutes": sla_metric.ttdn_minutes,
+                    "target_sla": f"TTA: {sla_metric.tta_minutes} mins, TTN: {sla_metric.ttn_minutes} mins, TTDN: {sla_metric.ttdn_minutes} mins",
+                    "compliance_percentage": 0,  # Placeholder for now
+                    "status": "Met" if sla_metric.tta_minutes <= 0 else "Breached"  # Placeholder for actual logic
+                }
+
+                # Get incidents for this severity level and calculate compliance
+                incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant_id__in=soar_ids,
+                    severity=level,
+                    incident_tta__isnull=False,
+                    incident_ttn__isnull=False,
+                    incident_ttdn__isnull=False,
+                )
+
+                # Calculate compliance percentage
+                total_incidents = incidents.count()
+                met_sla_count = 0
+
+                for incident in incidents:
+                    created = incident.created
+                    any_breach = False
+
+                    # Check if the incident met the SLA for tta, ttn, ttdn
+                    if incident.incident_tta and created:
+                        tta_delta = (incident.incident_tta - created).total_seconds() / 60
+                        if tta_delta > sla_metric.tta_minutes:
+                            any_breach = True
+
+                    if incident.incident_ttn and created:
+                        ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+                        if ttn_delta > sla_metric.ttn_minutes:
+                            any_breach = True
+
+                    if incident.incident_ttdn and created:
+                        ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+                        if ttdn_delta > sla_metric.ttdn_minutes:
+                            any_breach = True
+
+                    # If the incident did not breach, increment the met_sla_count
+                    if not any_breach:
+                        met_sla_count += 1
+
+                # Calculate the compliance percentage for the severity level
+                if total_incidents > 0:
+                    compliance_data[key]["compliance_percentage"] = round(
+                        (met_sla_count / total_incidents) * 100, 2
+                    )
+                else:
+                    compliance_data[key]["compliance_percentage"] = 0.0
+
+            # Step 5: Return response with SLA metrics and compliance data
+            return Response(compliance_data)
+
+        except Exception as e:
+            logger.error(f"Error in SLASeverityMetricsView: {str(e)}")
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
