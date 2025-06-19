@@ -4191,6 +4191,9 @@ class SLAIncidentsView(APIView):
             )
 
 
+
+
+
 # SLAComplianceView
 class SLAComplianceView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -4285,13 +4288,9 @@ class SLAComplianceView(APIView):
 
             # Step 7: Calculate overall SLA compliance percentage
             overall_sla_compliance_percentage = (
-                (met_sla_count / total_incident_count) * 100
-                if total_incident_count > 0
-                else 0
+                (met_sla_count / total_incident_count) * 100 if total_incident_count > 0 else 0
             )
-            overall_sla_compliance_percentage = round(
-                overall_sla_compliance_percentage, 2
-            )
+            overall_sla_compliance_percentage = round(overall_sla_compliance_percentage, 2)
 
             # Step 8: Return response with overall SLA compliance details
             overall_sla_compliance = {
@@ -4307,6 +4306,8 @@ class SLAComplianceView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 
 
 # SLASeverityIncidentsView
@@ -4471,34 +4472,22 @@ class SLASeverityMetricsView(APIView):
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
-            # Step 4: Calculate incidents compliance
-            compliance_data = {}
+            # Step 4: Initialize the response list
+            response_list = []
 
-            # Severity levels and corresponding keys
-            severity_keys = {
-                SlaLevelChoices.P1: "p1_critical",
-                SlaLevelChoices.P2: "p2_high",
-                SlaLevelChoices.P3: "p3_medium",
-                SlaLevelChoices.P4: "p4_low",
+            # Severity levels and corresponding labels
+            severity_levels = {
+                SlaLevelChoices.P1: "P1 - Critical",
+                SlaLevelChoices.P2: "P2 - High",
+                SlaLevelChoices.P3: "P3 - Medium",
+                SlaLevelChoices.P4: "P4 - Low"
             }
 
-            for level, key in severity_keys.items():
+            for level, label in severity_levels.items():
                 # Get SLA metric for the current severity level (P1, P2, P3, P4)
                 sla_metric = sla_metrics_dict.get(level)
                 if not sla_metric:
                     continue
-
-                # SLA Metric Details
-                compliance_data[key] = {
-                    "tta_minutes": sla_metric.tta_minutes,
-                    "ttn_minutes": sla_metric.ttn_minutes,
-                    "ttdn_minutes": sla_metric.ttdn_minutes,
-                    "target_sla": f"TTA: {sla_metric.tta_minutes} mins, TTN: {sla_metric.ttn_minutes} mins, TTDN: {sla_metric.ttdn_minutes} mins",
-                    "compliance_percentage": 0,  # Placeholder for now
-                    "status": "Met"
-                    if sla_metric.tta_minutes <= 0
-                    else "Breached",  # Placeholder for actual logic
-                }
 
                 # Get incidents for this severity level and calculate compliance
                 incidents = DUCortexSOARIncidentFinalModel.objects.filter(
@@ -4519,23 +4508,17 @@ class SLASeverityMetricsView(APIView):
 
                     # Check if the incident met the SLA for tta, ttn, ttdn
                     if incident.incident_tta and created:
-                        tta_delta = (
-                            incident.incident_tta - created
-                        ).total_seconds() / 60
+                        tta_delta = (incident.incident_tta - created).total_seconds() / 60
                         if tta_delta > sla_metric.tta_minutes:
                             any_breach = True
 
                     if incident.incident_ttn and created:
-                        ttn_delta = (
-                            incident.incident_ttn - created
-                        ).total_seconds() / 60
+                        ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
                         if ttn_delta > sla_metric.ttn_minutes:
                             any_breach = True
 
                     if incident.incident_ttdn and created:
-                        ttdn_delta = (
-                            incident.incident_ttdn - created
-                        ).total_seconds() / 60
+                        ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
                         if ttdn_delta > sla_metric.ttdn_minutes:
                             any_breach = True
 
@@ -4544,15 +4527,23 @@ class SLASeverityMetricsView(APIView):
                         met_sla_count += 1
 
                 # Calculate the compliance percentage for the severity level
+                compliance_percentage = 0.0
                 if total_incidents > 0:
-                    compliance_data[key]["compliance_percentage"] = round(
-                        (met_sla_count / total_incidents) * 100, 2
-                    )
-                else:
-                    compliance_data[key]["compliance_percentage"] = 0.0
+                    compliance_percentage = round((met_sla_count / total_incidents) * 100, 2)
+
+                # Add the data for the current severity level to the response list
+                response_list.append({
+                    "severity_label": label,
+                    "tta_minutes": sla_metric.tta_minutes,
+                    "ttn_minutes": sla_metric.ttn_minutes,
+                    "ttdn_minutes": sla_metric.ttdn_minutes,
+                    "target_sla": f"TTA: {sla_metric.tta_minutes} mins, TTN: {sla_metric.ttn_minutes} mins, TTDN: {sla_metric.ttdn_minutes} mins",
+                    "compliance_percentage": compliance_percentage,
+                    "status": "Met" if compliance_percentage >= 80 else "Breached"  # Arbitrary threshold for "Met" SLA
+                })
 
             # Step 5: Return response with SLA metrics and compliance data
-            return Response(compliance_data)
+            return Response(response_list)
 
         except Exception as e:
             logger.error(f"Error in SLASeverityMetricsView: {str(e)}")
