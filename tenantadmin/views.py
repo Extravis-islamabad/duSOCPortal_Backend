@@ -282,22 +282,36 @@ class NonActiveTenantsAPIView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        logger.info(f"All tenants request by user: {request.user.username}")
-        tenants = Tenant.objects.filter(
-            created_by=request.user, tenant__is_active=False, tenant__is_deleted=True
-        ).order_by("-created_at")
-
-        paginator = PageNumberPagination()
-        paginator.page_size = PaginationConstants.PAGE_SIZE
-
-        paginated_tenants = paginator.paginate_queryset(tenants, request)
-        serializer = AllTenantDetailSerializer(paginated_tenants, many=True)
-
-        logger.success(
-            f"Retrieved {tenants.count()} tenants for user: {request.user.username}"
+        logger.info(
+            f"Non-active tenant companies requested by: {request.user.username}"
         )
 
-        return paginator.get_paginated_response(serializer.data)
+        tenants = Tenant.objects.filter(
+            created_by=request.user,
+            tenant__is_active=False,
+        )
+
+        # Group by company name and count
+        company_data = (
+            tenants.values("tenant__company_name")
+            .annotate(total_tenants=Count("id"))
+            .filter(tenant__company_name__isnull=False)
+        )
+
+        # Build clean response
+        companies = [
+            {
+                "name": entry["tenant__company_name"],
+                "total_tenants": entry["total_tenants"],
+            }
+            for entry in company_data
+        ]
+
+        logger.success(
+            f"Retrieved {len(companies)} inactive tenant companies for user: {request.user.username}"
+        )
+
+        return Response({"companies": companies}, status=200)
 
 
 class SyncIBMQradarDataAPIView(APIView):
