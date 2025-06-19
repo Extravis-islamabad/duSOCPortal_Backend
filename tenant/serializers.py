@@ -215,6 +215,11 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
                             id__in=qt.get("event_collector_ids", [])
                         )
                     )
+                    # TODO : Add Contracted Volume
+                    if "contracted_volume_type" in qt:
+                        mapping.contracted_volume_type = qt["contracted_volume_type"]
+                    if "contracted_volume" in qt:
+                        mapping.contracted_volume = qt["contracted_volume"]
 
             if is_defualt_threat_intel is False and threat_intelligence and base_url:
                 with Cyware(
@@ -406,6 +411,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "role_info",
             "related_tenants",
             "industry",
+            "is_default_sla",
         ]
 
     def get_permissions(self, obj):
@@ -442,12 +448,6 @@ class TenantDetailSerializer(serializers.ModelSerializer):
 
     def get_active_incidents(self, obj):
         return self.get_total_incidents(obj)
-
-    def get_sla(self, obj):
-        try:
-            return obj.sla.name
-        except Exception:
-            return 0
 
     def get_total_incidents(self, obj):
         try:
@@ -491,8 +491,15 @@ class TenantDetailSerializer(serializers.ModelSerializer):
                         {"id": collector.id, "name": collector.name}
                         for collector in mapping.event_collectors.all()
                     ],
-                    "contracted_volume_type": mapping.get_contracted_volume_type_display()
-                    if mapping.contracted_volume_type
+                    # "contracted_volume_type": mapping.get_contracted_volume_type_display()
+                    # if mapping.contracted_volume_type
+                    # else None,
+                    # "contracted_volume": mapping.contracted_volume,
+                    "contracted_volume_type": {
+                        "id": mapping.contracted_volume_type,
+                        "text": mapping.get_contracted_volume_type_display(),
+                    }
+                    if mapping.contracted_volume_type is not None
                     else None,
                     "contracted_volume": mapping.contracted_volume,
                 }
@@ -615,6 +622,38 @@ class TenantDetailSerializer(serializers.ModelSerializer):
                 {"id": tenant.id, "name": tenant.name}
                 for tenant in obj.soar_tenants.all()
             ]
+        except Exception:
+            return []
+
+    def get_sla(self, obj):
+        try:
+            if obj.is_default_sla:
+                metrics = DefaultSoarSlaMetric.objects.all()
+            else:
+                metrics = SoarTenantSlaMetric.objects.filter(tenant=obj)
+
+            result = []
+            for metric in metrics:
+                result.append(
+                    {
+                        "sla_level": {
+                            "id": metric.sla_level,
+                            "text": SlaLevelChoices(metric.sla_level).label,
+                        },
+                        "tta_minutes": metric.tta_minutes,
+                        "ttn_minutes": metric.ttn_minutes,
+                        "ttdn_minutes": metric.ttdn_minutes,
+                        **(
+                            {
+                                "soar_tenant_id": metric.soar_tenant.id,
+                                "soar_tenant_name": metric.soar_tenant.name,
+                            }
+                            if hasattr(metric, "soar_tenant")
+                            else {}
+                        ),
+                    }
+                )
+            return result
         except Exception:
             return []
 
