@@ -174,17 +174,3 @@ class FilterType(Enum):
 SEVERITY_LABELS = {0: "Unknown", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
 
 
-# Assuming SlaLevelChoices (based on previous severity context)
-class SlaLevelChoices:
-    UNKNOWN = 0
-    LOW = 1
-    MEDIUM = 2
-    HIGH = 3
-    CRITICAL = 4
-    choices = (
-        (UNKNOWN, 'Unknown'),
-        (LOW, 'Low'),
-        (MEDIUM, 'Medium'),
-        (HIGH, 'High'),
-        (CRITICAL, 'Critical'),
-    )

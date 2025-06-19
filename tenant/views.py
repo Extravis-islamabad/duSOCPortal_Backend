@@ -3250,7 +3250,6 @@ class AllIncidentsView(APIView):
 
 
 
-
 # SLAIncidentsView
 class SLAIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -3342,21 +3341,32 @@ class SLAIncidentsView(APIView):
             if end_date:
                 filters &= Q(created__lte=end_date)
 
-            # Step 5: Fetch incidents
-            incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+            # Step 5: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
+            incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                filters,
+                incident_tta__isnull=False,
+                incident_ttdn__isnull=False,
+                incident_ttn__isnull=False
+            )
 
-            # Step 6: Fetch SLA metrics
-            sla_metrics = DefaultSoarSlaMetric.objects.all()
+            # Step 6: Fetch SLA metrics based on tenant's is_default_sla value
+            if tenant.is_default_sla:
+                sla_metrics = DefaultSoarSlaMetric.objects.all()
+            else:
+                sla_metrics = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_tenants
+                )
+
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
             # Step 7: Format SLA details for cards
             sla_details = {}
             for metric in sla_metrics:
                 priority_key = {
-                    4: "p1_critical",
-                    3: "p2_high",
-                    2: "p3_medium",
-                    1: "p4_low"
+                    SlaLevelChoices.P1: "p1_critical",
+                    SlaLevelChoices.P2: "p2_high",
+                    SlaLevelChoices.P3: "p3_medium",
+                    SlaLevelChoices.P4: "p4_low"
                 }.get(metric.sla_level, f"severity_{metric.sla_level}")
                 sla_details[priority_key] = {
                     "severity_level": metric.sla_level,
@@ -3367,7 +3377,7 @@ class SLAIncidentsView(APIView):
 
             # Step 8: Process incident counts
             total_incident_count = 0
-            severity_counts = {4: 0, 3: 0, 2: 0, 1: 0}
+            severity_counts = {SlaLevelChoices.P1: 0, SlaLevelChoices.P2: 0, SlaLevelChoices.P3: 0, SlaLevelChoices.P4: 0}
             met_sla_count = 0
             breached_sla_count = 0
 
