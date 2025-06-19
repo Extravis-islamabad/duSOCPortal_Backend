@@ -2849,58 +2849,261 @@ class EPSCountValuesByDomainAPIView(APIView):
 #             return Response({"error": str(e)}, status=500)
 
 
+# class AlertListView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         user = request.user
+#         try:
+#             tenant = Tenant.objects.get(tenant=user)
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         start_date_str = request.query_params.get("start_date")
+#         end_date_str = request.query_params.get("end_date")
+
+#         start_date = parse_datetime(start_date_str) if start_date_str else None
+#         end_date = parse_datetime(end_date_str) if end_date_str else None
+
+#         if tenant.is_defualt_threat_intel:
+#             integrations = tenant.integrations.all()
+#             queryset = Alert.objects.filter(integration__in=integrations)
+#         else:
+#             ti_entry = ThreatIntelligenceTenant.objects.filter(tenants=tenant).first()
+#             if not ti_entry:
+#                 return Response(
+#                     {
+#                         "error": "No Threat Intelligence configuration found for this tenant."
+#                     },
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             queryset = ThreatIntelligenceTenantAlerts.objects.filter(
+#                 threat_intelligence=ti_entry
+#             )
+
+#         if start_date:
+#             queryset = queryset.filter(published_time__date__gte=start_date.date())
+
+#         if end_date:
+#             queryset = queryset.filter(published_time__date__lte=end_date.date())
+
+#         queryset = queryset.order_by("-published_time")
+
+#         paginator = PageNumberPagination()
+#         paginator.page_size = 10  # Or replace with PaginationConstants.PAGE_SIZE
+#         paginated_qs = paginator.paginate_queryset(queryset, request)
+
+#         serializer = AlertSerializer(paginated_qs, many=True)
+#         return paginator.get_paginated_response(serializer.data)
+
+
 class AlertListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
     def get(self, request):
-        user = request.user
+        """
+        Retrieve alerts filtered by:
+        - Tenant-specific integrations or threat intelligence
+        - Optional query parameters: id, db_id, title, status, published_start_date, published_end_date,
+          created_start_date, created_end_date, updated_start_date, updated_end_date
+
+        Query Parameters:
+            id (int): Exact match on id
+            db_id (str): Exact match on db_id (case-insensitive)
+            title (str): Partial match on title (case-insensitive)
+            status (str): Exact match on status (case-insensitive)
+            published_start_date (YYYY-MM-DD): Alerts with published_time on or after this date
+            published_end_date (YYYY-MM-DD): Alerts with published_time on or before this date
+            created_start_date (YYYY-MM-DD): Alerts with created_at on or after this date
+            created_end_date (YYYY-MM-DD): Alerts with created_at on or before this date
+            updated_start_date (YYYY-MM-DD): Alerts with updated_at on or after this date
+            updated_end_date (YYYY-MM-DD): Alerts with updated_at on or before this date
+
+        Returns:
+            Paginated response with count, next, previous, and results
+        """
         try:
-            tenant = Tenant.objects.get(tenant=user)
+            # Step 1: Validate tenant
+            tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
             return Response(
                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
-        start_date_str = request.query_params.get("start_date")
-        end_date_str = request.query_params.get("end_date")
-
-        start_date = parse_datetime(start_date_str) if start_date_str else None
-        end_date = parse_datetime(end_date_str) if end_date_str else None
-
-        if tenant.is_defualt_threat_intel:
-            integrations = tenant.integrations.all()
-            queryset = Alert.objects.filter(integration__in=integrations)
-        else:
-            ti_entry = ThreatIntelligenceTenant.objects.filter(tenants=tenant).first()
-            if not ti_entry:
-                return Response(
-                    {
-                        "error": "No Threat Intelligence configuration found for this tenant."
-                    },
-                    status=status.HTTP_404_NOT_FOUND,
+        try:
+            # Step 2: Get tenant-specific queryset
+            if tenant.is_defualt_threat_intel:
+                integrations = tenant.integrations.all()
+                queryset = Alert.objects.filter(integration__in=integrations)
+            else:
+                ti_entry = ThreatIntelligenceTenant.objects.filter(tenants=tenant).first()
+                if not ti_entry:
+                    return Response(
+                        {
+                            "error": "No Threat Intelligence configuration found for this tenant."
+                        },
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                queryset = ThreatIntelligenceTenantAlerts.objects.filter(
+                    threat_intelligence=ti_entry
                 )
 
-            queryset = ThreatIntelligenceTenantAlerts.objects.filter(
-                threat_intelligence=ti_entry
+            # Step 3: Build filters
+            filters = Q()
+
+            # ID filter
+            id_filter = request.query_params.get("id")
+            if id_filter:
+                try:
+                    id_value = int(id_filter)
+                    filters &= Q(id=id_value)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid id format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # DB ID filter
+            db_id_filter = request.query_params.get("db_id")
+            if db_id_filter:
+                if not isinstance(db_id_filter, str) or not db_id_filter.strip():
+                    return Response(
+                        {"error": "Invalid db_id format. Must be a non-empty string."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                filters &= Q(db_id__iexact=db_id_filter)
+
+            # Title filter
+            title_filter = request.query_params.get("title")
+            if title_filter:
+                filters &= Q(title__icontains=title_filter)
+
+            # Status filter
+            status_filter = request.query_params.get("status")
+            if status_filter:
+                filters &= Q(status__iexact=status_filter)
+
+            # Date filters
+            date_format = "%Y-%m-%d"
+
+            # Published time filters
+            published_start_date_str = request.query_params.get("published_start_date")
+            published_end_date_str = request.query_params.get("published_end_date")
+            published_start_date = None
+            published_end_date = None
+
+            if published_start_date_str:
+                try:
+                    published_start_date = parse_datetime(published_start_date_str).date()
+                    filters &= Q(published_time__date__gte=published_start_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid published_start_date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            if published_end_date_str:
+                try:
+                    published_end_date = parse_datetime(published_end_date_str).date()
+                    filters &= Q(published_time__date__lte=published_end_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid published_end_date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            if published_start_date and published_end_date and published_start_date > published_end_date:
+                return Response(
+                    {"error": "published_start_date cannot be greater than published_end_date."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Created at filters
+            created_start_date_str = request.query_params.get("created_start_date")
+            created_end_date_str = request.query_params.get("created_end_date")
+            created_start_date = None
+            created_end_date = None
+
+            if created_start_date_str:
+                try:
+                    created_start_date = parse_datetime(created_start_date_str).date()
+                    filters &= Q(created_at__date__gte=created_start_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid created_start_date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            if created_end_date_str:
+                try:
+                    created_end_date = parse_datetime(created_end_date_str).date()
+                    filters &= Q(created_at__date__lte=created_end_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid created_end_date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            if created_start_date and created_end_date and created_start_date > created_end_date:
+                return Response(
+                    {"error": "created_start_date cannot be greater than created_end_date."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Updated at filters
+            updated_start_date_str = request.query_params.get("updated_start_date")
+            updated_end_date_str = request.query_params.get("updated_end_date")
+            updated_start_date = None
+            updated_end_date = None
+
+            if updated_start_date_str:
+                try:
+                    updated_start_date = parse_datetime(updated_start_date_str).date()
+                    filters &= Q(updated_at__date__gte=updated_start_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid updated_start_date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            if updated_end_date_str:
+                try:
+                    updated_end_date = parse_datetime(updated_end_date_str).date()
+                    filters &= Q(updated_at__date__lte=updated_end_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid updated_end_date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            if updated_start_date and updated_end_date and updated_start_date > updated_end_date:
+                return Response(
+                    {"error": "updated_start_date cannot be greater than updated_end_date."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Step 4: Apply filters and sort
+            queryset = queryset.filter(filters).order_by("-published_time")
+
+            # Step 5: Pagination
+            paginator = PageNumberPagination()
+            paginator.page_size = PaginationConstants.PAGE_SIZE  # Consistent with TenantITSMTicketsView
+            paginated_qs = paginator.paginate_queryset(queryset, request)
+
+            # Step 6: Serialize and return response
+            serializer = AlertSerializer(paginated_qs, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        except Exception as e:
+            logger.error("Error in AlertListView: %s", str(e))
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-        if start_date:
-            queryset = queryset.filter(published_time__date__gte=start_date.date())
-
-        if end_date:
-            queryset = queryset.filter(published_time__date__lte=end_date.date())
-
-        queryset = queryset.order_by("-published_time")
-
-        paginator = PageNumberPagination()
-        paginator.page_size = 10  # Or replace with PaginationConstants.PAGE_SIZE
-        paginated_qs = paginator.paginate_queryset(queryset, request)
-
-        serializer = AlertSerializer(paginated_qs, many=True)
-        return paginator.get_paginated_response(serializer.data)
-
-
 class AlertDetailView(APIView):
     authentication_classes = [JWTAuthentication]
 
