@@ -79,30 +79,59 @@ class TenantUpdateAPIView(APIView):
         return Response(serializer.errors, status=400)
 
 
-class TenantDeleteAPIView(APIView):
+class TenantInactiveView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def delete(self, request, tenant_id):
-        try:
-            tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
-        except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found"}, status=404)
+    def post(self, request):
+        company_name = request.data.get("company_name")
 
-        company_name = tenant.tenant.company_name
         if not company_name:
+            return Response({"error": "Company name is required."}, status=400)
+
+        users = User.objects.filter(company_name__iexact=company_name)
+
+        if not users.exists():
             return Response(
-                {"error": "Company name is missing for the tenant."}, status=400
+                {"error": "No users found for the given company name."}, status=404
             )
 
-        # Update all users with same company name
-        User.objects.filter(company_name=company_name).update(
-            is_deleted=True, is_active=False
-        )
+        users.update(is_active=False)
 
         return Response(
-            {"message": f"Users under company '{company_name}' marked as deleted."},
+            {"message": f"Users under company '{company_name}' have been deactivated."},
             status=200,
+        )
+
+
+class DeleteTenantByCompanyView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def delete(self, request):
+        company_name = request.data.get("company_name")
+
+        if not company_name:
+            return Response({"error": "Company name is required."}, status=400)
+
+        tenants = Tenant.objects.filter(tenant__company_name__iexact=company_name)
+
+        if not tenants.exists():
+            return Response(
+                {"error": "No tenant found for the given company name."}, status=404
+            )
+
+        # Delete all associated users
+        user_deleted_count, _ = User.objects.filter(
+            company_name__iexact=company_name
+        ).delete()
+
+        # Delete all related tenants
+        tenant_deleted_count, _ = tenants.delete()
+
+        return Response(
+            {"message": "Deleted tenant(s)  user(s) under company."},
+            status=status.HTTP_200_OK,
         )
 
 
@@ -110,19 +139,24 @@ class ReactivateTenantUsersAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def get(self, request, tenant_id):
-        try:
-            tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
-        except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found"}, status=404)
+    def post(self, request):
+        company_name = request.data.get("company_name")
 
-        # Reactivate the tenant's user account
-        User.objects.filter(id=tenant.tenant.id).update(
-            is_deleted=False, is_active=True
-        )
+        if not company_name:
+            return Response({"error": "Company name is required."}, status=400)
+
+        users = User.objects.filter(company_name__iexact=company_name)
+        if not users.exists():
+            return Response(
+                {"error": "No users found for the given company name."}, status=404
+            )
+
+        users.update(is_active=True)
 
         return Response(
-            {"message": f"User for tenant ID '{tenant_id}' reactivated."},
+            {
+                "message": f"All users under company '{company_name}' have been reactivated."
+            },
             status=200,
         )
 
