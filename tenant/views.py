@@ -2284,6 +2284,7 @@ class OffenseStatsAPIView(APIView):
 #                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
 #             )
 
+
 class OffenseDetailsByTenantAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2353,7 +2354,9 @@ class OffenseDetailsByTenantAPIView(APIView):
                 )
 
             # Step 5: Build filters
-            filters = Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
+            filters = Q(assests__id__in=assets) & Q(
+                qradar_tenant_domain__id__in=tenant_ids
+            )
 
             # ID filter
             id_filter = request.query_params.get("id")
@@ -2402,7 +2405,6 @@ class OffenseDetailsByTenantAPIView(APIView):
                 filters &= Q(status__icontains=status_filter)
 
             # Date filters
-            date_format = "%Y-%m-%d"
 
             # Start date filters
             start_date_start_str = request.query_params.get("start_date_start")
@@ -2436,9 +2438,15 @@ class OffenseDetailsByTenantAPIView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            if start_date_start and start_date_end and start_date_end < start_date_start:
+            if (
+                start_date_start
+                and start_date_end
+                and start_date_end < start_date_start
+            ):
                 return Response(
-                    {"error": "start_date_end must be after or equal to start_date_start."},
+                    {
+                        "error": "start_date_end must be after or equal to start_date_start."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -2478,9 +2486,15 @@ class OffenseDetailsByTenantAPIView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            if start_time_start and start_time_end and start_time_end < start_time_start:
+            if (
+                start_time_start
+                and start_time_end
+                and start_time_end < start_time_start
+            ):
                 return Response(
-                    {"error": "start_time_end must be after or equal to start_time_start."},
+                    {
+                        "error": "start_time_end must be after or equal to start_time_start."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -2506,7 +2520,9 @@ class OffenseDetailsByTenantAPIView(APIView):
             paginated_offenses = paginator.paginate_queryset(offenses, request)
 
             # Step 8: Return paginated response
-            return paginator.get_paginated_response({"offenses": list(paginated_offenses)})
+            return paginator.get_paginated_response(
+                {"offenses": list(paginated_offenses)}
+            )
 
         except Exception as e:
             logger.error("Error in OffenseDetailsByTenantAPIView: %s", str(e))
@@ -2514,6 +2530,7 @@ class OffenseDetailsByTenantAPIView(APIView):
                 {"error": f"Something went wrong: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
 
 class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -3171,7 +3188,9 @@ class AlertListView(APIView):
                 integrations = tenant.integrations.all()
                 queryset = Alert.objects.filter(integration__in=integrations)
             else:
-                ti_entry = ThreatIntelligenceTenant.objects.filter(tenants=tenant).first()
+                ti_entry = ThreatIntelligenceTenant.objects.filter(
+                    tenants=tenant
+                ).first()
                 if not ti_entry:
                     return Response(
                         {
@@ -3219,7 +3238,6 @@ class AlertListView(APIView):
                 filters &= Q(status__iexact=status_filter)
 
             # Date filters
-            date_format = "%Y-%m-%d"
 
             # Published time filters
             published_start_date_str = request.query_params.get("published_start_date")
@@ -3229,11 +3247,15 @@ class AlertListView(APIView):
 
             if published_start_date_str:
                 try:
-                    published_start_date = parse_datetime(published_start_date_str).date()
+                    published_start_date = parse_datetime(
+                        published_start_date_str
+                    ).date()
                     filters &= Q(published_time__date__gte=published_start_date)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid published_start_date format. Use YYYY-MM-DD."},
+                        {
+                            "error": "Invalid published_start_date format. Use YYYY-MM-DD."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -3247,9 +3269,15 @@ class AlertListView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            if published_start_date and published_end_date and published_start_date > published_end_date:
+            if (
+                published_start_date
+                and published_end_date
+                and published_start_date > published_end_date
+            ):
                 return Response(
-                    {"error": "published_start_date cannot be greater than published_end_date."},
+                    {
+                        "error": "published_start_date cannot be greater than published_end_date."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -3279,9 +3307,15 @@ class AlertListView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            if created_start_date and created_end_date and created_start_date > created_end_date:
+            if (
+                created_start_date
+                and created_end_date
+                and created_start_date > created_end_date
+            ):
                 return Response(
-                    {"error": "created_start_date cannot be greater than created_end_date."},
+                    {
+                        "error": "created_start_date cannot be greater than created_end_date."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -3311,9 +3345,15 @@ class AlertListView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            if updated_start_date and updated_end_date and updated_start_date > updated_end_date:
+            if (
+                updated_start_date
+                and updated_end_date
+                and updated_start_date > updated_end_date
+            ):
                 return Response(
-                    {"error": "updated_start_date cannot be greater than updated_end_date."},
+                    {
+                        "error": "updated_start_date cannot be greater than updated_end_date."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -3322,7 +3362,9 @@ class AlertListView(APIView):
 
             # Step 5: Pagination
             paginator = PageNumberPagination()
-            paginator.page_size = PaginationConstants.PAGE_SIZE  # Consistent with TenantITSMTicketsView
+            paginator.page_size = (
+                PaginationConstants.PAGE_SIZE
+            )  # Consistent with TenantITSMTicketsView
             paginated_qs = paginator.paginate_queryset(queryset, request)
 
             # Step 6: Serialize and return response
@@ -3334,6 +3376,8 @@ class AlertListView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 class AlertDetailView(APIView):
     authentication_classes = [JWTAuthentication]
 
