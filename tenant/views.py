@@ -4191,9 +4191,6 @@ class SLAIncidentsView(APIView):
             )
 
 
-
-
-
 # SLAComplianceView
 class SLAComplianceView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -4288,9 +4285,13 @@ class SLAComplianceView(APIView):
 
             # Step 7: Calculate overall SLA compliance percentage
             overall_sla_compliance_percentage = (
-                (met_sla_count / total_incident_count) * 100 if total_incident_count > 0 else 0
+                (met_sla_count / total_incident_count) * 100
+                if total_incident_count > 0
+                else 0
             )
-            overall_sla_compliance_percentage = round(overall_sla_compliance_percentage, 2)
+            overall_sla_compliance_percentage = round(
+                overall_sla_compliance_percentage, 2
+            )
 
             # Step 8: Return response with overall SLA compliance details
             overall_sla_compliance = {
@@ -4306,8 +4307,6 @@ class SLAComplianceView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
 
 
 # SLASeverityIncidentsView
