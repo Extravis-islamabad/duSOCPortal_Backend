@@ -51,6 +51,7 @@ from tenant.models import (
     IBMQradarEventCollector,
     IBMQradarOffense,
     SlaLevelChoices,
+    SoarTenantSlaMetric,
     Tenant,
     TenantPermissionChoices,
     TenantQradarMapping,
@@ -3828,8 +3829,8 @@ class SLAIncidentsView(APIView):
             if tenant.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
-                sla_metrics = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_tenants
+                sla_metrics = SoarTenantSlaMetric.objects.filter(
+                    soar_tenant__in=soar_tenants
                 )
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
@@ -3932,7 +3933,7 @@ class SLAIncidentsView(APIView):
             )
 
         except Exception as e:
-            logger.error("Error in SLAIncidentsView: %s", str(e))
+            logger.error(f"Error in SLAIncidentsView:{str(e)}")
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
