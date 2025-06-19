@@ -4191,9 +4191,6 @@ class SLAIncidentsView(APIView):
             )
 
 
-
-
-
 # SLAComplianceView
 class SLAComplianceView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -4288,9 +4285,13 @@ class SLAComplianceView(APIView):
 
             # Step 7: Calculate overall SLA compliance percentage
             overall_sla_compliance_percentage = (
-                (met_sla_count / total_incident_count) * 100 if total_incident_count > 0 else 0
+                (met_sla_count / total_incident_count) * 100
+                if total_incident_count > 0
+                else 0
             )
-            overall_sla_compliance_percentage = round(overall_sla_compliance_percentage, 2)
+            overall_sla_compliance_percentage = round(
+                overall_sla_compliance_percentage, 2
+            )
 
             # Step 8: Return response with overall SLA compliance details
             overall_sla_compliance = {
@@ -4306,8 +4307,6 @@ class SLAComplianceView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
 
 
 # SLASeverityIncidentsView
@@ -4480,7 +4479,7 @@ class SLASeverityMetricsView(APIView):
                 SlaLevelChoices.P1: "P1 - Critical",
                 SlaLevelChoices.P2: "P2 - High",
                 SlaLevelChoices.P3: "P3 - Medium",
-                SlaLevelChoices.P4: "P4 - Low"
+                SlaLevelChoices.P4: "P4 - Low",
             }
 
             for level, label in severity_levels.items():
@@ -4508,17 +4507,23 @@ class SLASeverityMetricsView(APIView):
 
                     # Check if the incident met the SLA for tta, ttn, ttdn
                     if incident.incident_tta and created:
-                        tta_delta = (incident.incident_tta - created).total_seconds() / 60
+                        tta_delta = (
+                            incident.incident_tta - created
+                        ).total_seconds() / 60
                         if tta_delta > sla_metric.tta_minutes:
                             any_breach = True
 
                     if incident.incident_ttn and created:
-                        ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+                        ttn_delta = (
+                            incident.incident_ttn - created
+                        ).total_seconds() / 60
                         if ttn_delta > sla_metric.ttn_minutes:
                             any_breach = True
 
                     if incident.incident_ttdn and created:
-                        ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+                        ttdn_delta = (
+                            incident.incident_ttdn - created
+                        ).total_seconds() / 60
                         if ttdn_delta > sla_metric.ttdn_minutes:
                             any_breach = True
 
@@ -4529,18 +4534,24 @@ class SLASeverityMetricsView(APIView):
                 # Calculate the compliance percentage for the severity level
                 compliance_percentage = 0.0
                 if total_incidents > 0:
-                    compliance_percentage = round((met_sla_count / total_incidents) * 100, 2)
+                    compliance_percentage = round(
+                        (met_sla_count / total_incidents) * 100, 2
+                    )
 
                 # Add the data for the current severity level to the response list
-                response_list.append({
-                    "severity_label": label,
-                    "tta_minutes": sla_metric.tta_minutes,
-                    "ttn_minutes": sla_metric.ttn_minutes,
-                    "ttdn_minutes": sla_metric.ttdn_minutes,
-                    "target_sla": f"TTA: {sla_metric.tta_minutes} mins, TTN: {sla_metric.ttn_minutes} mins, TTDN: {sla_metric.ttdn_minutes} mins",
-                    "compliance_percentage": compliance_percentage,
-                    "status": "Met" if compliance_percentage >= 80 else "Breached"  # Arbitrary threshold for "Met" SLA
-                })
+                response_list.append(
+                    {
+                        "severity_label": label,
+                        "tta_minutes": sla_metric.tta_minutes,
+                        "ttn_minutes": sla_metric.ttn_minutes,
+                        "ttdn_minutes": sla_metric.ttdn_minutes,
+                        "target_sla": f"TTA: {sla_metric.tta_minutes} mins, TTN: {sla_metric.ttn_minutes} mins, TTDN: {sla_metric.ttdn_minutes} mins",
+                        "compliance_percentage": compliance_percentage,
+                        "status": "Met"
+                        if compliance_percentage >= 80
+                        else "Breached",  # Arbitrary threshold for "Met" SLA
+                    }
+                )
 
             # Step 5: Return response with SLA metrics and compliance data
             return Response(response_list)
