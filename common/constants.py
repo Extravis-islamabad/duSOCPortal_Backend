@@ -172,5 +172,3 @@ class FilterType(Enum):
 
 
 SEVERITY_LABELS = {0: "Unknown", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
-
-

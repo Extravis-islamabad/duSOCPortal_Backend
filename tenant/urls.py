@@ -20,8 +20,8 @@ from tenant.views import (
     OwnerDistributionView,
     PermissionChoicesAPIView,
     RecentIncidentsView,
-    SLAIncidentsView,
     SeverityDistributionView,
+    SLAIncidentsView,
     SLAStatusView,
     TenantAPIView,
     TenantCortexSOARIncidentsAPIView,
@@ -139,7 +139,7 @@ urlpatterns = [
         name="alert-details",
     ),
     path("api/all-incidents/", AllIncidentsView.as_view(), name="all-incidents"),
-     path(
+    path(
         "api/sla-incidents/",
         SLAIncidentsView.as_view(),
         name="sla-incidents",

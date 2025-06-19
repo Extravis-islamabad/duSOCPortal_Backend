@@ -3249,7 +3249,6 @@ class AllIncidentsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-
 # SLAIncidentsView
 class SLAIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -3260,13 +3259,13 @@ class SLAIncidentsView(APIView):
         Retrieve incident counts and SLA details, filtered by:
         - SOAR tenant IDs
         - Optional query parameters: severity, status_filter, start_date, end_date
-        
+
         Query Parameters:
             severity (int): Exact match on severity (1=Low, 2=Medium, 3=High, 4=Critical)
             status_filter (str): Partial match on status (case-insensitive)
             start_date (YYYY-MM-DD): Incidents created on or after this date
             end_date (YYYY-MM-DD): Incidents created on or before this date
-        
+
         Returns:
             Response with SLA details for cards and incident counts for table
         """
@@ -3276,8 +3275,7 @@ class SLAIncidentsView(APIView):
             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
         except Tenant.DoesNotExist:
             return Response(
-                {"error": "Tenant not found."}, 
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
         try:
@@ -3296,11 +3294,11 @@ class SLAIncidentsView(APIView):
 
             # Step 3: Get SOAR tenant IDs
             soar_tenants = tenant.soar_tenants.all()
-            logger.debug("SOAR Tenants: %s", list(soar_tenants.values('id', 'name')))
+            logger.debug("SOAR Tenants: %s", list(soar_tenants.values("id", "name")))
             if not soar_tenants:
                 return Response(
-                    {"error": "No SOAR tenants found."}, 
-                    status=status.HTTP_404_NOT_FOUND
+                    {"error": "No SOAR tenants found."},
+                    status=status.HTTP_404_NOT_FOUND,
                 )
             soar_ids = [t.id for t in soar_tenants]
 
@@ -3316,7 +3314,7 @@ class SLAIncidentsView(APIView):
                 except ValueError:
                     return Response(
                         {"error": "Invalid severity format. Must be an integer."},
-                        status=status.HTTP_400_BAD_REQUEST
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             # Status filter
@@ -3346,7 +3344,7 @@ class SLAIncidentsView(APIView):
                 filters,
                 incident_tta__isnull=False,
                 incident_ttdn__isnull=False,
-                incident_ttn__isnull=False
+                incident_ttn__isnull=False,
             )
 
             # Step 6: Fetch SLA metrics based on tenant's is_default_sla value
@@ -3366,18 +3364,23 @@ class SLAIncidentsView(APIView):
                     SlaLevelChoices.P1: "p1_critical",
                     SlaLevelChoices.P2: "p2_high",
                     SlaLevelChoices.P3: "p3_medium",
-                    SlaLevelChoices.P4: "p4_low"
+                    SlaLevelChoices.P4: "p4_low",
                 }.get(metric.sla_level, f"severity_{metric.sla_level}")
                 sla_details[priority_key] = {
                     "severity_level": metric.sla_level,
                     "tta_minutes": metric.tta_minutes,
                     "ttn_minutes": metric.ttn_minutes,
-                    "ttdn_minutes": metric.ttdn_minutes
+                    "ttdn_minutes": metric.ttdn_minutes,
                 }
 
             # Step 8: Process incident counts
             total_incident_count = 0
-            severity_counts = {SlaLevelChoices.P1: 0, SlaLevelChoices.P2: 0, SlaLevelChoices.P3: 0, SlaLevelChoices.P4: 0}
+            severity_counts = {
+                SlaLevelChoices.P1: 0,
+                SlaLevelChoices.P2: 0,
+                SlaLevelChoices.P3: 0,
+                SlaLevelChoices.P4: 0,
+            }
             met_sla_count = 0
             breached_sla_count = 0
 
@@ -3426,7 +3429,9 @@ class SLAIncidentsView(APIView):
 
             # Calculate breached SLA percentage
             breached_sla_percentage = (
-                (breached_sla_count / total_incident_count * 100) if total_incident_count > 0 else 0
+                (breached_sla_count / total_incident_count * 100)
+                if total_incident_count > 0
+                else 0
             )
             breached_sla_percentage = round(breached_sla_percentage, 2)
 
@@ -3439,20 +3444,18 @@ class SLAIncidentsView(APIView):
                     "total_incident_count": total_incident_count,
                     "met_sla_count": met_sla_count,
                     "breached_sla_count": breached_sla_count,
-                    "breached_sla_percentage": breached_sla_percentage
+                    "breached_sla_percentage": breached_sla_percentage,
                 }
                 for severity, count in severity_counts.items()
             ]
 
             # Step 10: Return response
-            return Response({
-                "sla_details": sla_details,
-                "incident_counts": incident_counts
-            })
+            return Response(
+                {"sla_details": sla_details, "incident_counts": incident_counts}
+            )
 
         except Exception as e:
             logger.error("Error in SLAIncidentsView: %s", str(e))
             return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
