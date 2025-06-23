@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import time
 
 import pandas as pd
@@ -229,8 +228,8 @@ class CortexSOAR:
         :return: An integer representing the first sequence of digits found, or None if no digits are present.
         """
 
-        match = re.search(r"\d+", value)
-        return int(match.group()) if match else None
+        c = value.split(" ")
+        return int(c[-1])
 
     def _transform_incidents(self, data, integration_id, cortex_tenant):
         """
