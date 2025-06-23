@@ -1,11 +1,14 @@
 import json
 import os
 import time
+from datetime import datetime
 
 import pandas as pd
+import pytz
 import requests
 from django.db import transaction
-from django.utils.dateparse import parse_datetime
+
+DUBAI_TZ = pytz.timezone("Asia/Dubai")
 from loguru import logger
 
 from common.constants import CortexSOARConstants, SSLConstants
@@ -210,14 +213,32 @@ class CortexSOAR:
 
     def safe_parse_datetime(self, value):
         """
-        Safely parses a datetime string into a datetime object.
+        Safely parses a datetime string with timezone into a timezone-aware datetime object in Dubai timezone.
 
-        :param value: The value to parse, expected to be a string.
-        :return: A datetime object if the value is a valid datetime string, otherwise None.
+        :param value: A string datetime in ISO 8601 format with nanoseconds.
+        :return: A timezone-aware datetime object in Asia/Dubai timezone or None.
         """
-
         if isinstance(value, str):
-            return parse_datetime(value)
+            try:
+                # Truncate nanoseconds to microseconds for datetime.fromisoformat to work
+                # "2025-06-23T16:45:42.201416027+04:00" -> "2025-06-23T16:45:42.201416+04:00"
+                if "." in value:
+                    prefix, suffix = value.split(".")
+                    decimal, tz = (
+                        suffix[:9],
+                        suffix[9:],
+                    )  # Keep max 9 chars before +04:00
+                    microsecond = decimal[:6]  # Truncate to microseconds
+                    value = f"{prefix}.{microsecond}{tz}"
+
+                dt = datetime.fromisoformat(value)
+
+                # Convert to Dubai timezone
+                return dt.astimezone(DUBAI_TZ)
+
+            except Exception as e:
+                logger.warning(f"Failed to parse datetime: {value} — {e}")
+                return None
         return None
 
     def extract_digits(self, value):
