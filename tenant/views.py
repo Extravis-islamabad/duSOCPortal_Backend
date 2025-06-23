@@ -4653,6 +4653,103 @@ class RecentIncidentsView(APIView):
             )
 
 
+# class AllIncidentsView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         """
+#         Retrieve up to 10 incidents filtered by:
+#         - SOAR tenant
+#         - optional filter_type (1–4)
+#         - optional severity (0–6)
+
+#         Returns:
+#             {
+#                 "data": [...],
+#                 "summary": {
+#                     "Unknown": 3,
+#                     "Low": 2,
+#                     ...
+#                 }
+#             }
+#         """
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#             soar_ids = tenant.soar_tenants.values_list("id", flat=True)
+
+#             if not soar_ids:
+#                 return Response({"error": "No SOAR tenants found."}, status=404)
+
+#             filters = Q(cortex_soar_tenant__in=soar_ids)
+
+#             # Handle filter_type
+#             filter_type = request.query_params.get("filter_type")
+#             if filter_type:
+#                 try:
+#                     filter_enum = FilterType(int(filter_type))
+#                     now = timezone.now()
+#                     if filter_enum == FilterType.TODAY:
+#                         start_date = now.replace(
+#                             hour=0, minute=0, second=0, microsecond=0
+#                         )
+#                     elif filter_enum == FilterType.WEEK:
+#                         start_date = now - timedelta(days=7)
+#                     elif filter_enum == FilterType.MONTH:
+#                         start_date = now - timedelta(days=30)
+#                     elif filter_enum == FilterType.YEAR:
+#                         start_date = now - timedelta(days=365)
+#                     filters &= Q(created__gte=start_date)
+#                 except Exception:
+#                     return Response(
+#                         {
+#                             "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
+#                         },
+#                         status=400,
+#                     )
+
+#             # Handle severity
+#             severity = request.query_params.get("severity")
+#             if severity is not None:
+#                 try:
+#                     severity_int = int(severity)
+#                     if severity_int not in range(0, 7):
+#                         raise ValueError
+#                     filters &= Q(severity=severity_int)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid severity. Must be between 0 and 6."},
+#                         status=400,
+#                     )
+
+#             # Apply filters
+#             incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+#             print(incidents_qs.values("severity").annotate(count=Count("id")))
+
+#             # Prepare summary counts
+#             severity_counts = incidents_qs.values("severity").annotate(
+#                 count=Count("severity")
+#             )
+#             summary = {
+#                 SEVERITY_LABELS.get(
+#                     item["severity"], f"Unknown ({item['severity']})"
+#                 ): item["count"]
+#                 for item in severity_counts
+#             }
+
+#             # Limit to top 10
+#             incidents = incidents_qs.order_by("-created")[:10]
+
+#             serializer = RecentIncidentsSerializer(incidents, many=True)
+
+#             return Response({"data": serializer.data, "summary": summary}, status=200)
+
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=500)
+
+
 class AllIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4664,23 +4761,33 @@ class AllIncidentsView(APIView):
         - optional filter_type (1–4)
         - optional severity (0–6)
 
+        Query Parameters:
+            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year
+            severity (int): Severity level between 0 and 6
+
         Returns:
             {
                 "data": [...],
                 "summary": {
-                    "Unknown": 3,
-                    "Low": 2,
-                    ...
+                    "Unknown": 0,
+                    "Low": 0,
+                    "Medium": 0,
+                    "High": 0,
+                    "Critical": 0,
+                    "Major": 0,
+                    "Minor": 0
                 }
             }
         """
         try:
+            # Step 1: Validate tenant
             tenant = Tenant.objects.get(tenant=request.user)
             soar_ids = tenant.soar_tenants.values_list("id", flat=True)
 
             if not soar_ids:
                 return Response({"error": "No SOAR tenants found."}, status=404)
 
+            # Step 2: Build filters
             filters = Q(cortex_soar_tenant__in=soar_ids)
 
             # Handle filter_type
@@ -4690,9 +4797,7 @@ class AllIncidentsView(APIView):
                     filter_enum = FilterType(int(filter_type))
                     now = timezone.now()
                     if filter_enum == FilterType.TODAY:
-                        start_date = now.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
+                        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
                     elif filter_enum == FilterType.WEEK:
                         start_date = now - timedelta(days=7)
                     elif filter_enum == FilterType.MONTH:
@@ -4702,9 +4807,7 @@ class AllIncidentsView(APIView):
                     filters &= Q(created__gte=start_date)
                 except Exception:
                     return Response(
-                        {
-                            "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
-                        },
+                        {"error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."},
                         status=400,
                     )
 
@@ -4722,34 +4825,32 @@ class AllIncidentsView(APIView):
                         status=400,
                     )
 
-            # Apply filters
+            # Step 3: Apply filters
             incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
-            print(incidents_qs.values("severity").annotate(count=Count("id")))
 
-            # Prepare summary counts
-            severity_counts = incidents_qs.values("severity").annotate(
-                count=Count("severity")
-            )
-            summary = {
-                SEVERITY_LABELS.get(
-                    item["severity"], f"Unknown ({item['severity']})"
-                ): item["count"]
-                for item in severity_counts
-            }
+            # Step 4: Prepare summary counts
+            severity_counts = incidents_qs.values("severity").annotate(count=Count("severity"))
+            # Initialize summary with all severity labels set to 0
+            summary = {label: 0 for label in SEVERITY_LABELS.values()}
+            # Update counts for severities present in the data
+            for item in severity_counts:
+                severity_value = item["severity"]
+                label = SEVERITY_LABELS.get(severity_value, f"Unknown ({severity_value})")
+                summary[label] = item["count"]
 
-            # Limit to top 10
+            # Step 5: Limit to top 10 incidents
             incidents = incidents_qs.order_by("-created")[:10]
 
+            # Step 6: Serialize and return response
             serializer = RecentIncidentsSerializer(incidents, many=True)
-
             return Response({"data": serializer.data, "summary": summary}, status=200)
 
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
         except Exception as e:
+            logger.error("Error in AllIncidentsView: %s", str(e))
             return Response({"error": str(e)}, status=500)
-
-
+        
 # # SLAIncidentsView
 # class SLAIncidentsView(APIView):
 #     authentication_classes = [JWTAuthentication]
