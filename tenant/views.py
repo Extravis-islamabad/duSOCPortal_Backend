@@ -412,6 +412,7 @@ class TestView(APIView):
 #                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
 #             )
 
+
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -532,7 +533,9 @@ class GetTenantAssetsList(APIView):
                     filters &= Q(last_event_date_converted=last_event_date)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid last_event_start_date format. Use YYYY-MM-DD."},
+                        {
+                            "error": "Invalid last_event_start_date format. Use YYYY-MM-DD."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -561,9 +564,8 @@ class GetTenantAssetsList(APIView):
                 )
 
             # Fetch assets and apply date filtering manually since creation_date is a CharField
-            assets = (
-                IBMQradarAssests.objects.filter(filters)
-                .select_related("event_collector", "log_source_type")
+            assets = IBMQradarAssests.objects.filter(filters).select_related(
+                "event_collector", "log_source_type"
             )
 
             if start_date or end_date:
@@ -587,7 +589,9 @@ class GetTenantAssetsList(APIView):
 
             # Step 5: Sort
             assets = sorted(
-                assets, key=lambda x: x.creation_date_converted or datetime.min.date(), reverse=True
+                assets,
+                key=lambda x: x.creation_date_converted or datetime.min.date(),
+                reverse=True,
             )
 
             # Step 6: Pagination
@@ -604,351 +608,6 @@ class GetTenantAssetsList(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-# class TenantITSMTicketsView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response(
-#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-#             )
-
-#         itsm_integrations = tenant.integrations.filter(
-#             integration_type=IntegrationTypes.ITSM_INTEGRATION,
-#             itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
-#             status=True,
-#         )
-#         if not itsm_integrations.exists():
-#             return Response(
-#                 {"error": "No active ITSM integration configured for tenant."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-#         itsm_tenant_ids = tenant.itsm_tenants.values_list("id", flat=True)
-
-#         tickets = DuITSMFinalTickets.objects.filter(itsm_tenant__in=itsm_tenant_ids)
-
-#         # Parse start_date and end_date from query params
-#         start_date_str = request.query_params.get("start_date")
-#         end_date_str = request.query_params.get("end_date")
-
-#         date_format_in_db = "%b %d, %Y %I:%M %p"  # e.g., "Apr 17, 2025 10:42 PM"
-#         date_format_filter = "%Y-%m-%d"  # e.g., "2025-04-17"
-
-#         def parse_ticket_date(ticket):
-#             try:
-#                 return datetime.strptime(ticket.creation_date, date_format_in_db).date()
-#             except Exception:
-#                 return None
-
-#         if start_date_str:
-#             try:
-#                 start_date = datetime.strptime(
-#                     start_date_str, date_format_filter
-#                 ).date()
-#                 tickets = [
-#                     t
-#                     for t in tickets
-#                     if (dt := parse_ticket_date(t)) and dt >= start_date
-#                 ]
-#             except ValueError:
-#                 return Response(
-#                     {"error": "Invalid start_date format. Use YYYY-MM-DD."}, status=400
-#                 )
-
-#         if end_date_str:
-#             try:
-#                 end_date = datetime.strptime(end_date_str, date_format_filter).date()
-#                 tickets = [
-#                     t
-#                     for t in tickets
-#                     if (dt := parse_ticket_date(t)) and dt <= end_date
-#                 ]
-#             except ValueError:
-#                 return Response(
-#                     {"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400
-#                 )
-#             tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
-#         else:
-#             # No filtering needed, just order in queryset
-#             tickets = list(tickets)
-#             tickets.sort(
-#                 key=lambda t: parse_ticket_date(t) or datetime.min.date(), reverse=True
-#             )
-#             # tickets = tickets.order_by("creation_date")
-#         # tickets.sort(key=lambda t: parse_ticket_date(t) or datetime.min.date())
-#         # Pagination
-#         paginator = PageNumberPagination()
-#         paginator.page_size = PaginationConstants.PAGE_SIZE
-#         paginated_tickets = paginator.paginate_queryset(tickets, request)
-
-
-#         serializer = DuITSMTicketsSerializer(paginated_tickets, many=True)
-#         return paginator.get_paginated_response(serializer.data)
-# class TenantITSMTicketsView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response(
-#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-#             )
-
-#         itsm_integrations = tenant.integrations.filter(
-#             integration_type=IntegrationTypes.ITSM_INTEGRATION,
-#             itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
-#             status=True,
-#         )
-#         if not itsm_integrations.exists():
-#             return Response(
-#                 {"error": "No active ITSM integration configured for tenant."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-#         itsm_tenant_ids = tenant.itsm_tenants.values_list("id", flat=True)
-
-#         tickets = DuITSMFinalTickets.objects.filter(itsm_tenant__in=itsm_tenant_ids)
-
-#         # Parse query parameters for filters
-#         start_date_str = request.query_params.get("start_date")
-#         end_date_str = request.query_params.get("end_date")
-#         id_filter = request.query_params.get("id")
-#         name_filter = request.query_params.get("name")
-#         subject_filter = request.query_params.get("subject")
-#         status_filter = request.query_params.get("status")
-#         created_by_filter = request.query_params.get("created_by")
-
-#         date_format_in_db = "%b %d, %Y %I:%M %p"  # e.g., "Apr 17, 2025 10:42 PM"
-#         date_format_filter = "%Y-%m-%d"  # e.g., "2025-04-17"
-
-#         def parse_ticket_date(ticket):
-#             try:
-#                 return datetime.strptime(ticket.creation_date, date_format_in_db).date()
-#             except Exception:
-#                 return None
-
-#         # Convert tickets to a list for in-memory filtering
-#         tickets = list(tickets)
-
-#         # Apply filters
-#         if id_filter:
-#             try:
-#                 id_value = int(id_filter)
-#                 tickets = [t for t in tickets if t.id == id_value]
-#             except ValueError:
-#                 return Response(
-#                     {"error": "Invalid id format. Must be an integer."}, status=400
-#                 )
-
-#         if name_filter:
-#             tickets = [
-#                 t for t in tickets if name_filter.lower() in t.account_name.lower()
-#             ]
-
-#         if subject_filter:
-#             tickets = [
-#                 t for t in tickets if subject_filter.lower() in t.subject.lower()
-#             ]
-
-#         if status_filter:
-#             tickets = [t for t in tickets if status_filter.lower() == t.status.lower()]
-
-#         if created_by_filter:
-#             tickets = [
-#                 t
-#                 for t in tickets
-#                 if created_by_filter.lower() in t.created_by_name.lower()
-#             ]
-
-#         if start_date_str:
-#             try:
-#                 start_date = datetime.strptime(
-#                     start_date_str, date_format_filter
-#                 ).date()
-#                 tickets = [
-#                     t
-#                     for t in tickets
-#                     if (dt := parse_ticket_date(t)) and dt >= start_date
-#                 ]
-#             except ValueError:
-#                 return Response(
-#                     {"error": "Invalid start_date format. Use YYYY-MM-DD."}, status=400
-#                 )
-
-#         if end_date_str:
-#             try:
-#                 end_date = datetime.strptime(end_date_str, date_format_filter).date()
-#                 tickets = [
-#                     t
-#                     for t in tickets
-#                     if (dt := parse_ticket_date(t)) and dt <= end_date
-#                 ]
-#             except ValueError:
-#                 return Response(
-#                     {"error": "Invalid end_date format. Use YYYY-MM-DD."}, status=400
-#                 )
-
-#         # Sort tickets by creation_date (descending)
-#         tickets.sort(
-#             key=lambda t: parse_ticket_date(t) or datetime.min.date(), reverse=True
-#         )
-
-#         # Pagination
-#         paginator = PageNumberPagination()
-#         paginator.page_size = PaginationConstants.PAGE_SIZE
-#         paginated_tickets = paginator.paginate_queryset(tickets, request)
-
-#         serializer = DuITSMTicketsSerializer(paginated_tickets, many=True)
-#         return paginator.get_paginated_response(serializer.data)
-
-
-# TenantITSMTicketsView with optimized filtering
-# class TenantITSMTicketsView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         """
-#         Retrieve ITSM tickets filtered by:
-#         - ITSM tenant IDs
-#         - Optional query parameters: account_name, db_id, id, subject, status, created_by, start_date, end_date
-
-#         Query Parameters:
-#             account_name (str): Partial match on account_name (case-insensitive)
-#             db_id (int): Exact match on db_id
-#             id (int): Exact match on id
-#             subject (str): Partial match on subject (case-insensitive)
-#             status (str): Exact match on status (case-insensitive)
-#             created_by (str): Partial match on created_by_name (case-insensitive)
-#             start_date (YYYY-MM-DD): Tickets created on or after this date
-#             end_date (YYYY-MM-DD): Tickets created on or before this date
-
-#         Returns:
-#             Paginated response with count, next, previous, and results
-#         """
-#         try:
-#             # Step 1: Validate tenant
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response(
-#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-#             )
-
-#         try:
-#             # Step 2: Check for active ITSM integration
-#             itsm_integrations = tenant.integrations.filter(
-#                 integration_type=IntegrationTypes.ITSM_INTEGRATION,
-#                 itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
-#                 status=True,
-#             )
-#             if not itsm_integrations.exists():
-#                 return Response(
-#                     {"error": "No active ITSM integration configured for tenant."},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-
-#             # Step 3: Get ITSM tenant IDs
-#             itsm_tenant_ids = tenant.itsm_tenants.values_list("id", flat=True)
-#             if not itsm_tenant_ids:
-#                 return Response(
-#                     {"error": "No ITSM tenants found."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-
-#             # Step 4: Build filters
-#             filters = Q(itsm_tenant__in=itsm_tenant_ids)
-
-#             # Account name filter
-#             account_name = request.query_params.get("account_name")
-#             if account_name:
-#                 filters &= Q(account_name__icontains=account_name)
-
-#             # DB ID filter
-#             db_id = request.query_params.get("db_id")
-#             if db_id:
-#                 try:
-#                     db_id_value = int(db_id)
-#                     filters &= Q(db_id=db_id_value)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid db_id format. Must be an integer."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             # ID filter
-#             id_filter = request.query_params.get("id")
-#             if id_filter:
-#                 try:
-#                     id_value = int(id_filter)
-#                     filters &= Q(id=id_value)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid id format. Must be an integer."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             # Subject filter
-#             subject_filter = request.query_params.get("subject")
-#             if subject_filter:
-#                 filters &= Q(subject__icontains=subject_filter)
-
-#             # Status filter
-#             status_filter = request.query_params.get("status")
-#             if status_filter:
-#                 filters &= Q(status__iexact=status_filter)
-
-#             # Created by filter
-#             created_by_filter = request.query_params.get("created_by")
-#             if created_by_filter:
-#                 filters &= Q(created_by_name__icontains=created_by_filter)
-
-#             # Date filters (assuming creation_date is a DateTimeField in the model)
-#             date_format_filter = "%Y-%m-%d"  # e.g., "2025-06-17"
-#             start_date_str = request.query_params.get("start_date")
-#             if start_date_str:
-#                 try:
-#                     start_date = datetime.strptime(start_date_str, date_format_filter)
-#                     filters &= Q(creation_date__gte=start_date)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid start_date format. Use YYYY-MM-DD."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             end_date_str = request.query_params.get("end_date")
-#             if end_date_str:
-#                 try:
-#                     end_date = datetime.strptime(end_date_str, date_format_filter)
-#                     filters &= Q(creation_date__lte=end_date)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             # Step 5: Apply filters and sort
-#             tickets = DuITSMFinalTickets.objects.filter(filters).order_by(
-#                 "-creation_date"
-#             )
-
-#             # Step 6: Pagination
-#             paginator = PageNumberPagination()
-#             paginator.page_size = PaginationConstants.PAGE_SIZE
-#             paginated_tickets = paginator.paginate_queryset(tickets, request)
-
-#             # Step 7: Serialize and return response
-#             serializer = DuITSMTicketsSerializer(paginated_tickets, many=True)
-#             return paginator.get_paginated_response(serializer.data)
-
-#         except Exception as e:
-#             return Response(
-#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
 
 
 class TenantITSMTicketsView(APIView):
