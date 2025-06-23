@@ -407,11 +407,11 @@ class TestView(APIView):
 #             serializer = IBMQradarAssestsSerializer(result_page, many=True)
 #             return paginator.get_paginated_response(serializer.data)
 
-
 #         except Exception as e:
 #             return Response(
 #                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
 #             )
+
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -431,8 +431,8 @@ class GetTenantAssetsList(APIView):
             enabled (bool): Exact match on enabled status (true/false)
             last_event_start_date (YYYY-MM-DD): Exact match on last event start date
             average_eps (float): Exact match on average EPS
-            start_date (YYYY-MM-DD): Assets with created_at on or after this date
-            end_date (YYYY-MM-DD): Assets with created_at on or before this date (inclusive of the entire day)
+            start_date (YYYY-MM-DD): Assets with creation_date (parsed timestamp) on or after this date
+            end_date (YYYY-MM-DD): Assets with creation_date (parsed timestamp) on or before this date
 
         Returns:
             Paginated response with count, next, previous, and results
@@ -532,9 +532,7 @@ class GetTenantAssetsList(APIView):
                     filters &= Q(last_event_date_converted=last_event_date)
                 except ValueError:
                     return Response(
-                        {
-                            "error": "Invalid last_event_start_date format. Use YYYY-MM-DD."
-                        },
+                        {"error": "Invalid last_event_start_date format. Use YYYY-MM-DD."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -550,32 +548,11 @@ class GetTenantAssetsList(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Start and end date filters for created_at
+            # Start and end date filters for creation_date (Unix timestamp)
             start_date_str = request.query_params.get("start_date")
             end_date_str = request.query_params.get("end_date")
-            start_date = None
-            end_date = None
-
-            if start_date_str:
-                try:
-                    start_date = parse_date(start_date_str)
-                    filters &= Q(created_at__date__gte=start_date)
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid start_date format. Use YYYY-MM-DD."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            if end_date_str:
-                try:
-                    end_date = parse_date(end_date_str)
-                    # Extend end_date to include the entire day
-                    filters &= Q(created_at__date__lte=end_date)
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid end_date format. Use YYYY-MM-DD."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            start_date = parse_date(start_date_str) if start_date_str else None
+            end_date = parse_date(end_date_str) if end_date_str else None
 
             if start_date and end_date and start_date > end_date:
                 return Response(
@@ -583,11 +560,34 @@ class GetTenantAssetsList(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Step 5: Apply filters and sort
+            # Fetch assets and apply date filtering manually since creation_date is a CharField
             assets = (
                 IBMQradarAssests.objects.filter(filters)
                 .select_related("event_collector", "log_source_type")
-                .order_by("-created_at")
+            )
+
+            if start_date or end_date:
+                filtered_assets = []
+                for asset in assets:
+                    try:
+                        # Parse creation_date (Unix timestamp in milliseconds)
+                        ts = int(asset.creation_date) / 1000  # Convert to seconds
+                        asset_date = datetime.utcfromtimestamp(ts).date()
+                        # Check if asset_date is within the date range
+                        if (not start_date or asset_date >= start_date) and (
+                            not end_date or asset_date <= end_date
+                        ):
+                            filtered_assets.append(asset)
+                    except (ValueError, TypeError) as e:
+                        logger.warning(
+                            f"Skipping asset {asset.id} with invalid creation_date '{asset.creation_date}': {str(e)}"
+                        )
+                        continue
+                assets = filtered_assets
+
+            # Step 5: Sort
+            assets = sorted(
+                assets, key=lambda x: x.creation_date_converted or datetime.min.date(), reverse=True
             )
 
             # Step 6: Pagination
@@ -604,7 +604,6 @@ class GetTenantAssetsList(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 # class TenantITSMTicketsView(APIView):
 #     authentication_classes = [JWTAuthentication]
@@ -2407,6 +2406,738 @@ class OffenseStatsAPIView(APIView):
             )
 
 
+# class OffenseDetailsByTenantAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+
+#         siem_integrations = tenant.integrations.filter(
+#             integration_type=IntegrationTypes.SIEM_INTEGRATION,
+#             siem_subtype=SiemSubTypes.IBM_QRADAR,
+#             status=True,
+#         )
+#         if not siem_integrations.exists():
+#             return Response(
+#                 {"error": "No active SEIM integration configured for tenant."},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+#         try:
+#             tenant = request.user
+
+#             # Get tenant mappings
+#             mappings = TenantQradarMapping.objects.filter(
+#                 tenant__tenant=tenant
+#             ).values_list("event_collectors__id", "qradar_tenant__id")
+
+#             if not mappings:
+#                 return Response(
+#                     {"error": "No mappings found for the tenant."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             collector_ids, tenant_ids = zip(*mappings)
+
+#             assets = IBMQradarAssests.objects.filter(
+#                 event_collector__id__in=collector_ids
+#             ).values_list("id", flat=True)
+
+#             if not assets:
+#                 return Response(
+#                     {"error": "No assets found for the given collectors."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             # Get filters from query params
+#             start_date_str = request.query_params.get("start_date")
+#             end_date_str = request.query_params.get("end_date")
+#             status_filter = request.query_params.get("status")
+#             severity_filter = request.query_params.get("severity")
+#             db_id_filter = request.query_params.get("id")
+
+#             # Base filters
+#             filters = Q(assests__id__in=assets) & Q(
+#                 qradar_tenant_domain__id__in=tenant_ids
+#             )
+
+#             # Parse and apply date filters
+#             if start_date_str:
+#                 try:
+#                     start_date = parse_date(start_date_str)
+#                     if start_date:
+#                         filters &= Q(start_date__gte=start_date)
+#                     else:
+#                         raise ValueError
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid start_date format. Use YYYY-MM-DD."},
+#                         status=400,
+#                     )
+
+#             if end_date_str:
+#                 try:
+#                     end_date = parse_date(end_date_str)
+#                     if end_date:
+#                         filters &= Q(start_date__lte=end_date)
+#                     else:
+#                         raise ValueError
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
+#                         status=400,
+#                     )
+
+#             # Validate date range
+#             if start_date_str and end_date_str and end_date < start_date:
+#                 return Response(
+#                     {"error": "end_date must be after or equal to start_date."},
+#                     status=400,
+#                 )
+
+#             # Additional filters
+#             if status_filter:
+#                 filters &= Q(status__icontains=status_filter)
+
+#             if severity_filter:
+#                 filters &= Q(severity=severity_filter)
+
+#             if db_id_filter:
+#                 filters &= Q(db_id=db_id_filter)
+
+#             offenses = (
+#                 IBMQradarOffense.objects.filter(filters)
+#                 .values(
+#                     "id",
+#                     "db_id",
+#                     "description",
+#                     "severity",
+#                     "status",
+#                     "start_date",
+#                     "start_time",
+#                 )
+#                 .distinct()
+#             )
+
+#             return Response(
+#                 {"offenses": list(offenses), "count": len(offenses)},
+#                 status=status.HTTP_200_OK,
+#             )
+
+#         except Exception as e:
+#             return Response(
+#                 {"error": f"Something went wrong: {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             )
+
+
+# class OffenseDetailsByTenantAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+
+#         # Step 1: Check for active SIEM integration
+#         siem_integrations = tenant.integrations.filter(
+#             integration_type=IntegrationTypes.SIEM_INTEGRATION,
+#             siem_subtype=SiemSubTypes.IBM_QRADAR,
+#             status=True,
+#         )
+#         if not siem_integrations.exists():
+#             return Response(
+#                 {"error": "No active SIEM integration configured for tenant."},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         try:
+#             # Step 2: Get tenant mappings
+#             mappings = TenantQradarMapping.objects.filter(
+#                 tenant=tenant  # Fixed: Use Tenant instance, not request.user
+#             ).values_list("event_collectors__id", "qradar_tenant__id")
+
+#             if not mappings:
+#                 return Response(
+#                     {"error": "No mappings found for the tenant."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             collector_ids, tenant_ids = zip(*mappings)
+
+#             # Step 3: Get assets for collectors
+#             assets = IBMQradarAssests.objects.filter(
+#                 event_collector__id__in=collector_ids
+#             ).values_list("id", flat=True)
+
+#             if not assets:
+#                 return Response(
+#                     {"error": "No assets found for the given collectors."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             # Step 4: Get filters from query params
+#             start_date_str = request.query_params.get("start_date")
+#             end_date_str = request.query_params.get("end_date")
+#             status_filter = request.query_params.get("status")
+#             severity_filter = request.query_params.get("severity")
+#             db_id_filter = request.query_params.get("id")
+
+#             # Step 5: Base filters
+#             filters = Q(assests__id__in=assets) & Q(
+#                 qradar_tenant_domain__id__in=tenant_ids
+#             )
+
+#             # Step 6: Parse and apply date filters
+#             if start_date_str:
+#                 try:
+#                     start_date = parse_date(start_date_str)
+#                     if start_date:
+#                         filters &= Q(start_date__gte=start_date)
+#                     else:
+#                         raise ValueError
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid start_date format. Use YYYY-MM-DD."},
+#                         status=400,
+#                     )
+
+#             if end_date_str:
+#                 try:
+#                     end_date = parse_date(end_date_str)
+#                     if end_date:
+#                         filters &= Q(start_date__lte=end_date)
+#                     else:
+#                         raise ValueError
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
+#                         status=400,
+#                     )
+
+#             # Step 7: Validate date range
+#             if start_date_str and end_date_str and end_date < start_date:
+#                 return Response(
+#                     {"error": "end_date must be after or equal to start_date."},
+#                     status=400,
+#                 )
+
+#             # Step 8: Apply additional filters
+#             if status_filter:
+#                 filters &= Q(status__icontains=status_filter)
+
+#             if severity_filter:
+#                 filters &= Q(severity=severity_filter)
+
+#             if db_id_filter:
+#                 filters &= Q(db_id=db_id_filter)
+
+#             # Step 9: Query offenses
+#             offenses = (
+#                 IBMQradarOffense.objects.filter(filters)
+#                 .values(
+#                     "id",
+#                     "db_id",
+#                     "description",
+#                     "severity",
+#                     "status",
+#                     "start_date",
+#                     "start_time",
+#                 )
+#                 .distinct()
+#                 .order_by("-start_date")
+#             )
+
+#             # Step 10: Pagination
+#             paginator = PageNumberPagination()
+#             paginator.page_size = PaginationConstants.PAGE_SIZE
+#             paginated_offenses = paginator.paginate_queryset(offenses, request)
+
+#             # Step 11: Return paginated response
+#             return paginator.get_paginated_response(
+#                 {"offenses": list(paginated_offenses)}
+#             )
+
+#         except Exception as e:
+#             logger.error("Error in OffenseDetailsByTenantAPIView: %s", str(e))
+#             return Response(
+#                 {"error": f"Something went wrong: {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             )
+
+
+# class OffenseDetailsByTenantAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         """
+#         Retrieve QRadar offenses filtered by:
+#         - Tenant-specific assets and QRadar tenant domains
+#         - Optional query parameters: id, db_id, description, severity, status,
+#           start_date_start, start_date_end, start_time_start, start_time_end
+
+#         Query Parameters:
+#             id (int): Exact match on id
+#             db_id (int): Exact match on db_id
+#             description (str): Partial match on description (case-insensitive)
+#             severity (int): Exact match on severity
+#             status (str): Partial match on status (case-insensitive)
+#             start_date_start (YYYY-MM-DD): Offenses with start_date on or after this date
+#             start_date_end (YYYY-MM-DD): Offenses with start_date on or before this date
+#             start_time_start (YYYY-MM-DD): Offenses with start_time on or after this date
+#             start_time_end (YYYY-MM-DD): Offenses with start_time on or before this date
+
+#         Returns:
+#             Paginated response with count, next, previous, and results
+#         """
+#         try:
+#             # Step 1: Validate tenant
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+
+#         # Step 2: Check for active SIEM integration
+#         siem_integrations = tenant.integrations.filter(
+#             integration_type=IntegrationTypes.SIEM_INTEGRATION,
+#             siem_subtype=SiemSubTypes.IBM_QRADAR,
+#             status=True,
+#         )
+#         if not siem_integrations.exists():
+#             return Response(
+#                 {"error": "No active SIEM integration configured for tenant."},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         try:
+#             # Step 3: Get tenant mappings
+#             mappings = TenantQradarMapping.objects.filter(tenant=tenant).values_list(
+#                 "event_collectors__id", "qradar_tenant__id"
+#             )
+
+#             if not mappings:
+#                 return Response(
+#                     {"error": "No mappings found for the tenant."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             collector_ids, tenant_ids = zip(*mappings)
+
+#             # Step 4: Get assets for collectors
+#             assets = IBMQradarAssests.objects.filter(
+#                 event_collector__id__in=collector_ids
+#             ).values_list("id", flat=True)
+
+#             if not assets:
+#                 return Response(
+#                     {"error": "No assets found for the given collectors."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             # Step 5: Build filters
+#             filters = Q(assests__id__in=assets) & Q(
+#                 qradar_tenant_domain__id__in=tenant_ids
+#             )
+
+#             # ID filter
+#             id_filter = request.query_params.get("id")
+#             if id_filter:
+#                 try:
+#                     id_value = int(id_filter)
+#                     filters &= Q(id=id_value)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid id format. Must be an integer."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             # DB ID filter
+#             db_id_filter = request.query_params.get("db_id")
+#             if db_id_filter:
+#                 try:
+#                     db_id_value = int(db_id_filter)
+#                     filters &= Q(db_id=db_id_value)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid db_id format. Must be an integer."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             # Description filter
+#             description_filter = request.query_params.get("description")
+#             if description_filter:
+#                 filters &= Q(description__icontains=description_filter)
+
+#             # Severity filter
+#             severity_filter = request.query_params.get("severity")
+#             if severity_filter:
+#                 try:
+#                     severity_value = int(severity_filter)
+#                     filters &= Q(severity=severity_value)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid severity format. Must be an integer."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             # Status filter
+#             status_filter = request.query_params.get("status")
+#             if status_filter:
+#                 filters &= Q(status__icontains=status_filter)
+
+#             # Date filters
+
+#             # Start date filters
+#             start_date_start_str = request.query_params.get("start_date_start")
+#             start_date_end_str = request.query_params.get("start_date_end")
+#             start_date_start = None
+#             start_date_end = None
+
+#             if start_date_start_str:
+#                 try:
+#                     start_date_start = parse_date(start_date_start_str)
+#                     if start_date_start:
+#                         filters &= Q(start_date__gte=start_date_start)
+#                     else:
+#                         raise ValueError
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid start_date_start format. Use YYYY-MM-DD."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             if start_date_end_str:
+#                 try:
+#                     start_date_end = parse_date(start_date_end_str)
+#                     if start_date_end:
+#                         filters &= Q(start_date__lte=start_date_end)
+#                     else:
+#                         raise ValueError
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid start_date_end format. Use YYYY-MM-DD."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             if (
+#                 start_date_start
+#                 and start_date_end
+#                 and start_date_end < start_date_start
+#             ):
+#                 return Response(
+#                     {
+#                         "error": "start_date_end must be after or equal to start_date_start."
+#                     },
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             # Start time filters (assuming start_time is a Unix timestamp in milliseconds)
+#             start_time_start_str = request.query_params.get("start_time_start")
+#             start_time_end_str = request.query_params.get("start_time_end")
+#             start_time_start = None
+#             start_time_end = None
+
+#             if start_time_start_str:
+#                 try:
+#                     start_time_start_dt = parse_date(start_time_start_str)
+#                     if start_time_start_dt:
+#                         # Convert datetime to Unix timestamp (milliseconds)
+#                         start_time_start = int(start_time_start_dt.timestamp() * 1000)
+#                         filters &= Q(start_time__gte=start_time_start)
+#                     else:
+#                         raise ValueError
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid start_time_start format. Use YYYY-MM-DD."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             if start_time_end_str:
+#                 try:
+#                     start_time_end_dt = parse_date(start_time_end_str)
+#                     if start_time_end_dt:
+#                         # Convert datetime to Unix timestamp (milliseconds)
+#                         start_time_end = int(start_time_end_dt.timestamp() * 1000)
+#                         filters &= Q(start_time__lte=start_time_end)
+#                     else:
+#                         raise ValueError
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid start_time_end format. Use YYYY-MM-DD."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             if (
+#                 start_time_start
+#                 and start_time_end
+#                 and start_time_end < start_time_start
+#             ):
+#                 return Response(
+#                     {
+#                         "error": "start_time_end must be after or equal to start_time_start."
+#                     },
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             # Step 6: Query offenses
+#             offenses = (
+#                 IBMQradarOffense.objects.filter(filters)
+#                 .values(
+#                     "id",
+#                     "db_id",
+#                     "description",
+#                     "severity",
+#                     "status",
+#                     "start_date",
+#                     "start_time",
+#                 )
+#                 .distinct()
+#                 .order_by("-start_date")
+#             )
+
+#             # Step 7: Pagination
+#             paginator = PageNumberPagination()
+#             paginator.page_size = PaginationConstants.PAGE_SIZE
+#             paginated_offenses = paginator.paginate_queryset(offenses, request)
+
+#             # Step 8: Return paginated response
+#             return paginator.get_paginated_response(
+#                 {"offenses": list(paginated_offenses)}
+#             )
+
+#         except Exception as e:
+#             logger.error("Error in OffenseDetailsByTenantAPIView: %s", str(e))
+#             return Response(
+#                 {"error": f"Something went wrong: {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             )
+# class OffenseDetailsByTenantAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         """
+#         Retrieve QRadar offenses filtered by:
+#         - Tenant-specific assets and QRadar tenant domains
+#         - Optional query parameters: id, db_id, description, severity, status,
+#           start_date, end_date, start_time_start, start_time_end
+
+#         Query Parameters:
+#             id (int): Exact match on id
+#             db_id (int): Exact match on db_id
+#             description (str): Partial match on description (case-insensitive)
+#             severity (int): Exact match on severity
+#             status (str): Partial match on status (case-insensitive)
+#             start_date (YYYY-MM-DD): Offenses created on or after this date
+#             end_date (YYYY-MM-DD): Offenses created on or before this date
+#             start_time_start (YYYY-MM-DD): Offenses with start_time on or after this date
+#             start_time_end (YYYY-MM-DD): Offenses with start_time on or before this date
+
+#         Returns:
+#             Paginated response with count, next, previous, and results
+#         """
+#         try:
+#             # Step 1: Validate tenant
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+
+#         # Step 2: Check for active SIEM integration
+#         siem_integrations = tenant.integrations.filter(
+#             integration_type=IntegrationTypes.SIEM_INTEGRATION,
+#             siem_subtype=SiemSubTypes.IBM_QRADAR,
+#             status=True,
+#         )
+#         if not siem_integrations.exists():
+#             return Response(
+#                 {"error": "No active SIEM integration configured for tenant."},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         try:
+#             # Step 3: Get tenant mappings
+#             mappings = TenantQradarMapping.objects.filter(tenant=tenant).values_list(
+#                 "event_collectors__id", "qradar_tenant__id"
+#             )
+
+#             if not mappings:
+#                 return Response(
+#                     {"error": "No mappings found for the tenant."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             collector_ids, tenant_ids = zip(*mappings)
+
+#             # Step 4: Get assets for collectors
+#             assets = IBMQradarAssests.objects.filter(
+#                 event_collector__id__in=collector_ids
+#             ).values_list("id", flat=True)
+
+#             if not assets:
+#                 return Response(
+#                     {"error": "No assets found for the given collectors."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             # Step 5: Build filters
+#             filters = Q(assests__id__in=assets) & Q(
+#                 qradar_tenant_domain__id__in=tenant_ids
+#             )
+
+#             # ID filter
+#             id_filter = request.query_params.get("id")
+#             if id_filter:
+#                 try:
+#                     id_value = int(id_filter)
+#                     filters &= Q(id=id_value)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid id format. Must be an integer."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             # DB ID filter
+#             db_id_filter = request.query_params.get("db_id")
+#             if db_id_filter:
+#                 try:
+#                     db_id_value = int(db_id_filter)
+#                     filters &= Q(db_id=db_id_value)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid db_id format. Must be an integer."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             # Description filter
+#             description_filter = request.query_params.get("description")
+#             if description_filter:
+#                 filters &= Q(description__icontains=description_filter)
+
+#             # Severity filter
+#             severity_filter = request.query_params.get("severity")
+#             if severity_filter:
+#                 try:
+#                     severity_value = int(severity_filter)
+#                     filters &= Q(severity=severity_value)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid severity format. Must be an integer."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             # Status filter
+#             status_filter = request.query_params.get("status")
+#             if status_filter:
+#                 filters &= Q(status__icontains=status_filter)
+
+#             # Date filters
+#             date_format_filter = "%Y-%m-%d"  # e.g., "2025-06-17"
+#             start_date_str = request.query_params.get("start_date")
+#             end_date_str = request.query_params.get("end_date")
+
+#             if start_date_str:
+#                 try:
+#                     start_date = datetime.strptime(start_date_str, date_format_filter).date()
+#                     filters &= Q(start_date__gte=start_date)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid start_date format. Use YYYY-MM-DD."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             if end_date_str:
+#                 try:
+#                     end_date = datetime.strptime(end_date_str, date_format_filter).date()
+#                     filters &= Q(start_date__lte=end_date)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             if start_date_str and end_date_str and end_date < start_date:
+#                 return Response(
+#                     {"error": "end_date must be after or equal to start_date."},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             # Start time filters (assuming start_time is a Unix timestamp in milliseconds)
+#             start_time_start_str = request.query_params.get("start_time_start")
+#             start_time_end_str = request.query_params.get("start_time_end")
+
+#             if start_time_start_str:
+#                 try:
+#                     start_time_start_dt = datetime.strptime(start_time_start_str, date_format_filter)
+#                     # Convert datetime to Unix timestamp (milliseconds)
+#                     start_time_start = int(start_time_start_dt.timestamp() * 1000)
+#                     filters &= Q(start_time__gte=start_time_start)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid start_time_start format. Use YYYY-MM-DD."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             if start_time_end_str:
+#                 try:
+#                     start_time_end_dt = datetime.strptime(start_time_end_str, date_format_filter)
+#                     # Convert datetime to Unix timestamp (milliseconds)
+#                     start_time_end = int(start_time_end_dt.timestamp() * 1000)
+#                     filters &= Q(start_time__lte=start_time_end)
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid start_time_end format. Use YYYY-MM-DD."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#             if start_time_start_str and start_time_end_str and start_time_end < start_time_start:
+#                 return Response(
+#                     {"error": "start_time_end must be after or equal to start_time_start."},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             # Handle null start_date (exclude or include based on requirement)
+#             # Option 1: Exclude null start_date records when date filters are applied
+#             if start_date_str or end_date_str:
+#                 filters &= Q(start_date__isnull=False)
+
+#             # Step 6: Query offenses
+#             offenses = (
+#                 IBMQradarOffense.objects.filter(filters)
+#                 .values(
+#                     "id",
+#                     "db_id",
+#                     "description",
+#                     "severity",
+#                     "status",
+#                     "start_date",
+#                     "start_time",
+#                 )
+#                 .distinct()
+#                 .order_by("-start_date")
+#             )
+
+#             # Step 7: Pagination
+#             paginator = PageNumberPagination()
+#             paginator.page_size = PaginationConstants.PAGE_SIZE
+#             paginated_offenses = paginator.paginate_queryset(offenses, request)
+
+#             # Step 8: Return paginated response
+#             return paginator.get_paginated_response(
+#                 {"offenses": list(paginated_offenses)}
+#             )
+
+
+#         except Exception as e:
+#             logger.error("Error in OffenseDetailsByTenantAPIView: %s", str(e))
+#             return Response(
+#                 {"error": f"Something went wrong: {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             )
 class OffenseDetailsByTenantAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2416,7 +3147,7 @@ class OffenseDetailsByTenantAPIView(APIView):
         Retrieve QRadar offenses filtered by:
         - Tenant-specific assets and QRadar tenant domains
         - Optional query parameters: id, db_id, description, severity, status,
-            start_date, end_date, start_time_start, start_time_end
+          start_date, end_date, start_time_start, start_time_end
 
         Query Parameters:
             id (int): Exact match on id
