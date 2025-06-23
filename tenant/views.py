@@ -3176,10 +3176,10 @@ class OffenseDetailsByTenantAPIView(APIView):
             )
 
         except Exception as e:
-            logger.error("Error in OffenseDetailsByTenantAPIView: %s", str(e))
+            logger.error(f"Error in OffenseDetailsByTenantAPIView {str(e)}")
             return Response(
-                {"error": f"Something went wrong: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"error": f"{str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
 
