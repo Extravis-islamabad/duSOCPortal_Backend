@@ -1,12 +1,12 @@
 import json
 import os
 import time
-from datetime import datetime
 
 import pandas as pd
 import pytz
 import requests
 from django.db import transaction
+from django.utils.dateparse import parse_datetime
 
 DUBAI_TZ = pytz.timezone("Asia/Dubai")
 from loguru import logger
@@ -213,50 +213,15 @@ class CortexSOAR:
 
     def safe_parse_datetime(self, value):
         """
-        Parses ISO 8601 datetime strings (including those with malformed tz offsets or nanoseconds),
-        and returns a timezone-aware datetime object in Dubai timezone.
+        Safely parses a datetime string into a datetime object.
+
+        :param value: The value to parse, expected to be a string.
+        :return: A datetime object if the value is a valid datetime string, otherwise None.
         """
-        if not isinstance(value, str):
-            return None
 
-        try:
-            # Fix timezone offset (e.g., +04:0 → +04:00)
-            if "+" in value:
-                parts = value.split("+")
-                if len(parts[1]) == 4:  # e.g., 04:0
-                    hours, minutes = parts[1].split(":")
-                    minutes = minutes.zfill(2)
-                    value = parts[0] + "+" + f"{hours.zfill(2)}:{minutes}"
-
-            # Fix timezone offset (e.g., -3:0 → -03:00)
-            if "-" in value[10:]:  # after date part
-                parts = value.rsplit("-", 1)
-                if len(parts[1]) == 4 and ":" in parts[1]:
-                    hours, minutes = parts[1].split(":")
-                    minutes = minutes.zfill(2)
-                    value = parts[0] + "-" + f"{hours.zfill(2)}:{minutes}"
-
-            # Truncate nanoseconds to microseconds (max 6 digits)
-            if "." in value:
-                prefix, suffix = value.split(".")
-                decimal = suffix[:9]
-                tz = ""
-                if "+" in decimal:
-                    decimal, tz = decimal.split("+")
-                    tz = "+" + tz
-                elif "-" in decimal:
-                    decimal, tz = decimal.split("-")
-                    tz = "-" + tz
-
-                micro = decimal[:6].ljust(6, "0")
-                value = f"{prefix}.{micro}{tz}"
-
-            dt = datetime.fromisoformat(value)
-            return dt.astimezone(DUBAI_TZ)
-
-        except Exception as e:
-            logger.warning(f"Failed to parse datetime: {value} — {e}")
-            return None
+        if isinstance(value, str):
+            return parse_datetime(value)
+        return None
 
     def extract_digits(self, value):
         """
