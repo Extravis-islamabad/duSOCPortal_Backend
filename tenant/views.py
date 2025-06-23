@@ -4348,7 +4348,7 @@ class AlertListView(APIView):
                         published_start_date_str
                     ).date()
                     filters &= Q(published_time__date__gte=published_start_date)
-                except ValueError:
+                except Exception:
                     return Response(
                         {
                             "error": "Invalid start_date or published_start_date format. Use YYYY-MM-DD."
@@ -4473,7 +4473,7 @@ class AlertListView(APIView):
             return paginator.get_paginated_response(serializer.data)
 
         except Exception as e:
-            logger.error("Error in AlertListView: %s", str(e))
+            logger.error(f"Error in AlertListView: {str(e)}")
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
