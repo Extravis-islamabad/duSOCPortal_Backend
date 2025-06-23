@@ -213,33 +213,50 @@ class CortexSOAR:
 
     def safe_parse_datetime(self, value):
         """
-        Safely parses a datetime string with timezone into a timezone-aware datetime object in Dubai timezone.
-
-        :param value: A string datetime in ISO 8601 format with nanoseconds.
-        :return: A timezone-aware datetime object in Asia/Dubai timezone or None.
+        Parses ISO 8601 datetime strings (including those with malformed tz offsets or nanoseconds),
+        and returns a timezone-aware datetime object in Dubai timezone.
         """
-        if isinstance(value, str):
-            try:
-                # Truncate nanoseconds to microseconds for datetime.fromisoformat to work
-                # "2025-06-23T16:45:42.201416027+04:00" -> "2025-06-23T16:45:42.201416+04:00"
-                if "." in value:
-                    prefix, suffix = value.split(".")
-                    decimal, tz = (
-                        suffix[:9],
-                        suffix[9:],
-                    )  # Keep max 9 chars before +04:00
-                    microsecond = decimal[:6]  # Truncate to microseconds
-                    value = f"{prefix}.{microsecond}{tz}"
+        if not isinstance(value, str):
+            return None
 
-                dt = datetime.fromisoformat(value)
+        try:
+            # Fix timezone offset (e.g., +04:0 → +04:00)
+            if "+" in value:
+                parts = value.split("+")
+                if len(parts[1]) == 4:  # e.g., 04:0
+                    hours, minutes = parts[1].split(":")
+                    minutes = minutes.zfill(2)
+                    value = parts[0] + "+" + f"{hours.zfill(2)}:{minutes}"
 
-                # Convert to Dubai timezone
-                return dt.astimezone(DUBAI_TZ)
+            # Fix timezone offset (e.g., -3:0 → -03:00)
+            if "-" in value[10:]:  # after date part
+                parts = value.rsplit("-", 1)
+                if len(parts[1]) == 4 and ":" in parts[1]:
+                    hours, minutes = parts[1].split(":")
+                    minutes = minutes.zfill(2)
+                    value = parts[0] + "-" + f"{hours.zfill(2)}:{minutes}"
 
-            except Exception as e:
-                logger.warning(f"Failed to parse datetime: {value} — {e}")
-                return None
-        return None
+            # Truncate nanoseconds to microseconds (max 6 digits)
+            if "." in value:
+                prefix, suffix = value.split(".")
+                decimal = suffix[:9]
+                tz = ""
+                if "+" in decimal:
+                    decimal, tz = decimal.split("+")
+                    tz = "+" + tz
+                elif "-" in decimal:
+                    decimal, tz = decimal.split("-")
+                    tz = "-" + tz
+
+                micro = decimal[:6].ljust(6, "0")
+                value = f"{prefix}.{micro}{tz}"
+
+            dt = datetime.fromisoformat(value)
+            return dt.astimezone(DUBAI_TZ)
+
+        except Exception as e:
+            logger.warning(f"Failed to parse datetime: {value} — {e}")
+            return None
 
     def extract_digits(self, value):
         """
