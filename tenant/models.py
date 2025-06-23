@@ -308,7 +308,7 @@ class DuCortexSOARTenants(models.Model):
 
 class DUCortexSOARIncidentFinalModel(models.Model):
     id = models.AutoField(primary_key=True)
-    db_id = models.IntegerField(unique=True, null=True, blank=True)
+    db_id = models.IntegerField(null=True, blank=True)
     created = models.DateTimeField()
     modified = models.DateTimeField()
     account = models.CharField(max_length=255, null=True, blank=True)
@@ -360,6 +360,11 @@ class DUCortexSOARIncidentFinalModel(models.Model):
 
     class Meta:
         db_table = "du_cortex_soar_final_incidents"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "db_id"], name="unique_account_db_id"
+            )
+        ]
 
     def __str__(self):
         return f"{self.incident_id} - {self.name}"
