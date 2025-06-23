@@ -66,6 +66,7 @@ python-dotenv==1.1.0
 python-ldap==3.4.4
 pytz==2025.2
 PyYAML==6.0.2
+pyz==0.4.3
 pyzmq==26.4.0
 redis==5.2.1
 requests==2.32.3
