@@ -1609,6 +1609,16 @@ class IncidentsView(APIView):
 
             # Step 11: Process incidents
             incidents = []
+            offense_db_ids = {
+                row["name"].split()[0]
+                for row in queryset
+                if row["name"] and len(row["name"].split()) > 0
+            }
+
+            # 2. Bulk fetch related offenses
+            offenses = IBMQradarOffense.objects.filter(db_id__in=offense_db_ids)
+            offense_map = {str(o.db_id): o.id for o in offenses}
+
             for row in queryset:
                 created_date = (
                     row["created"].strftime("%Y-%m-%d %I:%M %p")
@@ -1627,6 +1637,9 @@ class IncidentsView(APIView):
                     else row["name"]
                 )
 
+                offense_db_id = row["name"].split()[0]
+                offense_id = offense_map.get(offense_db_id)
+
                 incidents.append(
                     {
                         "id": f"{row['id']}",
@@ -1643,6 +1656,9 @@ class IncidentsView(APIView):
                         "playbook": row["playbook_id"],
                         "occurred": occurred_date,
                         "sla": row["sla"],
+                        "offense_link": request.build_absolute_uri(
+                            f"/tenant/api/offense-details/{offense_id}/"
+                        ),
                     }
                 )
 
