@@ -106,6 +106,11 @@ def sync_requests_for_soar():
                         continue
 
                     incidents = all_data.get("data", [])
+                    if incidents is None:
+                        logger.warning(
+                            f"No data returned for the CortexSOAR tenant : {cortex_tenant.name}"
+                        )
+                        continue
                     logger.success(f"Fetched {len(incidents)} incidents")
                     records = soar._transform_incidents(
                         data=all_data,
