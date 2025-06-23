@@ -1656,6 +1656,7 @@ class IncidentsView(APIView):
                         "playbook": row["playbook_id"],
                         "occurred": occurred_date,
                         "sla": row["sla"],
+                        "offense_id": offense_id,
                         "offense_link": request.build_absolute_uri(
                             f"/tenant/api/offense-details/{offense_id}/"
                         ),
