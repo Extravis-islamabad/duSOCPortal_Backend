@@ -314,7 +314,6 @@ class CortexSOAR:
                     update_fields=[
                         "created",
                         "modified",
-                        "account",
                         "name",
                         "status",
                         "reason",
@@ -342,7 +341,7 @@ class CortexSOAR:
                         "integration",
                         "cortex_soar_tenant",
                     ],
-                    unique_fields=["db_id"],
+                    unique_fields=["account", "db_id"],
                 )
             logger.info(f"Inserted the incidents records: {len(records)}")
             logger.success(
