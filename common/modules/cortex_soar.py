@@ -148,7 +148,12 @@ class CortexSOAR:
             )
             transaction.rollback()
 
-    def _get_incidents(self, account_name: str, day_week_month: str):
+    def _get_incidents(
+        self,
+        account_name: str,
+        day_week_month: str,
+        batch_size=CortexSOARConstants.BATCH_SIZE,
+    ):
         """
         Fetches the list of incidents from the CortexSOAR instance.
 
@@ -165,11 +170,11 @@ class CortexSOAR:
             "userFilter": False,
             "filter": {
                 "page": 0,
-                "size": 1000,
+                "size": batch_size,
                 "query": "",
                 "sort": [{"field": "id", "asc": False}],
                 "accounts": {account_name: {}},
-                "period": {"by": day_week_month, "fromValue": 1},
+                "period": {"by": day_week_month, "fromValue": None},
             },
         }
         try:
