@@ -758,6 +758,7 @@ class GetTenantAssetsList(APIView):
 #                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
 #             )
 
+
 class TenantITSMTicketsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -785,7 +786,9 @@ class TenantITSMTicketsView(APIView):
             # Step 1: Validate tenant
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         try:
             # Step 2: Check for active ITSM integration
@@ -873,7 +876,9 @@ class TenantITSMTicketsView(APIView):
                 try:
                     end_date = datetime.strptime(end_date_str, query_date_format)
                     # Extend end_date to the end of the day
-                    end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+                    end_date = end_date.replace(
+                        hour=23, minute=59, second=59, microsecond=999999
+                    )
                 except ValueError:
                     return Response(
                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
@@ -887,7 +892,9 @@ class TenantITSMTicketsView(APIView):
                 )
 
             # Fetch all matching tickets
-            tickets = DuITSMFinalTickets.objects.filter(filters).order_by("-creation_date")
+            tickets = DuITSMFinalTickets.objects.filter(filters).order_by(
+                "-creation_date"
+            )
 
             # Apply date filtering manually since creation_date is a CharField
             if start_date or end_date:
@@ -895,13 +902,17 @@ class TenantITSMTicketsView(APIView):
                 db_date_format = "%b %d, %Y %I:%M %p"  # e.g., "Sep 30, 2024 11:36 AM"
                 for ticket in tickets:
                     try:
-                        ticket_date = datetime.strptime(ticket.creation_date, db_date_format)
+                        ticket_date = datetime.strptime(
+                            ticket.creation_date, db_date_format
+                        )
                         if (not start_date or ticket_date >= start_date) and (
                             not end_date or ticket_date <= end_date
                         ):
                             filtered.append(ticket)
                     except ValueError as e:
-                        logger.warning(f"Skipping ticket with invalid creation_date '{ticket.creation_date}': {str(e)}")
+                        logger.warning(
+                            f"Skipping ticket with invalid creation_date '{ticket.creation_date}': {str(e)}"
+                        )
                         continue  # Skip malformed dates
                 tickets = filtered
 
@@ -919,6 +930,8 @@ class TenantITSMTicketsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 class TenantCortexSOARIncidentsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1769,7 +1782,19 @@ class IncidentsView(APIView):
 
             # Step 11: Process incidents
             incidents = []
+            offense_db_ids = {
+                row["name"].split()[0]
+                for row in queryset
+                if row["name"] and len(row["name"].split()) > 0
+            }
+
+            # 2. Bulk fetch related offenses
+            offenses = IBMQradarOffense.objects.filter(db_id__in=offense_db_ids)
+            offense_map = {str(o.db_id): o.id for o in offenses}
+
             for row in queryset:
+                offense_db_id = row["name"].split()[0]
+                offense_id = offense_map.get(offense_db_id)
                 created_date = (
                     row["created"].strftime("%Y-%m-%d %I:%M %p")
                     if row["created"]
@@ -2022,6 +2047,9 @@ class IncidentDetailView(APIView):
             # )
 
             # Format source IPs and log source types
+            offense_db_id = incident["name"].split()[0]
+            offenses = IBMQradarOffense.objects.filter(db_id=offense_db_id).first()
+            offense_id = offenses.id
             source_ips_str = ", ".join(source_ips) if source_ips else "Unknown"
             log_source_type_str = (
                 ", ".join(log_source_types) if log_source_types else "Unknown"
@@ -2066,6 +2094,7 @@ class IncidentDetailView(APIView):
                         if incident["occured"]
                         else "Unknown"
                     ),
+                    "offense_id": offense_id,
                 }
             }
 
@@ -2910,6 +2939,7 @@ class OffenseStatsAPIView(APIView):
 #                 {"offenses": list(paginated_offenses)}
 #             )
 
+
 #         except Exception as e:
 #             logger.error("Error in OffenseDetailsByTenantAPIView: %s", str(e))
 #             return Response(
@@ -3042,7 +3072,9 @@ class OffenseDetailsByTenantAPIView(APIView):
 
             if start_date_str:
                 try:
-                    start_date = datetime.strptime(start_date_str, date_format_filter).date()
+                    start_date = datetime.strptime(
+                        start_date_str, date_format_filter
+                    ).date()
                     filters &= Q(start_date__gte=start_date)
                 except ValueError:
                     return Response(
@@ -3052,7 +3084,9 @@ class OffenseDetailsByTenantAPIView(APIView):
 
             if end_date_str:
                 try:
-                    end_date = datetime.strptime(end_date_str, date_format_filter).date()
+                    end_date = datetime.strptime(
+                        end_date_str, date_format_filter
+                    ).date()
                     filters &= Q(start_date__lte=end_date)
                 except ValueError:
                     return Response(
@@ -3072,7 +3106,9 @@ class OffenseDetailsByTenantAPIView(APIView):
 
             if start_time_start_str:
                 try:
-                    start_time_start_dt = datetime.strptime(start_time_start_str, date_format_filter)
+                    start_time_start_dt = datetime.strptime(
+                        start_time_start_str, date_format_filter
+                    )
                     # Convert datetime to Unix timestamp (milliseconds)
                     start_time_start = int(start_time_start_dt.timestamp() * 1000)
                     filters &= Q(start_time__gte=start_time_start)
@@ -3084,7 +3120,9 @@ class OffenseDetailsByTenantAPIView(APIView):
 
             if start_time_end_str:
                 try:
-                    start_time_end_dt = datetime.strptime(start_time_end_str, date_format_filter)
+                    start_time_end_dt = datetime.strptime(
+                        start_time_end_str, date_format_filter
+                    )
                     # Convert datetime to Unix timestamp (milliseconds)
                     start_time_end = int(start_time_end_dt.timestamp() * 1000)
                     filters &= Q(start_time__lte=start_time_end)
@@ -3094,9 +3132,15 @@ class OffenseDetailsByTenantAPIView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            if start_time_start_str and start_time_end_str and start_time_end < start_time_start:
+            if (
+                start_time_start_str
+                and start_time_end_str
+                and start_time_end < start_time_start
+            ):
                 return Response(
-                    {"error": "start_time_end must be after or equal to start_time_start."},
+                    {
+                        "error": "start_time_end must be after or equal to start_time_start."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -3137,6 +3181,8 @@ class OffenseDetailsByTenantAPIView(APIView):
                 {"error": f"Something went wrong: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
 class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4192,6 +4238,7 @@ class EPSCountValuesByDomainAPIView(APIView):
 #                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
 #             )
 
+
 class AlertListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4286,18 +4333,26 @@ class AlertListView(APIView):
 
             # Date filters
             # Published time filters (including start_date and end_date as aliases)
-            published_start_date_str = request.query_params.get("published_start_date") or request.query_params.get("start_date")
-            published_end_date_str = request.query_params.get("published_end_date") or request.query_params.get("end_date")
+            published_start_date_str = request.query_params.get(
+                "published_start_date"
+            ) or request.query_params.get("start_date")
+            published_end_date_str = request.query_params.get(
+                "published_end_date"
+            ) or request.query_params.get("end_date")
             published_start_date = None
             published_end_date = None
 
             if published_start_date_str:
                 try:
-                    published_start_date = parse_datetime(published_start_date_str).date()
+                    published_start_date = parse_datetime(
+                        published_start_date_str
+                    ).date()
                     filters &= Q(published_time__date__gte=published_start_date)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid start_date or published_start_date format. Use YYYY-MM-DD."},
+                        {
+                            "error": "Invalid start_date or published_start_date format. Use YYYY-MM-DD."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -4307,13 +4362,21 @@ class AlertListView(APIView):
                     filters &= Q(published_time__date__lte=published_end_date)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid end_date or published_end_date format. Use YYYY-MM-DD."},
+                        {
+                            "error": "Invalid end_date or published_end_date format. Use YYYY-MM-DD."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            if published_start_date and published_end_date and published_start_date > published_end_date:
+            if (
+                published_start_date
+                and published_end_date
+                and published_start_date > published_end_date
+            ):
                 return Response(
-                    {"error": "start_date/published_start_date cannot be greater than end_date/published_end_date."},
+                    {
+                        "error": "start_date/published_start_date cannot be greater than end_date/published_end_date."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -4347,9 +4410,15 @@ class AlertListView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            if created_start_date and created_end_date and created_start_date > created_end_date:
+            if (
+                created_start_date
+                and created_end_date
+                and created_start_date > created_end_date
+            ):
                 return Response(
-                    {"error": "created_start_date cannot be greater than created_end_date."},
+                    {
+                        "error": "created_start_date cannot be greater than created_end_date."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -4379,9 +4448,15 @@ class AlertListView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            if updated_start_date and updated_end_date and updated_start_date > updated_end_date:
+            if (
+                updated_start_date
+                and updated_end_date
+                and updated_start_date > updated_end_date
+            ):
                 return Response(
-                    {"error": "updated_start_date cannot be greater than updated_end_date."},
+                    {
+                        "error": "updated_start_date cannot be greater than updated_end_date."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -4402,6 +4477,8 @@ class AlertListView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 class AlertDetailView(APIView):
     authentication_classes = [JWTAuthentication]
 
@@ -4797,7 +4874,9 @@ class AllIncidentsView(APIView):
                     filter_enum = FilterType(int(filter_type))
                     now = timezone.now()
                     if filter_enum == FilterType.TODAY:
-                        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                        start_date = now.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
                     elif filter_enum == FilterType.WEEK:
                         start_date = now - timedelta(days=7)
                     elif filter_enum == FilterType.MONTH:
@@ -4807,7 +4886,9 @@ class AllIncidentsView(APIView):
                     filters &= Q(created__gte=start_date)
                 except Exception:
                     return Response(
-                        {"error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."},
+                        {
+                            "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
+                        },
                         status=400,
                     )
 
@@ -4829,13 +4910,17 @@ class AllIncidentsView(APIView):
             incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
 
             # Step 4: Prepare summary counts
-            severity_counts = incidents_qs.values("severity").annotate(count=Count("severity"))
+            severity_counts = incidents_qs.values("severity").annotate(
+                count=Count("severity")
+            )
             # Initialize summary with all severity labels set to 0
             summary = {label: 0 for label in SEVERITY_LABELS.values()}
             # Update counts for severities present in the data
             for item in severity_counts:
                 severity_value = item["severity"]
-                label = SEVERITY_LABELS.get(severity_value, f"Unknown ({severity_value})")
+                label = SEVERITY_LABELS.get(
+                    severity_value, f"Unknown ({severity_value})"
+                )
                 summary[label] = item["count"]
 
             # Step 5: Limit to top 10 incidents
@@ -4850,7 +4935,8 @@ class AllIncidentsView(APIView):
         except Exception as e:
             logger.error("Error in AllIncidentsView: %s", str(e))
             return Response({"error": str(e)}, status=500)
-        
+
+
 # # SLAIncidentsView
 # class SLAIncidentsView(APIView):
 #     authentication_classes = [JWTAuthentication]
