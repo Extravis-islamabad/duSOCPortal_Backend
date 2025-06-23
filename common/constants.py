@@ -128,7 +128,7 @@ class ITSMConstants:
 class CortexSOARConstants:
     TENANT_ENDPOINT = "accounts"
     INCIDENT_ENDPOINT = "incidents/search"
-    BATCH_SIZE = 1
+    BATCH_SIZE = 10000
 
 
 class AdminWebsocketConstants:

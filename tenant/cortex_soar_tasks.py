@@ -89,31 +89,8 @@ def sync_requests_for_soar():
                         )
                         continue
 
-                    initial = data
-                    total = initial.get("total", 0)
-                    logger.info(f"Total incidents: {total}")
-
-                    # Step 2: Fetch all incidents in one go
-                    all_data = soar._get_incidents(
-                        account_name=cortex_tenant.name,
-                        day_week_month=interval,
-                        batch_size=total,
-                    )
-                    if not all_data:
-                        logger.warning(
-                            f"No data returned for the CortexSOAR tenant : {cortex_tenant.name}"
-                        )
-                        continue
-
-                    incidents = all_data.get("data", [])
-                    if incidents is None:
-                        logger.warning(
-                            f"No data returned for the CortexSOAR tenant : {cortex_tenant.name}"
-                        )
-                        continue
-                    logger.success(f"Fetched {len(incidents)} incidents")
                     records = soar._transform_incidents(
-                        data=all_data,
+                        data=data,
                         integration_id=integration.integration,
                         cortex_tenant=cortex_tenant,
                     )
@@ -121,8 +98,6 @@ def sync_requests_for_soar():
                         f"Ingesting the Incident for the CortexSOAR tenant : {cortex_tenant.name}"
                     )
                     soar._insert_incidents(records=records)
-
-        print(cortex_tenants)
 
 
 @shared_task
