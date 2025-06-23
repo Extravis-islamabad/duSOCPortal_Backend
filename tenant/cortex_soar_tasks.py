@@ -107,7 +107,7 @@ def sync_requests_for_soar():
                     incidents = all_data.get("data", [])
                     logger.success(f"Fetched {len(incidents)} incidents")
                     records = soar._transform_incidents(
-                        data=incidents,
+                        data=all_data,
                         integration_id=integration.integration,
                         cortex_tenant=cortex_tenant,
                     )
