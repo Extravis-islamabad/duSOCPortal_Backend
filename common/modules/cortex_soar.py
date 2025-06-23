@@ -165,7 +165,6 @@ class CortexSOAR:
             f"CortexSOAR._get_incidents() fetching data for : {account_name} for {day_week_month}"
         )
         endpoint = f"{self.base_url}/{CortexSOARConstants.INCIDENT_ENDPOINT}"
-
         body = {
             "userFilter": False,
             "filter": {
@@ -177,6 +176,17 @@ class CortexSOAR:
                 "period": {"by": day_week_month, "fromValue": None},
             },
         }
+        # body = {
+        #     "userFilter": False,
+        #     "filter": {
+        #         "page": 0,
+        #         "size": batch_size,
+        #         "query": "",
+        #         "sort": [{"field": "id", "asc": False}],
+        #         "accounts": {account_name: {}},
+        #         "period": {"by": day_week_month, "fromValue": None},
+        #     },
+        # }
         try:
             response = requests.post(
                 endpoint,

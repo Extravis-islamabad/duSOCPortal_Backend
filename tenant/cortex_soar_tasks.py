@@ -57,7 +57,8 @@ def sync_cortex_soar_tenants(
 
 @shared_task
 def sync_requests_for_soar():
-    intervals = ["day", "week", "month"]
+    # intervals = ["day", "week", "month"]
+    intervals = ["year"]
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
         integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
