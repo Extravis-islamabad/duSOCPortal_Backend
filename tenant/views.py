@@ -5582,7 +5582,120 @@ class SLAComplianceView(APIView):
             )
 
 
-# SLASeverityIncidentsView
+# # SLASeverityIncidentsView
+# class SLASeverityIncidentsView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         """
+#         Retrieve incident counts for each severity level (P1, P2, P3, P4),
+#         including total incidents and completed incidents (those that met the SLA target).
+
+#         Returns:
+#             Response with total incidents and completed incidents for each severity level
+#         """
+#         try:
+#             # Step 1: Validate tenant
+#             tenant = Tenant.objects.get(tenant=request.user)
+#             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         try:
+#             # Step 2: Get SOAR tenant IDs
+#             soar_tenants = tenant.soar_tenants.all()
+#             if not soar_tenants:
+#                 return Response(
+#                     {"error": "No SOAR tenants found."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+#             soar_ids = [t.id for t in soar_tenants]
+
+#             # Step 3: Build filters
+#             filters = Q(cortex_soar_tenant_id__in=soar_ids)
+
+#             # Step 4: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
+#             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+#                 filters,
+#                 incident_tta__isnull=False,
+#                 incident_ttdn__isnull=False,
+#                 incident_ttn__isnull=False,
+#             )
+
+#             # Step 5: Fetch SLA metrics based on tenant's is_default_sla value
+#             if tenant.is_default_sla:
+#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
+#             else:
+#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
+#                     soar_tenant__in=soar_tenants
+#                 )
+
+#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+#             # Step 6: Initialize counts for P1, P2, P3, and P4
+#             severity_counts = {
+#                 "p1_critical": {"total_incidents": 0, "completed_incidents": 0},
+#                 "p1_high": {"total_incidents": 0, "completed_incidents": 0},
+#                 "p3_medium": {"total_incidents": 0, "completed_incidents": 0},
+#                 "p4_low": {"total_incidents": 0, "completed_incidents": 0},
+#             }
+
+#             # Step 7: Process incidents by severity
+#             for incident in incidents:
+#                 severity = incident.severity
+#                 if severity == SlaLevelChoices.P1:
+#                     severity_label = "p1_critical"
+#                 elif severity == SlaLevelChoices.P2:
+#                     severity_label = "p1_high"
+#                 elif severity == SlaLevelChoices.P3:
+#                     severity_label = "p3_medium"
+#                 elif severity == SlaLevelChoices.P4:
+#                     severity_label = "p4_low"
+#                 else:
+#                     continue  # Skip incidents with an unknown severity level
+
+#                 # Get SLA metrics for the incident's severity level
+#                 sla_metric = sla_metrics_dict.get(severity)
+#                 if not sla_metric:
+#                     continue
+
+#                 # Calculate deltas and check if the incident met the SLA target
+#                 created = incident.created
+#                 any_breach = False
+
+#                 # Check if the incident met the SLA for tta, ttn, ttdn
+#                 if incident.incident_tta and created:
+#                     tta_delta = (incident.incident_tta - created).total_seconds() / 60
+#                     if tta_delta > sla_metric.tta_minutes:
+#                         any_breach = True
+
+#                 if incident.incident_ttn and created:
+#                     ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+#                     if ttn_delta > sla_metric.ttn_minutes:
+#                         any_breach = True
+
+#                 if incident.incident_ttdn and created:
+#                     ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+#                     if ttdn_delta > sla_metric.ttdn_minutes:
+#                         any_breach = True
+
+#                 # Update counts based on whether the incident met the SLA target
+#                 severity_counts[severity_label]["total_incidents"] += 1
+#                 if not any_breach:
+#                     severity_counts[severity_label]["completed_incidents"] += 1
+
+#             # Step 8: Return response with total and completed incidents per severity level
+#             return Response(severity_counts)
+
+#         except Exception as e:
+#             logger.error(f"Error in SLASeverityIncidentsView: {str(e)}")
+#             return Response(
+#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
+
 class SLASeverityIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5591,9 +5704,13 @@ class SLASeverityIncidentsView(APIView):
         """
         Retrieve incident counts for each severity level (P1, P2, P3, P4),
         including total incidents and completed incidents (those that met the SLA target).
+        Filters incidents by creation date using predefined periods (TODAY, WEEK, MONTH, YEAR)
+        or a custom date range.
 
-        Returns:
-            Response with total incidents and completed incidents for each severity level
+        Query Parameters:
+            filter_type (int): 1=TODAY, 2=WEEK, 3=MONTH, 4=YEAR
+            start_date (str): ISO date format (e.g., '2022-04-05') for custom range
+            end_date (str): ISO date format (e.g., '2022-04-05') for custom range
         """
         try:
             # Step 1: Validate tenant
@@ -5614,18 +5731,84 @@ class SLASeverityIncidentsView(APIView):
                 )
             soar_ids = [t.id for t in soar_tenants]
 
-            # Step 3: Build filters
+            # Step 3: Build base filters
             filters = Q(cortex_soar_tenant_id__in=soar_ids)
 
-            # Step 4: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
+            # Step 4: Apply time-based filters on created field
+            filter_type = request.query_params.get('filter_type')
+            start_date = request.query_params.get('start_date')
+            end_date = request.query_params.get('end_date')
+            # Use +04:00 timezone (matching sample data)
+            db_timezone = timezone.get_fixed_timezone(240)  # +04:00 (240 minutes)
+            now = timezone.now().astimezone(db_timezone)
+
+            if start_date and end_date:
+                try:
+                    # Parse date-only inputs and localize to +04:00
+                    start_date = datetime.strptime(start_date, '%Y-%m-%d')
+                    end_date = datetime.strptime(end_date, '%Y-%m-%d')
+                    start_date = timezone.make_aware(
+                        start_date.replace(hour=0, minute=0, second=0, microsecond=0),
+                        timezone=db_timezone
+                    )
+                    end_date = timezone.make_aware(
+                        end_date.replace(hour=23, minute=59, second=59, microsecond=999999),
+                        timezone=db_timezone
+                    )
+                    if start_date > end_date:
+                        return Response(
+                            {"error": "start_date cannot be after end_date."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    filters &= Q(created__range=[start_date, end_date])
+                    logger.debug("Custom date range filter applied: %s to %s", start_date, end_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid date format. Use YYYY-MM-DD (e.g., '2022-04-05')."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            elif start_date or end_date:
+                return Response(
+                    {"error": "Both start_date and end_date must be provided for custom range."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            elif filter_type:
+                try:
+                    filter_type = int(filter_type)
+                    filter_type = FilterType(filter_type)
+                    if filter_type == FilterType.TODAY:
+                        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                        today_end = today_start.replace(hour=23, minute=59, second=59, microsecond=999999)
+                        filters &= Q(created__range=[today_start, today_end])
+                    elif filter_type == FilterType.WEEK:
+                        start_of_week = now - timedelta(days=7)
+                        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+                        filters &= Q(created__gte=start_of_week)
+                    elif filter_type == FilterType.MONTH:
+                        start_of_month = now - timedelta(days=30)
+                        start_of_month = start_of_month.replace(hour=0, minute=0, second=0, microsecond=0)
+                        filters &= Q(created__gte=start_of_month)
+                    elif filter_type == FilterType.YEAR:
+                        start_of_year = now - timedelta(days=365)
+                        start_of_year = start_of_year.replace(hour=0, minute=0, second=0, microsecond=0)
+                        filters &= Q(created__gte=start_of_year)
+                    logger.debug("Filter type %s applied with filter: %s", filter_type, filters)
+                except (ValueError, KeyError):
+                    return Response(
+                        {"error": "Invalid filter_type. Use 1 (TODAY), 2 (WEEK), 3 (MONTH), or 4 (YEAR)."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Step 5: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
                 filters,
                 incident_tta__isnull=False,
                 incident_ttdn__isnull=False,
                 incident_ttn__isnull=False,
             )
+            logger.debug("Incidents count after filtering: %s", incidents.count())
 
-            # Step 5: Fetch SLA metrics based on tenant's is_default_sla value
+            # Step 6: Fetch SLA metrics based on tenant's is_default_sla value
             if tenant.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
@@ -5635,7 +5818,7 @@ class SLASeverityIncidentsView(APIView):
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
-            # Step 6: Initialize counts for P1, P2, P3, and P4
+            # Step 7: Initialize counts for P1, P2, P3, and P4
             severity_counts = {
                 "p1_critical": {"total_incidents": 0, "completed_incidents": 0},
                 "p1_high": {"total_incidents": 0, "completed_incidents": 0},
@@ -5643,7 +5826,7 @@ class SLASeverityIncidentsView(APIView):
                 "p4_low": {"total_incidents": 0, "completed_incidents": 0},
             }
 
-            # Step 7: Process incidents by severity
+            # Step 8: Process incidents by severity
             for incident in incidents:
                 severity = incident.severity
                 if severity == SlaLevelChoices.P1:
@@ -5687,7 +5870,7 @@ class SLASeverityIncidentsView(APIView):
                 if not any_breach:
                     severity_counts[severity_label]["completed_incidents"] += 1
 
-            # Step 8: Return response with total and completed incidents per severity level
+            # Step 9: Return response with total and completed incidents per severity level
             return Response(severity_counts)
 
         except Exception as e:
@@ -5695,7 +5878,6 @@ class SLASeverityIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 # SLASeverityMetricsView
 class SLASeverityMetricsView(APIView):
@@ -5820,7 +6002,7 @@ class SLASeverityMetricsView(APIView):
                         "ttdn_minutes": sla_metric.ttdn_minutes,
                         "target_sla": f"TTA: {sla_metric.tta_minutes} mins, TTN: {sla_metric.ttn_minutes} mins, TTDN: {sla_metric.ttdn_minutes} mins",
                         "compliance_percentage": compliance_percentage,
-                        "status": "Met"
+                        "status": "Fullfilled"
                         if compliance_percentage >= 80
                         else "Breached",  # Arbitrary threshold for "Met" SLA
                     }
