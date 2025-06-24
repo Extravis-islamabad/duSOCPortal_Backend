@@ -1678,6 +1678,7 @@ class IncidentsView(APIView):
                         "occurred": occurred_date,
                         "sla": row["sla"],
                         "offense_id": offense_id,
+                        "offense_db_id": offense_db_id,
                         "offense_link": request.build_absolute_uri(
                             f"/tenant/api/offense-details/{offense_id}/"
                         ),
@@ -1944,6 +1945,7 @@ class IncidentDetailView(APIView):
                         else "Unknown"
                     ),
                     "offense_id": offense_id,
+                    "offense_db_id": offense_db_id,
                 }
             }
 
@@ -3107,6 +3109,129 @@ class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
             # Step 4: Retrieve assets associated with the offense
             offense_assets = IBMQradarAssests.objects.filter(
                 du_ibm_qradar_offenses__id=offense_id
+            ).values("id", "db_id", "name", "description")
+
+            offense.pop("source_address_ids", None)
+            offense.pop("qradar_tenant_domain_id", None)
+            offense.pop("integration_id", None)
+            offense.pop("closing_reason_id", None)
+            response_data = {
+                "offense": offense,  # full offense fields
+                "assets": list(offense_assets),
+            }
+            # # Step 5: Format the response
+            # response_data = {
+            #     "offense": {
+            #         "id": offense["id"],
+            #         "db_id": offense["db_id"],
+            #         "description": offense["description"],
+            #         "severity": offense["severity"],
+            #         "status": offense["status"],
+            #         # "source_address_ids": offense["source_address_ids"],
+            #         "start_time": offense["start_time"],
+            #     },
+            #     "flows": offense["flow_count"],
+            #     "events": offense["event_count"],
+            #     "assets": [
+            #         {
+            #             "id": asset["id"],
+            #             "db_id": asset["db_id"],
+            #             "name": asset["name"],
+            #             "description": asset["description"],
+            #         }
+            #         for asset in offense_assets
+            #     ],
+            # }
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception:
+            return Response(
+                {"error": "Invalid tenant or related data not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class OffenseDetailsWithFlowsAndAssetsDBIDAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request, offense_id):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        siem_integrations = tenant.integrations.filter(
+            integration_type=IntegrationTypes.SIEM_INTEGRATION,
+            siem_subtype=SiemSubTypes.IBM_QRADAR,
+            status=True,
+        )
+        if not siem_integrations.exists():
+            return Response(
+                {"error": "No active SEIM integration configured for tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
+            tenant = request.user
+            mappings = TenantQradarMapping.objects.filter(
+                tenant__tenant=tenant
+            ).values_list("event_collectors__id", "qradar_tenant__id")
+
+            if not mappings:
+                return Response(
+                    {"error": "No mappings found for the tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Extract collector IDs and tenant IDs
+            collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
+
+            # Step 2: Retrieve asset IDs based on collector IDs
+            assets = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).values_list("id", flat=True)
+
+            if not assets:
+                return Response(
+                    {"error": "No assets found for the given collectors."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 3: Retrieve the specific offense
+            try:
+                offense = (
+                    IBMQradarOffense.objects.filter(
+                        Q(db_id=offense_id)
+                        & Q(assests__id__in=assets)
+                        & Q(qradar_tenant_domain__id__in=tenant_ids)
+                    )
+                    .values()
+                    .first()
+                )
+
+                if not offense:
+                    return Response(
+                        {
+                            "error": "Offense not found or not associated with the tenant's assets/tenant domain."
+                        },
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+
+            except IBMQradarOffense.DoesNotExist:
+                return Response(
+                    {"error": "Offense not found."}, status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Step 4: Retrieve assets associated with the offense
+            offense_assets = IBMQradarAssests.objects.filter(
+                du_ibm_qradar_offenses__db_id=offense_id
             ).values("id", "db_id", "name", "description")
 
             offense.pop("source_address_ids", None)
