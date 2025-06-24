@@ -5242,20 +5242,149 @@ class SLAIncidentsView(APIView):
             )
 
 
-# SLAComplianceView
+# # SLAComplianceView
+# class SLAComplianceView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         """
+#         Retrieve overall SLA compliance details, including:
+#         - Overall SLA compliance percentage
+#         - Count of breached incidents
+#         - Count of incidents that met the SLA target
+
+#         Returns:
+#             Response with overall compliance details
+#         """
+#         try:
+#             # Step 1: Validate tenant
+#             tenant = Tenant.objects.get(tenant=request.user)
+#             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         try:
+#             # Step 2: Get SOAR tenant IDs
+#             soar_tenants = tenant.soar_tenants.all()
+#             if not soar_tenants:
+#                 return Response(
+#                     {"error": "No SOAR tenants found."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+#             soar_ids = [t.id for t in soar_tenants]
+
+#             # Step 3: Build filters
+#             filters = Q(cortex_soar_tenant_id__in=soar_ids)
+
+#             # Step 4: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
+#             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+#                 filters,
+#                 incident_tta__isnull=False,
+#                 incident_ttdn__isnull=False,
+#                 incident_ttn__isnull=False,
+#             )
+
+#             # Step 5: Fetch SLA metrics based on tenant's is_default_sla value
+#             if tenant.is_default_sla:
+#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
+#             else:
+#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
+#                     soar_tenant__in=soar_tenants
+#                 )
+
+#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+#             # Step 6: Calculate the total number of incidents, incidents that met the SLA, and breached incidents
+#             total_incident_count = 0
+#             met_sla_count = 0
+#             breached_sla_count = 0
+
+#             for incident in incidents:
+#                 total_incident_count += 1
+
+#                 # Get SLA metrics for severity
+#                 sla_metric = sla_metrics_dict.get(incident.severity)
+#                 if not sla_metric:
+#                     continue
+
+#                 # Calculate deltas and check breaches
+#                 created = incident.created
+#                 any_breach = False
+
+#                 if incident.incident_tta and created:
+#                     tta_delta = (incident.incident_tta - created).total_seconds() / 60
+#                     if tta_delta > sla_metric.tta_minutes:
+#                         any_breach = True
+
+#                 if incident.incident_ttn and created:
+#                     ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+#                     if ttn_delta > sla_metric.ttn_minutes:
+#                         any_breach = True
+
+#                 if incident.incident_ttdn and created:
+#                     ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+#                     if ttdn_delta > sla_metric.ttdn_minutes:
+#                         any_breach = True
+
+#                 if any_breach:
+#                     breached_sla_count += 1
+#                 else:
+#                     met_sla_count += 1
+
+#             # Step 7: Calculate overall SLA compliance percentage
+#             overall_sla_compliance_percentage = (
+#                 (met_sla_count / total_incident_count) * 100
+#                 if total_incident_count > 0
+#                 else 0
+#             )
+#             overall_sla_compliance_percentage = round(
+#                 overall_sla_compliance_percentage, 2
+#             )
+
+#             # Step 8: Return response with overall SLA compliance details
+#             overall_sla_compliance = {
+#                 "total_breached_incidents": breached_sla_count,
+#                 "total_met_target_incidents": met_sla_count,
+#                 "overall_compliance_percentage": overall_sla_compliance_percentage,
+#             }
+
+#             return Response(overall_sla_compliance)
+
+#         except Exception as e:
+#             logger.error(f"Error in SLAComplianceView: {str(e)}")
+#             return Response(
+#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
+
 class SLAComplianceView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
     def get(self, request):
         """
-        Retrieve overall SLA compliance details, including:
-        - Overall SLA compliance percentage
+        Retrieve SLA compliance details, including:
+        - Overall SLA compliance percentage (incidents meeting all SLA metrics: TTA, TTN, TTDN)
+        - Incident met percentage (incidents meeting TTA SLA metric only)
+        - Total breach incident percentage (incidents breaching any SLA metric)
         - Count of breached incidents
-        - Count of incidents that met the SLA target
+        - Count of incidents that met all SLA metrics
+
+        Query Parameters:
+            start_date (YYYY-MM-DD): Incidents with created date on or after this date
+            end_date (YYYY-MM-DD): Incidents with created date on or before this date (inclusive of the entire day)
 
         Returns:
-            Response with overall compliance details
+            Response with SLA compliance details, e.g.:
+            {
+                "total_breached_incidents": 15,
+                "total_met_target_incidents": 4,
+                "overall_compliance_percentage": 21.05,
+                "incident_met_percentage": 84.21,
+                "total_breach_incident_percentage": 78.95
+            }
         """
         try:
             # Step 1: Validate tenant
@@ -5279,28 +5408,51 @@ class SLAComplianceView(APIView):
             # Step 3: Build filters
             filters = Q(cortex_soar_tenant_id__in=soar_ids)
 
-            # Step 4: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
+            # Step 4: Apply date filters
+            start_date_str = request.query_params.get("start_date")
+            end_date_str = request.query_params.get("end_date")
+            start_date = parse_date(start_date_str) if start_date_str else None
+            end_date = parse_date(end_date_str) if end_date_str else None
+
+            if start_date and end_date and start_date > end_date:
+                return Response(
+                    {"error": "start_date cannot be greater than end_date."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if start_date:
+                filters &= Q(created__date__gte=start_date)
+            if end_date:
+                # Extend end_date to include the full day
+                end_date = datetime.combine(end_date, datetime.max.time())
+                filters &= Q(created__date__lte=end_date)
+
+            # Step 5: Fetch incidents, excluding null fields
             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
                 filters,
                 incident_tta__isnull=False,
-                incident_ttdn__isnull=False,
                 incident_ttn__isnull=False,
+                incident_ttdn__isnull=False
             )
 
-            # Step 5: Fetch SLA metrics based on tenant's is_default_sla value
+            # Log incident count for debugging
+            logger.debug("Total incidents after filters: %d", incidents.count())
+
+            # Step 6: Fetch SLA metrics
             if tenant.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-                    soar_tenant__in=soar_tenants
+                    soar_tenant_id__in=soar_tenants
                 )
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
-            # Step 6: Calculate the total number of incidents, incidents that met the SLA, and breached incidents
+            # Step 7: Calculate counts
             total_incident_count = 0
-            met_sla_count = 0
-            breached_sla_count = 0
+            met_sla_count = 0  # Incidents meeting all SLA metrics
+            breached_sla_count = 0  # Incidents breaching any SLA metric
+            tta_met_count = 0  # Incidents meeting TTA SLA metric
 
             for incident in incidents:
                 total_incident_count += 1
@@ -5308,15 +5460,19 @@ class SLAComplianceView(APIView):
                 # Get SLA metrics for severity
                 sla_metric = sla_metrics_dict.get(incident.severity)
                 if not sla_metric:
+                    logger.warning("No SLA metric found for severity: %s, incident ID: %s", incident.severity, incident.id)
                     continue
 
                 # Calculate deltas and check breaches
                 created = incident.created
                 any_breach = False
+                tta_met = False
 
                 if incident.incident_tta and created:
                     tta_delta = (incident.incident_tta - created).total_seconds() / 60
-                    if tta_delta > sla_metric.tta_minutes:
+                    if tta_delta <= sla_metric.tta_minutes:
+                        tta_met = True
+                    else:
                         any_breach = True
 
                 if incident.incident_ttn and created:
@@ -5334,31 +5490,53 @@ class SLAComplianceView(APIView):
                 else:
                     met_sla_count += 1
 
-            # Step 7: Calculate overall SLA compliance percentage
-            overall_sla_compliance_percentage = (
+                if tta_met:
+                    tta_met_count += 1
+
+            # Log counts for debugging
+            logger.debug(
+                "Counts: Total=%d, Met=%d, Breached=%d, TTA Met=%d",
+                total_incident_count, met_sla_count, breached_sla_count, tta_met_count
+            )
+
+            # Step 8: Calculate percentages (without rounding)
+            overall_compliance_percentage = (
                 (met_sla_count / total_incident_count) * 100
                 if total_incident_count > 0
                 else 0
             )
-            overall_sla_compliance_percentage = round(
-                overall_sla_compliance_percentage, 2
+            incident_met_percentage = (
+                (tta_met_count / total_incident_count) * 100
+                if total_incident_count > 0
+                else 0
+            )
+            total_breach_incident_percentage = (
+                (breached_sla_count / total_incident_count) * 100
+                if total_incident_count > 0
+                else 0
             )
 
-            # Step 8: Return response with overall SLA compliance details
-            overall_sla_compliance = {
+            # Format percentages as decimals with 2 decimal places
+            overall_compliance_percentage = "{:.2f}".format(overall_compliance_percentage)
+            incident_met_percentage = "{:.2f}".format(incident_met_percentage)
+            total_breach_incident_percentage = "{:.2f}".format(total_breach_incident_percentage)
+
+            # Step 9: Return response with SLA compliance details
+            sla_compliance = {
                 "total_breached_incidents": breached_sla_count,
                 "total_met_target_incidents": met_sla_count,
-                "overall_compliance_percentage": overall_sla_compliance_percentage,
+                "overall_compliance_percentage": overall_compliance_percentage,
+                "incident_met_percentage": incident_met_percentage,
+                "total_breach_incident_percentage": total_breach_incident_percentage,
             }
 
-            return Response(overall_sla_compliance)
+            return Response(sla_compliance)
 
         except Exception as e:
-            logger.error(f"Error in SLAComplianceView: {str(e)}")
+            logger.error("Error in SLAComplianceView: %s", str(e))
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 # SLASeverityIncidentsView
 class SLASeverityIncidentsView(APIView):
