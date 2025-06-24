@@ -5359,6 +5359,7 @@ class SLAIncidentsView(APIView):
 #                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
 #             )
 
+
 class SLAComplianceView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5417,7 +5418,7 @@ class SLAComplianceView(APIView):
             if start_date and end_date and start_date > end_date:
                 return Response(
                     {"error": "start_date cannot be greater than end_date."},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             if start_date:
@@ -5432,7 +5433,7 @@ class SLAComplianceView(APIView):
                 filters,
                 incident_tta__isnull=False,
                 incident_ttn__isnull=False,
-                incident_ttdn__isnull=False
+                incident_ttdn__isnull=False,
             )
 
             # Log incident count for debugging
@@ -5460,7 +5461,11 @@ class SLAComplianceView(APIView):
                 # Get SLA metrics for severity
                 sla_metric = sla_metrics_dict.get(incident.severity)
                 if not sla_metric:
-                    logger.warning("No SLA metric found for severity: %s, incident ID: %s", incident.severity, incident.id)
+                    logger.warning(
+                        "No SLA metric found for severity: %s, incident ID: %s",
+                        incident.severity,
+                        incident.id,
+                    )
                     continue
 
                 # Calculate deltas and check breaches
@@ -5496,7 +5501,10 @@ class SLAComplianceView(APIView):
             # Log counts for debugging
             logger.debug(
                 "Counts: Total=%d, Met=%d, Breached=%d, TTA Met=%d",
-                total_incident_count, met_sla_count, breached_sla_count, tta_met_count
+                total_incident_count,
+                met_sla_count,
+                breached_sla_count,
+                tta_met_count,
             )
 
             # Step 8: Calculate percentages (without rounding)
@@ -5517,9 +5525,13 @@ class SLAComplianceView(APIView):
             )
 
             # Format percentages as decimals with 2 decimal places
-            overall_compliance_percentage = "{:.2f}".format(overall_compliance_percentage)
+            overall_compliance_percentage = "{:.2f}".format(
+                overall_compliance_percentage
+            )
             incident_met_percentage = "{:.2f}".format(incident_met_percentage)
-            total_breach_incident_percentage = "{:.2f}".format(total_breach_incident_percentage)
+            total_breach_incident_percentage = "{:.2f}".format(
+                total_breach_incident_percentage
+            )
 
             # Step 9: Return response with SLA compliance details
             sla_compliance = {
@@ -5537,6 +5549,7 @@ class SLAComplianceView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 # SLASeverityIncidentsView
 class SLASeverityIncidentsView(APIView):
