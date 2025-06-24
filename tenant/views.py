@@ -1624,9 +1624,11 @@ class IncidentsView(APIView):
             # Step 11: Process incidents
             incidents = []
             offense_db_ids = {
-                row["name"].split()[0]
+                int(part)
                 for row in queryset
-                if row["name"] and len(row["name"].split()) > 0
+                if row["name"]
+                for part in [row["name"].split()[0]]
+                if part.isdigit()
             }
 
             # 2. Bulk fetch related offenses
@@ -1634,8 +1636,14 @@ class IncidentsView(APIView):
             offense_map = {str(o.db_id): o.id for o in offenses}
 
             for row in queryset:
-                offense_db_id = row["name"].split()[0]
-                offense_id = offense_map.get(offense_db_id)
+                name = row.get("name") or ""
+
+                parts = name.split()
+                offense_db_id = parts[0] if parts else None
+                if offense_db_id is None:
+                    continue
+                offense_id = offense_map.get(offense_db_id) if offense_db_id else None
+
                 created_date = (
                     row["created"].strftime("%Y-%m-%d %I:%M %p")
                     if row["created"]
