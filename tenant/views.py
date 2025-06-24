@@ -3539,31 +3539,8 @@ class EPSCountValuesByDomainAPIView(APIView):
                 )
 
             eps_entries = IBMQradarEPS.objects.filter(domain__in=qradar_tenant_ids)
-            serializer = IBMQradarEPSSerializer(
-                eps_entries, many=True, context={"request": request}
-            )
-
-            mapping = TenantQradarMapping.objects.filter(
-                tenant__tenant=request.user
-            ).first()
-
-            contracted_volume = mapping.contracted_volume if mapping else None
-            contracted_volume_type = mapping.contracted_volume_type if mapping else None
-            contracted_volume_type_display = (
-                mapping.get_contracted_volume_type_display() if mapping else None
-            )
-
-            # Step 4: Return combined response
-            return Response(
-                {
-                    "contracted_volume": contracted_volume,
-                    "contracted_volume_type": contracted_volume_type,
-                    "contracted_volume_type_display": contracted_volume_type_display,
-                    "eps_data": serializer.data,
-                },
-                status=200,
-            )
-            # return Response(serializer.data, status=200)
+            serializer = IBMQradarEPSSerializer(eps_entries, many=True)
+            return Response(serializer.data, status=200)
         except Exception:
             return Response(
                 {"error": "Invalid tenant or related data not found."},
@@ -5582,7 +5559,7 @@ class SLAComplianceView(APIView):
             )
 
 
-# # SLASeverityIncidentsView
+# SLASeverityIncidentsView
 # class SLASeverityIncidentsView(APIView):
 #     authentication_classes = [JWTAuthentication]
 #     permission_classes = [IsTenant]
@@ -5704,11 +5681,11 @@ class SLASeverityIncidentsView(APIView):
         """
         Retrieve incident counts for each severity level (P1, P2, P3, P4),
         including total incidents and completed incidents (those that met the SLA target).
-        Filters incidents by creation date using predefined periods (TODAY, WEEK, MONTH, YEAR)
+        Filters incidents by creation date using predefined periods (TODAY, WEEK, MONTH, YEAR, QUARTER)
         or a custom date range.
 
         Query Parameters:
-            filter_type (int): 1=TODAY, 2=WEEK, 3=MONTH, 4=YEAR
+            filter_type (int): 1=TODAY, 2=WEEK, 3=MONTH, 4=YEAR, 5=QUARTER
             start_date (str): ISO date format (e.g., '2022-04-05') for custom range
             end_date (str): ISO date format (e.g., '2022-04-05') for custom range
         """
@@ -5792,10 +5769,14 @@ class SLASeverityIncidentsView(APIView):
                         start_of_year = now - timedelta(days=365)
                         start_of_year = start_of_year.replace(hour=0, minute=0, second=0, microsecond=0)
                         filters &= Q(created__gte=start_of_year)
+                    elif filter_type == FilterType.QUARTER:
+                        start_of_quarter = now - timedelta(days=90)
+                        start_of_quarter = start_of_quarter.replace(hour=0, minute=0, second=0, microsecond=0)
+                        filters &= Q(created__gte=start_of_quarter)
                     logger.debug("Filter type %s applied with filter: %s", filter_type, filters)
                 except (ValueError, KeyError):
                     return Response(
-                        {"error": "Invalid filter_type. Use 1 (TODAY), 2 (WEEK), 3 (MONTH), or 4 (YEAR)."},
+                        {"error": "Invalid filter_type. Use 1 (TODAY), 2 (WEEK), 3 (MONTH), 4 (YEAR), 5 (QUARTER)."},
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
