@@ -13,6 +13,7 @@ from django.db.models import (
     FloatField,
     IntegerField,
     Q,
+    Sum,
     When,
 )
 from django.db.models.functions import ExtractSecond
@@ -3666,6 +3667,7 @@ class EPSCountValuesByDomainAPIView(APIView):
                 )
 
             eps_entries = IBMQradarEPS.objects.filter(domain__in=qradar_tenant_ids)
+            sum_eps = eps_entries.aggregate(total_eps=Sum("eps"))["total_eps"] or 0
             serializer = IBMQradarEPSSerializer(
                 eps_entries, many=True, context={"request": request}
             )
@@ -3686,6 +3688,7 @@ class EPSCountValuesByDomainAPIView(APIView):
                     "contracted_volume": contracted_volume,
                     "contracted_volume_type": contracted_volume_type,
                     "contracted_volume_type_display": contracted_volume_type_display,
+                    "sum_eps": sum_eps,
                     "eps_data": serializer.data,
                 },
                 status=200,
