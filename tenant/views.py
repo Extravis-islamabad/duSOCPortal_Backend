@@ -4511,469 +4511,6 @@ class IncidentSummaryView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-# # SLAIncidentsView
-# class SLAIncidentsView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         """
-#         Retrieve incident counts and SLA details, filtered by:
-#         - SOAR tenant IDs
-#         - Optional query parameters: severity, status_filter, start_date, end_date
-
-#         Query Parameters:
-#             severity (int): Exact match on severity (1=Low, 2=Medium, 3=High, 4=Critical)
-#             status_filter (str): Partial match on status (case-insensitive)
-#             start_date (YYYY-MM-DD): Incidents created on or after this date
-#             end_date (YYYY-MM-DD): Incidents created on or before this date
-
-#         Returns:
-#             Response with SLA details for cards and incident counts for table
-#         """
-#         try:
-#             # Step 1: Validate tenant
-#             tenant = Tenant.objects.get(tenant=request.user)
-#             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
-#         except Tenant.DoesNotExist:
-#             return Response(
-#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-#             )
-
-#         try:
-#             # Step 2: Check for active SOAR integration
-#             soar_integrations = tenant.integrations.filter(
-#                 integration_type=IntegrationTypes.SOAR_INTEGRATION,
-#                 soar_subtype=SoarSubTypes.CORTEX_SOAR,
-#                 status=True,
-#             )
-#             logger.debug("SOAR Integrations Count: %s", soar_integrations.count())
-#             if not soar_integrations.exists():
-#                 return Response(
-#                     {"error": "No active SOAR integration configured for tenant."},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-
-#             # Step 3: Get SOAR tenant IDs
-#             soar_tenants = tenant.soar_tenants.all()
-#             logger.debug("SOAR Tenants: %s", list(soar_tenants.values("id", "name")))
-#             if not soar_tenants:
-#                 return Response(
-#                     {"error": "No SOAR tenants found."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-#             soar_ids = [t.id for t in soar_tenants]
-
-#             # Step 4: Build filters
-#             filters = Q(cortex_soar_tenant_id__in=soar_ids)
-
-#             # Severity filter
-#             severity = request.query_params.get("severity")
-#             if severity:
-#                 try:
-#                     severity_value = int(severity)
-#                     filters &= Q(severity=severity_value)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid severity format. Must be an integer."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             # Status filter
-#             status_filter = request.query_params.get("status_filter")
-#             if status_filter:
-#                 filters &= Q(status__icontains=status_filter)
-
-#             # Date filters
-#             start_date_str = request.query_params.get("start_date")
-#             end_date_str = request.query_params.get("end_date")
-#             start_date = parse_date(start_date_str) if start_date_str else None
-#             end_date = parse_date(end_date_str) if end_date_str else None
-
-#             if start_date and end_date and start_date > end_date:
-#                 return Response(
-#                     {"error": "start_date cannot be after end_date."},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-
-#             if start_date:
-#                 filters &= Q(created__gte=start_date)
-#             if end_date:
-#                 filters &= Q(created__lte=end_date)
-
-#             # Step 5: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
-#             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-#                 filters,
-#                 incident_tta__isnull=False,
-#                 incident_ttdn__isnull=False,
-#                 incident_ttn__isnull=False,
-#             )
-
-#             # Step 6: Fetch SLA metrics based on tenant's is_default_sla value
-#             if tenant.is_default_sla:
-#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
-#             else:
-#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-#                     soar_tenant__in=soar_tenants
-#                 )
-
-#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
-
-#             # Step 7: Format SLA details for cards
-#             sla_details = {}
-#             for metric in sla_metrics:
-#                 priority_key = {
-#                     SlaLevelChoices.P1: "p1_critical",
-#                     SlaLevelChoices.P2: "p2_high",
-#                     SlaLevelChoices.P3: "p3_medium",
-#                     SlaLevelChoices.P4: "p4_low",
-#                 }.get(metric.sla_level, f"severity_{metric.sla_level}")
-#                 sla_details[priority_key] = {
-#                     "severity_level": metric.sla_level,
-#                     "tta_minutes": metric.tta_minutes,
-#                     "ttn_minutes": metric.ttn_minutes,
-#                     "ttdn_minutes": metric.ttdn_minutes,
-#                 }
-
-#             # Step 8: Process incident counts
-#             total_incident_count = 0
-#             severity_counts = {
-#                 SlaLevelChoices.P1: 0,
-#                 SlaLevelChoices.P2: 0,
-#                 SlaLevelChoices.P3: 0,
-#                 SlaLevelChoices.P4: 0,
-#             }
-#             met_sla_count = 0
-#             breached_sla_count = 0
-
-#             # Map severity to label
-#             severity_labels = dict(SlaLevelChoices.choices)
-
-#             for incident in incidents:
-#                 total_incident_count += 1
-
-#                 # Count by severity
-#                 if incident.severity in severity_counts:
-#                     severity_counts[incident.severity] += 1
-
-#                 # Skip SLA checks if severity is None
-#                 if incident.severity is None:
-#                     continue
-
-#                 # Get SLA metrics for severity
-#                 sla_metric = sla_metrics_dict.get(incident.severity)
-#                 if not sla_metric:
-#                     continue
-
-#                 # Calculate deltas and check breaches
-#                 created = incident.created
-#                 any_breach = False
-
-#                 if incident.incident_tta and created:
-#                     tta_delta = (incident.incident_tta - created).total_seconds() / 60
-#                     if tta_delta > sla_metric.tta_minutes:
-#                         any_breach = True
-
-#                 if incident.incident_ttn and created:
-#                     ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
-#                     if ttn_delta > sla_metric.ttn_minutes:
-#                         any_breach = True
-
-#                 if incident.incident_ttdn and created:
-#                     ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
-#                     if ttdn_delta > sla_metric.ttdn_minutes:
-#                         any_breach = True
-
-#                 if any_breach:
-#                     breached_sla_count += 1
-#                 else:
-#                     met_sla_count += 1
-
-#             # Calculate breached SLA percentage
-#             breached_sla_percentage = (
-#                 (breached_sla_count / total_incident_count * 100)
-#                 if total_incident_count > 0
-#                 else 0
-#             )
-#             breached_sla_percentage = round(breached_sla_percentage, 2)
-
-#             # Step 9: Format incident counts for table
-#             incident_counts = [
-#                 {
-#                     "severity_level": severity,
-#                     "severity_label": severity_labels.get(severity, "Unknown"),
-#                     "incident_count": count,
-#                     "total_incident_count": total_incident_count,
-#                     "met_sla_count": met_sla_count,
-#                     "breached_sla_count": breached_sla_count,
-#                     "breached_sla_percentage": breached_sla_percentage,
-#                 }
-#                 for severity, count in severity_counts.items()
-#             ]
-
-#             # Step 10: Return response
-#             return Response(
-#                 {"sla_details": sla_details, "incident_counts": incident_counts}
-#             )
-
-
-#         except Exception as e:
-#             logger.error(f"Error in SLAIncidentsView:{str(e)}")
-#             return Response(
-#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
-# SLAIncidentsView
-# class SLAIncidentsView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         """
-#         Retrieve incident counts and SLA details, filtered by:
-#         - SOAR tenant IDs
-#         - Optional query parameters: severity, status_filter, start_date, end_date
-
-#         Query Parameters:
-#             severity (int): Exact match on severity (1=Low, 2=Medium, 3=High, 4=Critical)
-#             status_filter (str): Partial match on status (case-insensitive)
-#             start_date (YYYY-MM-DD): Incidents created on or after this date
-#             end_date (YYYY-MM-DD): Incidents created on or before this date
-
-#         Returns:
-#             Response with SLA details for cards, incident counts for table, and overall compliance
-#         """
-#         try:
-#             # Step 1: Validate tenant
-#             tenant = Tenant.objects.get(tenant=request.user)
-#             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
-#         except Tenant.DoesNotExist:
-#             return Response(
-#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-#             )
-
-#         try:
-#             # Step 2: Check for active SOAR integration
-#             soar_integrations = tenant.integrations.filter(
-#                 integration_type=IntegrationTypes.SOAR_INTEGRATION,
-#                 soar_subtype=SoarSubTypes.CORTEX_SOAR,
-#                 status=True,
-#             )
-#             logger.debug("SOAR Integrations Count: %s", soar_integrations.count())
-#             if not soar_integrations.exists():
-#                 return Response(
-#                     {"error": "No active SOAR integration configured for tenant."},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-
-#             # Step 3: Get SOAR tenant IDs
-#             soar_tenants = tenant.soar_tenants.all()
-#             logger.debug("SOAR Tenants: %s", list(soar_tenants.values("id", "name")))
-#             if not soar_tenants:
-#                 return Response(
-#                     {"error": "No SOAR tenants found."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-#             soar_ids = [t.id for t in soar_tenants]
-
-#             # Step 4: Build filters
-#             filters = Q(cortex_soar_tenant_id__in=soar_ids)
-
-#             # Severity filter
-#             severity = request.query_params.get("severity")
-#             if severity:
-#                 try:
-#                     severity_value = int(severity)
-#                     filters &= Q(severity=severity_value)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid severity format. Must be an integer."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             # Status filter
-#             status_filter = request.query_params.get("status_filter")
-#             if status_filter:
-#                 filters &= Q(status__icontains=status_filter)
-
-#             # Date filters
-#             start_date_str = request.query_params.get("start_date")
-#             end_date_str = request.query_params.get("end_date")
-#             start_date = parse_date(start_date_str) if start_date_str else None
-#             end_date = parse_date(end_date_str) if end_date_str else None
-
-#             if start_date and end_date and start_date > end_date:
-#                 return Response(
-#                     {"error": "start_date cannot be after end_date."},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-
-#             if start_date:
-#                 filters &= Q(created__gte=start_date)
-#             if end_date:
-#                 filters &= Q(created__lte=end_date)
-
-#             # Step 5: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
-#             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-#                 filters,
-#                 incident_tta__isnull=False,
-#                 incident_ttdn__isnull=False,
-#                 incident_ttn__isnull=False,
-#             )
-
-#             # Step 6: Fetch SLA metrics based on tenant's is_default_sla value
-#             if tenant.is_default_sla:
-#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
-#             else:
-#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-#                     soar_tenant__in=soar_tenants
-#                 )
-
-#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
-
-#             # Step 7: Format SLA details for cards
-#             sla_details = {}
-#             for metric in sla_metrics:
-#                 priority_key = {
-#                     SlaLevelChoices.P1: "p1_critical",
-#                     SlaLevelChoices.P2: "p2_high",
-#                     SlaLevelChoices.P3: "p3_medium",
-#                     SlaLevelChoices.P4: "p4_low",
-#                 }.get(metric.sla_level, f"severity_{metric.sla_level}")
-
-#                 # TODO : No need to define the text again
-#                 severity_label = {
-#                     SlaLevelChoices.P1: "P1 - Critical",
-#                     SlaLevelChoices.P2: "P2 - High",
-#                     SlaLevelChoices.P3: "P3 - Medium",
-#                     SlaLevelChoices.P4: "P4 - Low",
-#                 }.get(metric.sla_level, f"Severity {metric.sla_level}")
-
-#                 sla_details[priority_key] = {
-#                     "severity_level": metric.sla_level,
-#                     "severity_label": severity_label,  # Added severity_label
-#                     "tta_minutes": metric.tta_minutes,
-#                     "ttn_minutes": metric.ttn_minutes,
-#                     "ttdn_minutes": metric.ttdn_minutes,
-#                 }
-
-#             # Step 8: Process incident counts
-#             total_incident_count = 0
-#             severity_counts = {
-#                 SlaLevelChoices.P1: 0,
-#                 SlaLevelChoices.P2: 0,
-#                 SlaLevelChoices.P3: 0,
-#                 SlaLevelChoices.P4: 0,
-#             }
-#             met_sla_count = 0
-#             breached_sla_count = 0
-
-#             # Map severity to label
-#             severity_labels = dict(SlaLevelChoices.choices)
-
-#             for incident in incidents:
-#                 total_incident_count += 1
-
-#                 # Count by severity
-#                 if incident.severity in severity_counts:
-#                     severity_counts[incident.severity] += 1
-
-#                 # Skip SLA checks if severity is None
-#                 if incident.severity is None:
-#                     continue
-
-#                 # Get SLA metrics for severity
-#                 sla_metric = sla_metrics_dict.get(incident.severity)
-#                 if not sla_metric:
-#                     continue
-
-#                 # Calculate deltas and check breaches
-#                 created = incident.created
-#                 any_breach = False
-
-#                 if incident.incident_tta and created:
-#                     tta_delta = (incident.incident_tta - created).total_seconds() / 60
-#                     if tta_delta > sla_metric.tta_minutes:
-#                         any_breach = True
-
-#                 if incident.incident_ttn and created:
-#                     ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
-#                     if ttn_delta > sla_metric.ttn_minutes:
-#                         any_breach = True
-
-#                 if incident.incident_ttdn and created:
-#                     ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
-#                     if ttdn_delta > sla_metric.ttdn_minutes:
-#                         any_breach = True
-
-#                 if any_breach:
-#                     breached_sla_count += 1
-#                 else:
-#                     met_sla_count += 1
-
-#             # Calculate breached SLA percentage
-#             breached_sla_percentage = (
-#                 (breached_sla_count / total_incident_count * 100)
-#                 if total_incident_count > 0
-#                 else 0
-#             )
-#             breached_sla_percentage = round(breached_sla_percentage, 2)
-
-#             # Calculate SLA Met Percentage for each severity level
-#             sla_met_percentage = {}
-#             for severity, count in severity_counts.items():
-#                 if count > 0:
-#                     sla_met_percentage[severity] = round(
-#                         (met_sla_count / count) * 100, 2
-#                     )
-#                 else:
-#                     sla_met_percentage[severity] = 0.0
-
-#             # Step 9: Format incident counts for table, including tta_minutes, ttn_minutes in each incident count
-#             incident_counts = [
-#                 {
-#                     "severity_level": severity,
-#                     "severity_label": severity_labels.get(severity, "Unknown"),
-#                     "incident_count": count,
-#                     "total_incident_count": total_incident_count,
-#                     "met_sla_count": met_sla_count,
-#                     "breached_sla_count": breached_sla_count,
-#                     "breached_sla_percentage": breached_sla_percentage,
-#                     "sla_met_percentage": sla_met_percentage.get(
-#                         severity, 0.0
-#                     ),  # SLA Met Percentage
-#                     "tta_minutes": sla_metrics_dict.get(severity).tta_minutes,
-#                     "ttn_minutes": sla_metrics_dict.get(severity).ttn_minutes,
-#                     "ttdn_minutes": sla_metrics_dict.get(severity).ttdn_minutes,
-#                 }
-#                 for severity, count in severity_counts.items()
-#             ]
-
-#             # Step 10: New overall SLA compliance object
-#             overall_sla_compliance = {
-#                 "total_breached_incidents": breached_sla_count,
-#                 "total_met_target_incidents": met_sla_count,
-#                 "overall_compliance_percentage": round(
-#                     (met_sla_count / total_incident_count) * 100, 2
-#                 )
-#                 if total_incident_count > 0
-#                 else 0,
-#             }
-
-#             # Step 11: Return response with overall SLA compliance
-#             return Response(
-#                 {
-#                     "sla_details": sla_details,
-#                     "incident_counts": incident_counts,
-#                     "overall_sla_compliance": overall_sla_compliance,
-#                 }
-#             )
-
-
-#         except Exception as e:
-#             logger.error(f"Error in SLAIncidentsView:{str(e)}")
-#             return Response(
-#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
 class SLAIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5251,124 +4788,6 @@ class SLAIncidentsView(APIView):
             )
 
 
-# # SLAComplianceView
-# class SLAComplianceView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         """
-#         Retrieve overall SLA compliance details, including:
-#         - Overall SLA compliance percentage
-#         - Count of breached incidents
-#         - Count of incidents that met the SLA target
-
-#         Returns:
-#             Response with overall compliance details
-#         """
-#         try:
-#             # Step 1: Validate tenant
-#             tenant = Tenant.objects.get(tenant=request.user)
-#             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
-#         except Tenant.DoesNotExist:
-#             return Response(
-#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-#             )
-
-#         try:
-#             # Step 2: Get SOAR tenant IDs
-#             soar_tenants = tenant.soar_tenants.all()
-#             if not soar_tenants:
-#                 return Response(
-#                     {"error": "No SOAR tenants found."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-#             soar_ids = [t.id for t in soar_tenants]
-
-#             # Step 3: Build filters
-#             filters = Q(cortex_soar_tenant_id__in=soar_ids)
-
-#             # Step 4: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
-#             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-#                 filters,
-#                 incident_tta__isnull=False,
-#                 incident_ttdn__isnull=False,
-#                 incident_ttn__isnull=False,
-#             )
-
-#             # Step 5: Fetch SLA metrics based on tenant's is_default_sla value
-#             if tenant.is_default_sla:
-#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
-#             else:
-#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-#                     soar_tenant__in=soar_tenants
-#                 )
-
-#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
-
-#             # Step 6: Calculate the total number of incidents, incidents that met the SLA, and breached incidents
-#             total_incident_count = 0
-#             met_sla_count = 0
-#             breached_sla_count = 0
-
-#             for incident in incidents:
-#                 total_incident_count += 1
-
-#                 # Get SLA metrics for severity
-#                 sla_metric = sla_metrics_dict.get(incident.severity)
-#                 if not sla_metric:
-#                     continue
-
-#                 # Calculate deltas and check breaches
-#                 created = incident.created
-#                 any_breach = False
-
-#                 if incident.incident_tta and created:
-#                     tta_delta = (incident.incident_tta - created).total_seconds() / 60
-#                     if tta_delta > sla_metric.tta_minutes:
-#                         any_breach = True
-
-#                 if incident.incident_ttn and created:
-#                     ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
-#                     if ttn_delta > sla_metric.ttn_minutes:
-#                         any_breach = True
-
-#                 if incident.incident_ttdn and created:
-#                     ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
-#                     if ttdn_delta > sla_metric.ttdn_minutes:
-#                         any_breach = True
-
-#                 if any_breach:
-#                     breached_sla_count += 1
-#                 else:
-#                     met_sla_count += 1
-
-#             # Step 7: Calculate overall SLA compliance percentage
-#             overall_sla_compliance_percentage = (
-#                 (met_sla_count / total_incident_count) * 100
-#                 if total_incident_count > 0
-#                 else 0
-#             )
-#             overall_sla_compliance_percentage = round(
-#                 overall_sla_compliance_percentage, 2
-#             )
-
-#             # Step 8: Return response with overall SLA compliance details
-#             overall_sla_compliance = {
-#                 "total_breached_incidents": breached_sla_count,
-#                 "total_met_target_incidents": met_sla_count,
-#                 "overall_compliance_percentage": overall_sla_compliance_percentage,
-#             }
-
-#             return Response(overall_sla_compliance)
-
-#         except Exception as e:
-#             logger.error(f"Error in SLAComplianceView: {str(e)}")
-#             return Response(
-#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
-
-
 class SLAComplianceView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5558,121 +4977,6 @@ class SLAComplianceView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
-# SLASeverityIncidentsView
-# class SLASeverityIncidentsView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         """
-#         Retrieve incident counts for each severity level (P1, P2, P3, P4),
-#         including total incidents and completed incidents (those that met the SLA target).
-
-#         Returns:
-#             Response with total incidents and completed incidents for each severity level
-#         """
-#         try:
-#             # Step 1: Validate tenant
-#             tenant = Tenant.objects.get(tenant=request.user)
-#             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
-#         except Tenant.DoesNotExist:
-#             return Response(
-#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-#             )
-
-#         try:
-#             # Step 2: Get SOAR tenant IDs
-#             soar_tenants = tenant.soar_tenants.all()
-#             if not soar_tenants:
-#                 return Response(
-#                     {"error": "No SOAR tenants found."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-#             soar_ids = [t.id for t in soar_tenants]
-
-#             # Step 3: Build filters
-#             filters = Q(cortex_soar_tenant_id__in=soar_ids)
-
-#             # Step 4: Fetch incidents, excluding null fields for incident_tta, incident_ttn, incident_ttdn
-#             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-#                 filters,
-#                 incident_tta__isnull=False,
-#                 incident_ttdn__isnull=False,
-#                 incident_ttn__isnull=False,
-#             )
-
-#             # Step 5: Fetch SLA metrics based on tenant's is_default_sla value
-#             if tenant.is_default_sla:
-#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
-#             else:
-#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-#                     soar_tenant__in=soar_tenants
-#                 )
-
-#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
-
-#             # Step 6: Initialize counts for P1, P2, P3, and P4
-#             severity_counts = {
-#                 "p1_critical": {"total_incidents": 0, "completed_incidents": 0},
-#                 "p1_high": {"total_incidents": 0, "completed_incidents": 0},
-#                 "p3_medium": {"total_incidents": 0, "completed_incidents": 0},
-#                 "p4_low": {"total_incidents": 0, "completed_incidents": 0},
-#             }
-
-#             # Step 7: Process incidents by severity
-#             for incident in incidents:
-#                 severity = incident.severity
-#                 if severity == SlaLevelChoices.P1:
-#                     severity_label = "p1_critical"
-#                 elif severity == SlaLevelChoices.P2:
-#                     severity_label = "p1_high"
-#                 elif severity == SlaLevelChoices.P3:
-#                     severity_label = "p3_medium"
-#                 elif severity == SlaLevelChoices.P4:
-#                     severity_label = "p4_low"
-#                 else:
-#                     continue  # Skip incidents with an unknown severity level
-
-#                 # Get SLA metrics for the incident's severity level
-#                 sla_metric = sla_metrics_dict.get(severity)
-#                 if not sla_metric:
-#                     continue
-
-#                 # Calculate deltas and check if the incident met the SLA target
-#                 created = incident.created
-#                 any_breach = False
-
-#                 # Check if the incident met the SLA for tta, ttn, ttdn
-#                 if incident.incident_tta and created:
-#                     tta_delta = (incident.incident_tta - created).total_seconds() / 60
-#                     if tta_delta > sla_metric.tta_minutes:
-#                         any_breach = True
-
-#                 if incident.incident_ttn and created:
-#                     ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
-#                     if ttn_delta > sla_metric.ttn_minutes:
-#                         any_breach = True
-
-#                 if incident.incident_ttdn and created:
-#                     ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
-#                     if ttdn_delta > sla_metric.ttdn_minutes:
-#                         any_breach = True
-
-#                 # Update counts based on whether the incident met the SLA target
-#                 severity_counts[severity_label]["total_incidents"] += 1
-#                 if not any_breach:
-#                     severity_counts[severity_label]["completed_incidents"] += 1
-
-#             # Step 8: Return response with total and completed incidents per severity level
-#             return Response(severity_counts)
-
-#         except Exception as e:
-#             logger.error(f"Error in SLASeverityIncidentsView: {str(e)}")
-#             return Response(
-#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
 
 
 class SLASeverityIncidentsView(APIView):
@@ -6028,9 +5332,6 @@ class SLASeverityMetricsView(APIView):
             )
 
 
-
-
-
 class IncidentReportView(APIView):
     def get(self, request):
         try:
@@ -6039,7 +5340,9 @@ class IncidentReportView(APIView):
             if filter_type is not None:
                 filter_type = int(filter_type)
 
-            severity_filter = request.query_params.get("severity")  # Optional severity filter
+            severity_filter = request.query_params.get(
+                "severity"
+            )  # Optional severity filter
 
             # Apply date filters based on FilterType Enum
             now = timezone.now()
@@ -6049,7 +5352,9 @@ class IncidentReportView(APIView):
 
             if filter_type == FilterType.TODAY.value:
                 date_threshold = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                comparison_period = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+                comparison_period = now.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                ) - timedelta(days=1)
                 period_name = "today"
             elif filter_type == FilterType.WEEK.value:
                 date_threshold = now - timedelta(weeks=1)
@@ -6143,7 +5448,9 @@ class IncidentReportView(APIView):
             if tenant.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
-                sla_metrics = SoarTenantSlaMetric.objects.filter(soar_tenant__in=soar_tenants)
+                sla_metrics = SoarTenantSlaMetric.objects.filter(
+                    soar_tenant__in=soar_tenants
+                )
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
             # Group by severity and calculate metrics
@@ -6175,18 +5482,25 @@ class IncidentReportView(APIView):
 
             # Calculate change percentage
             current_filter = Q(created__gte=date_threshold)
-            previous_filter = Q(created__gte=comparison_period, created__lt=date_threshold)
+            previous_filter = Q(
+                created__gte=comparison_period, created__lt=date_threshold
+            )
 
             if severity_filter:
                 current_filter &= Q(severity=severity_value)
                 previous_filter &= Q(severity=severity_value)
 
-            current_period_count = DUCortexSOARIncidentFinalModel.objects.filter(current_filter).count()
-            previous_period_count = DUCortexSOARIncidentFinalModel.objects.filter(previous_filter).count()
+            current_period_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                current_filter
+            ).count()
+            previous_period_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                previous_filter
+            ).count()
 
             if previous_period_count > 0:
                 change_percent = (
-                    (current_period_count - previous_period_count) / previous_period_count
+                    (current_period_count - previous_period_count)
+                    / previous_period_count
                 ) * 100
             else:
                 change_percent = 0 if current_period_count == 0 else 100
@@ -6211,13 +5525,19 @@ class IncidentReportView(APIView):
 
             # Calculate closed, pending, and assigned incident counts
             closed_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                status=2, created__gte=date_threshold, cortex_soar_tenant_id__in=soar_ids
+                status=2,
+                created__gte=date_threshold,
+                cortex_soar_tenant_id__in=soar_ids,
             ).count()
             pending_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                status=1, created__gte=date_threshold, cortex_soar_tenant_id__in=soar_ids
+                status=1,
+                created__gte=date_threshold,
+                cortex_soar_tenant_id__in=soar_ids,
             ).count()
             assigned_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                owner__isnull=False, created__gte=date_threshold, cortex_soar_tenant_id__in=soar_ids
+                owner__isnull=False,
+                created__gte=date_threshold,
+                cortex_soar_tenant_id__in=soar_ids,
             ).count()
 
             incident_status_graph = {
@@ -6230,23 +5550,36 @@ class IncidentReportView(APIView):
             incident_ticket_details = []
 
             # Process incidents for incident_ticket_details
-            for severity_level in [SlaLevelChoices.P4, SlaLevelChoices.P3, SlaLevelChoices.P2, SlaLevelChoices.P1]:
+            for severity_level in [
+                SlaLevelChoices.P4,
+                SlaLevelChoices.P3,
+                SlaLevelChoices.P2,
+                SlaLevelChoices.P1,
+            ]:
                 sla_metric = sla_metrics_dict.get(severity_level)
-                severity_label = SEVERITY_LABELS.get(severity_level, "Unknown").replace("P1 - ", "").replace("P2 - ", "").replace("P3 - ", "").replace("P4 - ", "")
+                severity_label = (
+                    SEVERITY_LABELS.get(severity_level, "Unknown")
+                    .replace("P1 - ", "")
+                    .replace("P2 - ", "")
+                    .replace("P3 - ", "")
+                    .replace("P4 - ", "")
+                )
 
                 if not sla_metric:
-                    incident_ticket_details.append({
-                        "severity_label": severity_label,
-                        "severity_level": severity_level,
-                        "open_tickets": 0,
-                        "sla_breach_tickets": 0,
-                        "avg_tta_minutes": 0,
-                        "avg_ttn_minutes": 0,
-                        "avg_ttdn_minutes": 0,
-                        "sla_tta_minutes": 0,
-                        "sla_ttn_minutes": 0,
-                        "sla_ttdn_minutes": 0,
-                    })
+                    incident_ticket_details.append(
+                        {
+                            "severity_label": severity_label,
+                            "severity_level": severity_level,
+                            "open_tickets": 0,
+                            "sla_breach_tickets": 0,
+                            "avg_tta_minutes": 0,
+                            "avg_ttn_minutes": 0,
+                            "avg_ttdn_minutes": 0,
+                            "sla_tta_minutes": 0,
+                            "sla_ttn_minutes": 0,
+                            "sla_ttdn_minutes": 0,
+                        }
+                    )
                     continue
 
                 # Filter incidents by severity
@@ -6266,19 +5599,25 @@ class IncidentReportView(APIView):
                     any_breach = False
 
                     if incident.incident_tta and created:
-                        tta_delta = (incident.incident_tta - created).total_seconds() / 60
+                        tta_delta = (
+                            incident.incident_tta - created
+                        ).total_seconds() / 60
                         tta_times.append(tta_delta)
                         if tta_delta > sla_metric.tta_minutes:
                             any_breach = True
 
                     if incident.incident_ttn and created:
-                        ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+                        ttn_delta = (
+                            incident.incident_ttn - created
+                        ).total_seconds() / 60
                         ttn_times.append(ttn_delta)
                         if ttn_delta > sla_metric.ttn_minutes:
                             any_breach = True
 
                     if incident.incident_ttdn and created:
-                        ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+                        ttdn_delta = (
+                            incident.incident_ttdn - created
+                        ).total_seconds() / 60
                         ttdn_times.append(ttdn_delta)
                         if ttdn_delta > sla_metric.ttdn_minutes:
                             any_breach = True
@@ -6292,18 +5631,20 @@ class IncidentReportView(APIView):
                 avg_ttdn = sum(ttdn_times) / len(ttdn_times) if ttdn_times else 0
 
                 # Append to incident_ticket_details
-                incident_ticket_details.append({
-                    "severity_label": severity_label,
-                    "severity_level": severity_level,
-                    "open_tickets": open_tickets,
-                    "sla_breach_tickets": sla_breach_tickets,
-                    "avg_tta_minutes": round(avg_tta, 2),
-                    "avg_ttn_minutes": round(avg_ttn, 2),
-                    "avg_ttdn_minutes": round(avg_ttdn, 2),
-                    "sla_tta_minutes": sla_metric.tta_minutes,
-                    "sla_ttn_minutes": sla_metric.ttn_minutes,
-                    "sla_ttdn_minutes": sla_metric.ttdn_minutes,
-                })
+                incident_ticket_details.append(
+                    {
+                        "severity_label": severity_label,
+                        "severity_level": severity_level,
+                        "open_tickets": open_tickets,
+                        "sla_breach_tickets": sla_breach_tickets,
+                        "avg_tta_minutes": round(avg_tta, 2),
+                        "avg_ttn_minutes": round(avg_ttn, 2),
+                        "avg_ttdn_minutes": round(avg_ttdn, 2),
+                        "sla_tta_minutes": sla_metric.tta_minutes,
+                        "sla_ttn_minutes": sla_metric.ttn_minutes,
+                        "sla_ttdn_minutes": sla_metric.ttdn_minutes,
+                    }
+                )
 
             # Initialize incident_ticket_trend_by_severity_graph
             incident_ticket_trend_by_severity_graph = []
@@ -6318,7 +5659,11 @@ class IncidentReportView(APIView):
                 while current_time <= end_time:
                     next_time = current_time + delta
                     time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = incidents.filter(time_filter).values("severity").annotate(count=Count("id"))
+                    counts = (
+                        incidents.filter(time_filter)
+                        .values("severity")
+                        .annotate(count=Count("id"))
+                    )
                     severity_counts = {
                         "Critical": 0,
                         "High": 0,
@@ -6337,10 +5682,9 @@ class IncidentReportView(APIView):
                             severity_counts["Low"] = entry["count"]
                         elif entry["severity"] == 0:
                             severity_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_severity_graph.append({
-                        "timestamp": current_time.isoformat(),
-                        **severity_counts
-                    })
+                    incident_ticket_trend_by_severity_graph.append(
+                        {"timestamp": current_time.isoformat(), **severity_counts}
+                    )
                     current_time = next_time
             elif filter_type in [FilterType.WEEK.value, FilterType.LAST_3_WEEKS.value]:
                 # Daily intervals for week or last 3 weeks
@@ -6351,7 +5695,11 @@ class IncidentReportView(APIView):
                 while current_time <= end_time:
                     next_time = current_time + delta
                     time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = incidents.filter(time_filter).values("severity").annotate(count=Count("id"))
+                    counts = (
+                        incidents.filter(time_filter)
+                        .values("severity")
+                        .annotate(count=Count("id"))
+                    )
                     severity_counts = {
                         "Critical": 0,
                         "High": 0,
@@ -6370,12 +5718,16 @@ class IncidentReportView(APIView):
                             severity_counts["Low"] = entry["count"]
                         elif entry["severity"] == 0:
                             severity_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_severity_graph.append({
-                        "timestamp": current_time.isoformat(),
-                        **severity_counts
-                    })
+                    incident_ticket_trend_by_severity_graph.append(
+                        {"timestamp": current_time.isoformat(), **severity_counts}
+                    )
                     current_time = next_time
-            elif filter_type in [FilterType.MONTH.value, FilterType.LAST_MONTH.value, FilterType.QUARTER.value, FilterType.LAST_6_MONTHS.value]:
+            elif filter_type in [
+                FilterType.MONTH.value,
+                FilterType.LAST_MONTH.value,
+                FilterType.QUARTER.value,
+                FilterType.LAST_6_MONTHS.value,
+            ]:
                 # Weekly intervals for month, last month, quarter, or last 6 months
                 start_time = date_threshold
                 end_time = now
@@ -6384,7 +5736,11 @@ class IncidentReportView(APIView):
                 while current_time <= end_time:
                     next_time = current_time + delta
                     time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = incidents.filter(time_filter).values("severity").annotate(count=Count("id"))
+                    counts = (
+                        incidents.filter(time_filter)
+                        .values("severity")
+                        .annotate(count=Count("id"))
+                    )
                     severity_counts = {
                         "Critical": 0,
                         "High": 0,
@@ -6403,10 +5759,9 @@ class IncidentReportView(APIView):
                             severity_counts["Low"] = entry["count"]
                         elif entry["severity"] == 0:
                             severity_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_severity_graph.append({
-                        "timestamp": current_time.isoformat(),
-                        **severity_counts
-                    })
+                    incident_ticket_trend_by_severity_graph.append(
+                        {"timestamp": current_time.isoformat(), **severity_counts}
+                    )
                     current_time = next_time
             elif filter_type == FilterType.YEAR.value:
                 # Monthly intervals for year
@@ -6415,9 +5770,15 @@ class IncidentReportView(APIView):
                 current_time = start_time
                 while current_time <= end_time:
                     # Move to the first day of the next month
-                    next_time = (current_time.replace(day=1) + timedelta(days=32)).replace(day=1)
+                    next_time = (
+                        current_time.replace(day=1) + timedelta(days=32)
+                    ).replace(day=1)
                     time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = incidents.filter(time_filter).values("severity").annotate(count=Count("id"))
+                    counts = (
+                        incidents.filter(time_filter)
+                        .values("severity")
+                        .annotate(count=Count("id"))
+                    )
                     severity_counts = {
                         "Critical": 0,
                         "High": 0,
@@ -6436,10 +5797,9 @@ class IncidentReportView(APIView):
                             severity_counts["Low"] = entry["count"]
                         elif entry["severity"] == 0:
                             severity_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_severity_graph.append({
-                        "timestamp": current_time.isoformat(),
-                        **severity_counts
-                    })
+                    incident_ticket_trend_by_severity_graph.append(
+                        {"timestamp": current_time.isoformat(), **severity_counts}
+                    )
                     current_time = next_time
             else:
                 # Default: Daily intervals for last 3 weeks
@@ -6450,7 +5810,11 @@ class IncidentReportView(APIView):
                 while current_time <= end_time:
                     next_time = current_time + delta
                     time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = incidents.filter(time_filter).values("severity").annotate(count=Count("id"))
+                    counts = (
+                        incidents.filter(time_filter)
+                        .values("severity")
+                        .annotate(count=Count("id"))
+                    )
                     severity_counts = {
                         "Critical": 0,
                         "High": 0,
@@ -6469,26 +5833,40 @@ class IncidentReportView(APIView):
                             severity_counts["Low"] = entry["count"]
                         elif entry["severity"] == 0:
                             severity_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_severity_graph.append({
-                        "timestamp": current_time.isoformat(),
-                        **severity_counts
-                    })
+                    incident_ticket_trend_by_severity_graph.append(
+                        {"timestamp": current_time.isoformat(), **severity_counts}
+                    )
                     current_time = next_time
 
             # Add severity data to cards_data
             for severity in severity_data:
-                severity_label = SEVERITY_LABELS.get(severity["severity"], "Unknown").replace("P1 - ", "").replace("P2 - ", "").replace("P3 - ", "").replace("P4 - ", "")
+                severity_label = (
+                    SEVERITY_LABELS.get(severity["severity"], "Unknown")
+                    .replace("P1 - ", "")
+                    .replace("P2 - ", "")
+                    .replace("P3 - ", "")
+                    .replace("P4 - ", "")
+                )
                 cards_data.append(
                     {
                         severity_label: {
                             "open_ticket": severity["open_tickets"],
-                            "avg_time_to_notify": severity["avg_time_to_notify"].total_seconds() / 60
+                            "avg_time_to_notify": severity[
+                                "avg_time_to_notify"
+                            ].total_seconds()
+                            / 60
                             if severity["avg_time_to_notify"]
                             else 0,
-                            "avg_time_to_acknowledge": severity["avg_time_to_acknowledge"].total_seconds() / 60
+                            "avg_time_to_acknowledge": severity[
+                                "avg_time_to_acknowledge"
+                            ].total_seconds()
+                            / 60
                             if severity["avg_time_to_acknowledge"]
                             else 0,
-                            "avg_time_to_detection": severity["avg_time_to_detection"].total_seconds() / 60
+                            "avg_time_to_detection": severity[
+                                "avg_time_to_detection"
+                            ].total_seconds()
+                            / 60
                             if severity["avg_time_to_detection"]
                             else 0,
                         }
@@ -6497,12 +5875,16 @@ class IncidentReportView(APIView):
 
             # Initialize service_request_summary
             # Calculate open and closed request counts by severity
-            open_counts = DUCortexSOARIncidentFinalModel.objects.filter(
-                filters, status=1
-            ).values("severity").annotate(count=Count("id"))
-            closed_counts = DUCortexSOARIncidentFinalModel.objects.filter(
-                filters, status=2
-            ).values("severity").annotate(count=Count("id"))
+            open_counts = (
+                DUCortexSOARIncidentFinalModel.objects.filter(filters, status=1)
+                .values("severity")
+                .annotate(count=Count("id"))
+            )
+            closed_counts = (
+                DUCortexSOARIncidentFinalModel.objects.filter(filters, status=2)
+                .values("severity")
+                .annotate(count=Count("id"))
+            )
 
             open_severity_counts = {
                 "Critical": 0,
@@ -6551,7 +5933,6 @@ class IncidentReportView(APIView):
                 "open_requests": open_severity_counts,
                 "closed_requests": closed_severity_counts,
             }
-
 
             # Return response
             return Response(
