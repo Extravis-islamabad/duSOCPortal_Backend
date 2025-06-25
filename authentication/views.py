@@ -5,6 +5,7 @@ from io import BytesIO
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db.models import Q
+from django.db.models.functions import Lower
 from django.utils import timezone
 from loguru import logger
 from rest_framework import status
@@ -345,14 +346,14 @@ class LDAPGroupUsersView(APIView):
             ldap_users = LDAP.fetch_users_in_group(group_name)
             ldap_usernames = {user["username"].lower() for user in ldap_users}
             existing_usernames = set(
-                User.objects.filter(username__in=ldap_usernames).values_list(
-                    "username", flat=True
-                )
+                User.objects.annotate(lower_username=Lower("username"))
+                .filter(lower_username__in=ldap_usernames)
+                .values_list("lower_username", flat=True)
             )
             new_users = [
                 user
                 for user in ldap_users
-                if user["username"] not in existing_usernames
+                if user["username"].lower() not in existing_usernames
             ]
             if not new_users:
                 return Response(
