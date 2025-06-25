@@ -12,6 +12,8 @@ from tenant.views import (
     EventCollectorsListAPIView,
     GetTenantAssetsList,
     IncidentDetailView,
+    IncidentReportView,
+    IncidentSummaryView,
     IncidentsView,
     OffenseCategoriesAPIView,
     OffenseDetailsByTenantAPIView,
@@ -148,6 +150,9 @@ urlpatterns = [
         name="alert-details",
     ),
     path("api/all-incidents/", AllIncidentsView.as_view(), name="all-incidents"),
+    
+    path("api/incident-summary-cards/", IncidentSummaryView.as_view(), name="incident-summary"),
+
     path(
         "api/sla-incidents/",
         SLAIncidentsView.as_view(),
@@ -168,4 +173,7 @@ urlpatterns = [
         SLASeverityMetricsView.as_view(),
         name="sla-severity-metrics",
     ),
+  
+    path('api/incident-report/', IncidentReportView.as_view(), name='incident-report'),
+
 ]
