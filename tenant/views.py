@@ -6028,19 +6028,20 @@ class SLASeverityMetricsView(APIView):
             )
 
 
+
+
+
 class IncidentReportView(APIView):
     def get(self, request):
         try:
-            # Get filter_type from query params (numeric values)
+            # Get filter_type from query params
             filter_type = request.query_params.get("filter_type")
             if filter_type is not None:
                 filter_type = int(filter_type)
 
-            severity_filter = request.query_params.get(
-                "severity"
-            )  # Optional severity filter (P1, P2, P3, P4)
+            severity_filter = request.query_params.get("severity")  # Optional severity filter
 
-            # Apply date filters based on the FilterType Enum
+            # Apply date filters based on FilterType Enum
             now = timezone.now()
             date_threshold = None
             comparison_period = None
@@ -6048,9 +6049,7 @@ class IncidentReportView(APIView):
 
             if filter_type == FilterType.TODAY.value:
                 date_threshold = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                comparison_period = now.replace(
-                    hour=0, minute=0, second=0, microsecond=0
-                ) - timedelta(days=1)
+                comparison_period = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
                 period_name = "today"
             elif filter_type == FilterType.WEEK.value:
                 date_threshold = now - timedelta(weeks=1)
@@ -6081,81 +6080,121 @@ class IncidentReportView(APIView):
                 comparison_period = now - timedelta(days=60)
                 period_name = "last month"
             else:
-                # Default to last 3 weeks if no filter is provided
+                # Default to last 3 weeks
                 date_threshold = now - timedelta(weeks=3)
                 comparison_period = now - timedelta(weeks=6)
                 period_name = "last 3 weeks"
 
-            # Filter incidents based on the date threshold
-            incidents = DUCortexSOARIncidentFinalModel.objects.all()
+            # Validate tenant
+            try:
+                tenant = Tenant.objects.get(tenant=request.user)
+                logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
+            except Tenant.DoesNotExist:
+                return Response(
+                    {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Check for active SOAR integration
+            soar_integrations = tenant.integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.CORTEX_SOAR,
+                status=True,
+            )
+            if not soar_integrations.exists():
+                return Response(
+                    {"error": "No active SOAR integration configured for tenant."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Get SOAR tenant IDs
+            soar_tenants = tenant.soar_tenants.all()
+            if not soar_tenants:
+                return Response(
+                    {"error": "No SOAR tenants found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            soar_ids = [t.id for t in soar_tenants]
+
+            # Build filters
+            filters = Q(cortex_soar_tenant_id__in=soar_ids)
 
             if date_threshold:
-                incidents = incidents.filter(created__gte=date_threshold)
+                filters &= Q(created__gte=date_threshold)
 
             if severity_filter:
-                incidents = incidents.filter(severity=severity_filter)
+                try:
+                    severity_value = int(severity_filter)
+                    filters &= Q(severity=severity_value)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid severity format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-            # Group by severity and calculate the required metrics
+            # Filter incidents
+            incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                filters,
+                incident_tta__isnull=False,
+                incident_ttn__isnull=False,
+                incident_ttdn__isnull=False,
+            )
+
+            # Fetch SLA metrics
+            if tenant.is_default_sla:
+                sla_metrics = DefaultSoarSlaMetric.objects.all()
+            else:
+                sla_metrics = SoarTenantSlaMetric.objects.filter(soar_tenant__in=soar_tenants)
+            sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+            # Group by severity and calculate metrics
             severity_data = incidents.values("severity").annotate(
                 total_incidents=Count("id"),
-                open_tickets=Count(
-                    "id", filter=Q(status=1)
-                ),  # Count only OPEN (status=1)
-                # Calculate the time differences (in seconds or minutes)
+                open_tickets=Count("id", filter=Q(status=1)),
                 avg_time_to_notify=Avg(
                     ExpressionWrapper(
                         F("incident_ttn") - F("created"), output_field=DurationField()
-                    )
+                    ),
                 ),
                 avg_time_to_acknowledge=Avg(
                     ExpressionWrapper(
                         F("incident_tta") - F("created"), output_field=DurationField()
-                    )
+                    ),
                 ),
                 avg_time_to_detection=Avg(
                     ExpressionWrapper(
                         F("incident_ttdn") - F("created"), output_field=DurationField()
-                    )
+                    ),
                 ),
             )
 
-            # Create a dictionary for cards data
+            # Create cards data
             cards_data = []
 
-            # Total incidents and changes
+            # Total incidents and change percentage
             total_incidents = incidents.count()
 
-            # Calculate change percentage for the selected period compared to the previous period
+            # Calculate change percentage
             current_filter = Q(created__gte=date_threshold)
-            previous_filter = Q(
-                created__gte=comparison_period, created__lt=date_threshold
-            )
+            previous_filter = Q(created__gte=comparison_period, created__lt=date_threshold)
 
             if severity_filter:
-                current_filter &= Q(severity=severity_filter)
-                previous_filter &= Q(severity=severity_filter)
+                current_filter &= Q(severity=severity_value)
+                previous_filter &= Q(severity=severity_value)
 
-            current_period_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                current_filter
-            ).count()
+            current_period_count = DUCortexSOARIncidentFinalModel.objects.filter(current_filter).count()
+            previous_period_count = DUCortexSOARIncidentFinalModel.objects.filter(previous_filter).count()
 
-            previous_period_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                previous_filter
-            ).count()
-
-            # Calculate percentage change properly
             if previous_period_count > 0:
                 change_percent = (
-                    (current_period_count - previous_period_count)
-                    / previous_period_count
+                    (current_period_count - previous_period_count) / previous_period_count
                 ) * 100
             else:
                 change_percent = 0 if current_period_count == 0 else 100
 
-            # Get alert count for all severity levels that are OPEN (status=1)
-            alert_filter = Q(status=1)  # Only for OPEN tickets (status=1)
+            # Get alert count for open tickets
+            alert_filter = Q(status=1)
             if severity_filter:
-                alert_filter &= Q(severity=severity_filter)
+                alert_filter &= Q(severity=severity_value)
 
             alert_count = DUCortexSOARIncidentFinalModel.objects.filter(
                 alert_filter, created__gte=date_threshold
@@ -6163,65 +6202,365 @@ class IncidentReportView(APIView):
 
             cards_data.append(
                 {
-                    "TOTAL INCIDENTS": total_incidents,
-                    f"{period_name} change %": change_percent,
-                    "log activity": "N/A",  # Could be replaced by specific log activity calculation if needed
-                    "alert count": alert_count,  # Count of all OPEN incidents (or filtered by severity if specified)
+                    "total_incidents": total_incidents,
+                    f"{period_name.lower().replace(' ', '_')}_change_percent": change_percent,
+                    "log_activity": "N/A",
+                    "alert_count": alert_count,
                 }
             )
 
-            # Calculate closed, pending, and assigned (owner) incident counts
+            # Calculate closed, pending, and assigned incident counts
             closed_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                status=2, created__gte=date_threshold
-            ).count()  # status=2 for closed
+                status=2, created__gte=date_threshold, cortex_soar_tenant_id__in=soar_ids
+            ).count()
             pending_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                status=1, created__gte=date_threshold
-            ).count()  # Assuming status=3 for pending
+                status=1, created__gte=date_threshold, cortex_soar_tenant_id__in=soar_ids
+            ).count()
             assigned_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                owner__isnull=False, created__gte=date_threshold
-            ).count()  # owner field is not NULL
+                owner__isnull=False, created__gte=date_threshold, cortex_soar_tenant_id__in=soar_ids
+            ).count()
 
-            # Add incident status graph and assigned incidents count to the response
             incident_status_graph = {
                 "closed": closed_incidents,
                 "pending": pending_incidents,
                 "assigned": assigned_incidents,
             }
 
-            # Loop through each severity level and build a response object
+            # Initialize incident_ticket_details as a list
+            incident_ticket_details = []
+
+            # Process incidents for incident_ticket_details
+            for severity_level in [SlaLevelChoices.P4, SlaLevelChoices.P3, SlaLevelChoices.P2, SlaLevelChoices.P1]:
+                sla_metric = sla_metrics_dict.get(severity_level)
+                severity_label = SEVERITY_LABELS.get(severity_level, "Unknown").replace("P1 - ", "").replace("P2 - ", "").replace("P3 - ", "").replace("P4 - ", "")
+
+                if not sla_metric:
+                    incident_ticket_details.append({
+                        "severity_label": severity_label,
+                        "severity_level": severity_level,
+                        "open_tickets": 0,
+                        "sla_breach_tickets": 0,
+                        "avg_tta_minutes": 0,
+                        "avg_ttn_minutes": 0,
+                        "avg_ttdn_minutes": 0,
+                        "sla_tta_minutes": 0,
+                        "sla_ttn_minutes": 0,
+                        "sla_ttdn_minutes": 0,
+                    })
+                    continue
+
+                # Filter incidents by severity
+                severity_incidents = incidents.filter(severity=severity_level)
+
+                # Count open tickets
+                open_tickets = severity_incidents.filter(status=1).count()
+
+                # Calculate SLA breaches
+                sla_breach_tickets = 0
+                tta_times = []
+                ttn_times = []
+                ttdn_times = []
+
+                for incident in severity_incidents:
+                    created = incident.created
+                    any_breach = False
+
+                    if incident.incident_tta and created:
+                        tta_delta = (incident.incident_tta - created).total_seconds() / 60
+                        tta_times.append(tta_delta)
+                        if tta_delta > sla_metric.tta_minutes:
+                            any_breach = True
+
+                    if incident.incident_ttn and created:
+                        ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+                        ttn_times.append(ttn_delta)
+                        if ttn_delta > sla_metric.ttn_minutes:
+                            any_breach = True
+
+                    if incident.incident_ttdn and created:
+                        ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+                        ttdn_times.append(ttdn_delta)
+                        if ttdn_delta > sla_metric.ttdn_minutes:
+                            any_breach = True
+
+                    if any_breach:
+                        sla_breach_tickets += 1
+
+                # Calculate averages
+                avg_tta = sum(tta_times) / len(tta_times) if tta_times else 0
+                avg_ttn = sum(ttn_times) / len(ttn_times) if ttn_times else 0
+                avg_ttdn = sum(ttdn_times) / len(ttdn_times) if ttdn_times else 0
+
+                # Append to incident_ticket_details
+                incident_ticket_details.append({
+                    "severity_label": severity_label,
+                    "severity_level": severity_level,
+                    "open_tickets": open_tickets,
+                    "sla_breach_tickets": sla_breach_tickets,
+                    "avg_tta_minutes": round(avg_tta, 2),
+                    "avg_ttn_minutes": round(avg_ttn, 2),
+                    "avg_ttdn_minutes": round(avg_ttdn, 2),
+                    "sla_tta_minutes": sla_metric.tta_minutes,
+                    "sla_ttn_minutes": sla_metric.ttn_minutes,
+                    "sla_ttdn_minutes": sla_metric.ttdn_minutes,
+                })
+
+            # Initialize incident_ticket_trend_by_severity_graph
+            incident_ticket_trend_by_severity_graph = []
+
+            # Determine time intervals based on filter_type
+            if filter_type == FilterType.TODAY.value:
+                # Hourly intervals for today
+                start_time = date_threshold
+                end_time = now
+                delta = timedelta(hours=1)
+                current_time = start_time
+                while current_time <= end_time:
+                    next_time = current_time + delta
+                    time_filter = Q(created__gte=current_time, created__lt=next_time)
+                    counts = incidents.filter(time_filter).values("severity").annotate(count=Count("id"))
+                    severity_counts = {
+                        "Critical": 0,
+                        "High": 0,
+                        "Medium": 0,
+                        "Low": 0,
+                        "Unknown": 0,
+                    }
+                    for entry in counts:
+                        if entry["severity"] == SlaLevelChoices.P1:
+                            severity_counts["Critical"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P2:
+                            severity_counts["High"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P3:
+                            severity_counts["Medium"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P4:
+                            severity_counts["Low"] = entry["count"]
+                        elif entry["severity"] == 0:
+                            severity_counts["Unknown"] = entry["count"]
+                    incident_ticket_trend_by_severity_graph.append({
+                        "timestamp": current_time.isoformat(),
+                        **severity_counts
+                    })
+                    current_time = next_time
+            elif filter_type in [FilterType.WEEK.value, FilterType.LAST_3_WEEKS.value]:
+                # Daily intervals for week or last 3 weeks
+                start_time = date_threshold
+                end_time = now
+                delta = timedelta(days=1)
+                current_time = start_time
+                while current_time <= end_time:
+                    next_time = current_time + delta
+                    time_filter = Q(created__gte=current_time, created__lt=next_time)
+                    counts = incidents.filter(time_filter).values("severity").annotate(count=Count("id"))
+                    severity_counts = {
+                        "Critical": 0,
+                        "High": 0,
+                        "Medium": 0,
+                        "Low": 0,
+                        "Unknown": 0,
+                    }
+                    for entry in counts:
+                        if entry["severity"] == SlaLevelChoices.P1:
+                            severity_counts["Critical"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P2:
+                            severity_counts["High"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P3:
+                            severity_counts["Medium"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P4:
+                            severity_counts["Low"] = entry["count"]
+                        elif entry["severity"] == 0:
+                            severity_counts["Unknown"] = entry["count"]
+                    incident_ticket_trend_by_severity_graph.append({
+                        "timestamp": current_time.isoformat(),
+                        **severity_counts
+                    })
+                    current_time = next_time
+            elif filter_type in [FilterType.MONTH.value, FilterType.LAST_MONTH.value, FilterType.QUARTER.value, FilterType.LAST_6_MONTHS.value]:
+                # Weekly intervals for month, last month, quarter, or last 6 months
+                start_time = date_threshold
+                end_time = now
+                delta = timedelta(weeks=1)
+                current_time = start_time
+                while current_time <= end_time:
+                    next_time = current_time + delta
+                    time_filter = Q(created__gte=current_time, created__lt=next_time)
+                    counts = incidents.filter(time_filter).values("severity").annotate(count=Count("id"))
+                    severity_counts = {
+                        "Critical": 0,
+                        "High": 0,
+                        "Medium": 0,
+                        "Low": 0,
+                        "Unknown": 0,
+                    }
+                    for entry in counts:
+                        if entry["severity"] == SlaLevelChoices.P1:
+                            severity_counts["Critical"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P2:
+                            severity_counts["High"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P3:
+                            severity_counts["Medium"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P4:
+                            severity_counts["Low"] = entry["count"]
+                        elif entry["severity"] == 0:
+                            severity_counts["Unknown"] = entry["count"]
+                    incident_ticket_trend_by_severity_graph.append({
+                        "timestamp": current_time.isoformat(),
+                        **severity_counts
+                    })
+                    current_time = next_time
+            elif filter_type == FilterType.YEAR.value:
+                # Monthly intervals for year
+                start_time = date_threshold
+                end_time = now
+                current_time = start_time
+                while current_time <= end_time:
+                    # Move to the first day of the next month
+                    next_time = (current_time.replace(day=1) + timedelta(days=32)).replace(day=1)
+                    time_filter = Q(created__gte=current_time, created__lt=next_time)
+                    counts = incidents.filter(time_filter).values("severity").annotate(count=Count("id"))
+                    severity_counts = {
+                        "Critical": 0,
+                        "High": 0,
+                        "Medium": 0,
+                        "Low": 0,
+                        "Unknown": 0,
+                    }
+                    for entry in counts:
+                        if entry["severity"] == SlaLevelChoices.P1:
+                            severity_counts["Critical"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P2:
+                            severity_counts["High"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P3:
+                            severity_counts["Medium"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P4:
+                            severity_counts["Low"] = entry["count"]
+                        elif entry["severity"] == 0:
+                            severity_counts["Unknown"] = entry["count"]
+                    incident_ticket_trend_by_severity_graph.append({
+                        "timestamp": current_time.isoformat(),
+                        **severity_counts
+                    })
+                    current_time = next_time
+            else:
+                # Default: Daily intervals for last 3 weeks
+                start_time = date_threshold
+                end_time = now
+                delta = timedelta(days=1)
+                current_time = start_time
+                while current_time <= end_time:
+                    next_time = current_time + delta
+                    time_filter = Q(created__gte=current_time, created__lt=next_time)
+                    counts = incidents.filter(time_filter).values("severity").annotate(count=Count("id"))
+                    severity_counts = {
+                        "Critical": 0,
+                        "High": 0,
+                        "Medium": 0,
+                        "Low": 0,
+                        "Unknown": 0,
+                    }
+                    for entry in counts:
+                        if entry["severity"] == SlaLevelChoices.P1:
+                            severity_counts["Critical"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P2:
+                            severity_counts["High"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P3:
+                            severity_counts["Medium"] = entry["count"]
+                        elif entry["severity"] == SlaLevelChoices.P4:
+                            severity_counts["Low"] = entry["count"]
+                        elif entry["severity"] == 0:
+                            severity_counts["Unknown"] = entry["count"]
+                    incident_ticket_trend_by_severity_graph.append({
+                        "timestamp": current_time.isoformat(),
+                        **severity_counts
+                    })
+                    current_time = next_time
+
+            # Add severity data to cards_data
             for severity in severity_data:
-                severity_label = SEVERITY_LABELS.get(severity["severity"], "Unknown")
+                severity_label = SEVERITY_LABELS.get(severity["severity"], "Unknown").replace("P1 - ", "").replace("P2 - ", "").replace("P3 - ", "").replace("P4 - ", "")
                 cards_data.append(
                     {
-                        f"{severity_label} ({severity['severity']})": {
-                            "OPEN TICKET": severity["open_tickets"],
-                            "AVG TIME TO NOTIFY": severity[
-                                "avg_time_to_notify"
-                            ].total_seconds()
-                            / 60
+                        severity_label: {
+                            "open_ticket": severity["open_tickets"],
+                            "avg_time_to_notify": severity["avg_time_to_notify"].total_seconds() / 60
                             if severity["avg_time_to_notify"]
-                            else 0,  # Convert to minutes
-                            "AVG TIME TO ACKNOWLEDGE": severity[
-                                "avg_time_to_acknowledge"
-                            ].total_seconds()
-                            / 60
+                            else 0,
+                            "avg_time_to_acknowledge": severity["avg_time_to_acknowledge"].total_seconds() / 60
                             if severity["avg_time_to_acknowledge"]
-                            else 0,  # Convert to minutes
-                            "AVG TIME TO DETECTION": severity[
-                                "avg_time_to_detection"
-                            ].total_seconds()
-                            / 60
+                            else 0,
+                            "avg_time_to_detection": severity["avg_time_to_detection"].total_seconds() / 60
                             if severity["avg_time_to_detection"]
-                            else 0,  # Convert to minutes
+                            else 0,
                         }
                     }
                 )
 
-            # Return both cards data and incident status graph
+            # Initialize service_request_summary
+            # Calculate open and closed request counts by severity
+            open_counts = DUCortexSOARIncidentFinalModel.objects.filter(
+                filters, status=1
+            ).values("severity").annotate(count=Count("id"))
+            closed_counts = DUCortexSOARIncidentFinalModel.objects.filter(
+                filters, status=2
+            ).values("severity").annotate(count=Count("id"))
+
+            open_severity_counts = {
+                "Critical": 0,
+                "High": 0,
+                "Medium": 0,
+                "Low": 0,
+                "Unknown": 0,
+            }
+            closed_severity_counts = {
+                "Critical": 0,
+                "High": 0,
+                "Medium": 0,
+                "Low": 0,
+                "Unknown": 0,
+            }
+
+            for entry in open_counts:
+                if entry["severity"] == SlaLevelChoices.P1:
+                    open_severity_counts["Critical"] = entry["count"]
+                elif entry["severity"] == SlaLevelChoices.P2:
+                    open_severity_counts["High"] = entry["count"]
+                elif entry["severity"] == SlaLevelChoices.P3:
+                    open_severity_counts["Medium"] = entry["count"]
+                elif entry["severity"] == SlaLevelChoices.P4:
+                    open_severity_counts["Low"] = entry["count"]
+                elif entry["severity"] == 0:
+                    open_severity_counts["Unknown"] = entry["count"]
+
+            for entry in closed_counts:
+                if entry["severity"] == SlaLevelChoices.P1:
+                    closed_severity_counts["Critical"] = entry["count"]
+                elif entry["severity"] == SlaLevelChoices.P2:
+                    closed_severity_counts["High"] = entry["count"]
+                elif entry["severity"] == SlaLevelChoices.P3:
+                    closed_severity_counts["Medium"] = entry["count"]
+                elif entry["severity"] == SlaLevelChoices.P4:
+                    closed_severity_counts["Low"] = entry["count"]
+                elif entry["severity"] == 0:
+                    closed_severity_counts["Unknown"] = entry["count"]
+
+            service_request_summary = {
+                "created_request_count": DUCortexSOARIncidentFinalModel.objects.filter(
+                    filters
+                ).count(),
+                "closed_request_count": closed_incidents,
+                "open_requests": open_severity_counts,
+                "closed_requests": closed_severity_counts,
+            }
+
+
+            # Return response
             return Response(
                 {
                     "cards_data": cards_data,
                     "incident_status_graph": incident_status_graph,
+                    "incident_ticket_details": incident_ticket_details,
+                    "incident_ticket_trend_by_severity_graph": incident_ticket_trend_by_severity_graph,
+                    "service_request_summary": service_request_summary,
                 },
                 status=status.HTTP_200_OK,
             )
