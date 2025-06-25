@@ -3,6 +3,7 @@ import time
 from celery import shared_task
 from loguru import logger
 
+from common.constants import IBMQradarConstants
 from common.modules.ibm_qradar import IBMQradar
 from integration.models import (
     CredentialTypes,
@@ -220,6 +221,8 @@ def sync_eps_for_domain(
             if transformed_data:
                 ibm_qradar._insert_eps(transformed_data)
 
+                logger.info("Completed QRadarTasks.sync_eps_for_domain() task")
+
 
 @shared_task
 def sync_eps_for_domain_for_admin(
@@ -230,19 +233,27 @@ def sync_eps_for_domain_for_admin(
     with IBMQradar(
         username=username, password=password, ip_address=ip_address, port=port
     ) as ibm_qradar:
-        logger.info("Running QRadarTasks.sync_eps_for_domain() task")
+        logger.info("Running QRadarTasks.sync_eps_for_domain_for_admin() task")
         for domain_id in db_ids:
-            logger.info(f"Syncing EPS for domain {domain_id}")
-            query = "SELECT DOMAINNAME(domainid)   AS Customer, SUM(eventcount) / ( (MAX(endtime) - MIN(starttime)) / 1000 ) AS EPS FROM events GROUP BY domainid ORDER BY EPS DESC LAST 1 HOURS"
-            search_id = ibm_qradar._get_do_aql_query(query=query)
+            logger.info(f"Syncing Customer EPS for domain {domain_id}")
+            search_id = ibm_qradar._get_do_aql_query(
+                query=IBMQradarConstants.AQL_QUERY_FOR_ADMIN_DASHBOARD
+            )
             flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
             if not flag:
                 logger.warning(
-                    f"IBM QRadar EPS sync failed for domain {domain_id} for integration {integration_id}"
+                    f"IBM QRadar Customer EPS sync failed for integration {integration_id}"
                 )
                 continue
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
-            print(data)
+            transformed_data = ibm_qradar._transform_customer_eps_data(
+                data_list=data, integration=integration_id
+            )
+            if transformed_data:
+                ibm_qradar._insert_customer_eps(transformed_data)
+                logger.success(
+                    f"IBM QRadar Customer EPS sync completed for integration {integration_id}"
+                )
 
 
 @shared_task
