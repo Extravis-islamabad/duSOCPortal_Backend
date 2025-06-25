@@ -1073,10 +1073,21 @@ class CustomerEPSSerializer(serializers.ModelSerializer):
     qradar_tenant_name = serializers.CharField(
         source="qradar_tenant.name", read_only=True
     )
+    qradar_tenant_id = serializers.IntegerField(
+        source="qradar_tenant.id", read_only=True
+    )
+    qradar_tenant_db_id = serializers.IntegerField(
+        source="qradar_tenant.db_id", read_only=True
+    )
 
     class Meta:
         model = CustomerEPS
-        fields = ["customer", "eps", "qradar_tenant_name"]
+        fields = [
+            "eps",
+            "qradar_tenant_id",
+            "qradar_tenant_db_id",
+            "qradar_tenant_name",
+        ]
 
 
 class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
