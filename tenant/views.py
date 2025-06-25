@@ -4833,6 +4833,7 @@ class AllIncidentsView(APIView):
 #                 }
 #             )
 
+
 #         except Exception as e:
 #             logger.error(f"Error in SLAIncidentsView:{str(e)}")
 #             return Response(
@@ -4933,7 +4934,9 @@ class SLAIncidentsView(APIView):
                     filter_type_enum = FilterType(filter_type_value)
                 except (ValueError, KeyError):
                     return Response(
-                        {"error": f"Invalid filter_type. Must be one of {[f.value for f in FilterType]}."},
+                        {
+                            "error": f"Invalid filter_type. Must be one of {[f.value for f in FilterType]}."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
