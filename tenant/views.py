@@ -3664,8 +3664,30 @@ class EPSCountValuesByDomainAPIView(APIView):
                 )
 
             eps_entries = IBMQradarEPS.objects.filter(domain__in=qradar_tenant_ids)
-            serializer = IBMQradarEPSSerializer(eps_entries, many=True)
-            return Response(serializer.data, status=200)
+            serializer = IBMQradarEPSSerializer(
+                eps_entries, many=True, context={"request": request}
+            )
+
+            mapping = TenantQradarMapping.objects.filter(
+                tenant__tenant=request.user
+            ).first()
+
+            contracted_volume = mapping.contracted_volume if mapping else None
+            contracted_volume_type = mapping.contracted_volume_type if mapping else None
+            contracted_volume_type_display = (
+                mapping.get_contracted_volume_type_display() if mapping else None
+            )
+
+            # Step 4: Return combined response
+            return Response(
+                {
+                    "contracted_volume": contracted_volume,
+                    "contracted_volume_type": contracted_volume_type,
+                    "contracted_volume_type_display": contracted_volume_type_display,
+                    "eps_data": serializer.data,
+                },
+                status=200,
+            )
         except Exception:
             return Response(
                 {"error": "Invalid tenant or related data not found."},
