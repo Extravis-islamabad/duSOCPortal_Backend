@@ -114,6 +114,7 @@ class IBMQradarConstants:
     )
     IBM_OFFENSES_ENDPOINT = "api/siem/offenses"
     IBM_EPS_ENDPOINT = "api/ariel/searches"
+    AQL_QUERY_FOR_ADMIN_DASHBOARD = "SELECT DOMAINNAME(domainid)   AS Customer, SUM(eventcount) / ( (MAX(endtime) - MIN(starttime)) / 1000 ) AS EPS FROM events GROUP BY domainid ORDER BY EPS DESC LAST 1 HOURS"
 
 
 class ITSMConstants:
