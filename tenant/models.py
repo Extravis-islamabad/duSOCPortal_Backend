@@ -153,6 +153,22 @@ class IBMQradarEPS(models.Model):
         db_table = "du_ibm_qradar_eps"
 
 
+class CustomerEPS(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    customer = models.CharField(max_length=255, unique=True)
+    eps = models.FloatField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "customer_eps"
+
+    def __str__(self):
+        return f"{self.customer} - EPS: {self.eps}"
+
+
 class IBMQradarOffense(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)  # Maps to 'id' in JSON
