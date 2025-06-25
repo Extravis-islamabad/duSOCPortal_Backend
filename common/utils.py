@@ -65,6 +65,21 @@ class DBMappings:
         """
         return dict(model_class.objects.values_list("db_id", "id"))
 
+    @staticmethod
+    def get_name_to_id_mapping(model_class):
+        """
+        Returns a dictionary mapping 'name' to 'id' for the given model class.
+        The model must have 'name' and 'id' fields.
+
+        :param model_class: A Django model class
+        :return: Dictionary {name: id}
+        """
+        return dict(
+            model_class.objects.filter(name__isnull=False)
+            .exclude(name__exact="")
+            .values_list("name", "id")
+        )
+
 
 class LDAP:
     @staticmethod
