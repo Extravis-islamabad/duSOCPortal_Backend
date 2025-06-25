@@ -222,6 +222,30 @@ def sync_eps_for_domain(
 
 
 @shared_task
+def sync_eps_for_domain_for_admin(
+    username: str, password: str, ip_address: str, port: int, integration_id: int
+):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_eps_for_domain() task")
+        for domain_id in db_ids:
+            logger.info(f"Syncing EPS for domain {domain_id}")
+            query = "SELECT DOMAINNAME(domainid)   AS Customer, SUM(eventcount) / ( (MAX(endtime) - MIN(starttime)) / 1000 ) AS EPS FROM events GROUP BY domainid ORDER BY EPS DESC LAST 1 HOURS"
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
+            if not flag:
+                logger.warning(
+                    f"IBM QRadar EPS sync failed for domain {domain_id} for integration {integration_id}"
+                )
+                continue
+            data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+            print(data)
+
+
+@shared_task
 def sync_ibm_qradar_data():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
