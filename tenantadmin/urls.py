@@ -2,6 +2,7 @@ from django.urls import path
 
 from tenantadmin.views import (
     AllTenantsAPIView,
+    CustomerEPSAPIView,
     DeleteTenantByCompanyView,
     DistinctCompaniesAPIView,
     NonActiveTenantsAPIView,
@@ -58,4 +59,5 @@ urlpatterns = [
     path("sync_itsm/", SyncITSMDataAPIView.as_view(), name="sync-itsm"),
     path("volume-types/", VolumeTypeChoicesAPIView.as_view(), name="volume-types"),
     path("sla_levels/", SlaLevelsAPIView.as_view(), name="sla_levels"),
+    path("customer_eps/", CustomerEPSAPIView.as_view(), name="customer-eps"),
 ]

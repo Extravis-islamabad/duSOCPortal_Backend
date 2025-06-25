@@ -13,9 +13,10 @@ from common.constants import PaginationConstants
 from tenant.cortex_soar_tasks import sync_soar_data
 from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
 from tenant.itsm_tasks import sync_itsm
-from tenant.models import SlaLevelChoices, Tenant, VolumeTypeChoices
+from tenant.models import CustomerEPS, SlaLevelChoices, Tenant, VolumeTypeChoices
 from tenant.serializers import (
     AllTenantDetailSerializer,
+    CustomerEPSSerializer,
     TenantCreateSerializer,
     TenantDetailSerializer,
     TenantUpdateSerializer,
@@ -360,3 +361,17 @@ class SlaLevelsAPIView(APIView):
         return Response(
             [{"value": level.value, "label": level.label} for level in SlaLevelChoices]
         )
+
+
+class CustomerEPSAPIView(APIView):
+    """
+    APIView to return EPS data with customer name and QRadar tenant name.
+    """
+
+    permission_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        queryset = CustomerEPS.objects.select_related("qradar_tenant").all()
+        serializer = CustomerEPSSerializer(queryset, many=True)
+        return Response(serializer.data)
