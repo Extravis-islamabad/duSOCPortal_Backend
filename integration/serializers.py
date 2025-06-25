@@ -132,7 +132,7 @@ class IntegrationSerializer(serializers.ModelSerializer):
                     ip_address=credentials.get("ip_address"),
                     port=credentials.get("port"),
                 ) as ibm_qradar:
-                    if not ibm_qradar.test_integration():
+                    if not ibm_qradar.test_integration(timeout=4):
                         raise serializers.ValidationError(
                             "QRadar integration is not accessible."
                         )
@@ -151,7 +151,7 @@ class IntegrationSerializer(serializers.ModelSerializer):
                     port=credentials.get("port"),
                     token=credentials.get("api_key"),
                 ) as itsm:
-                    if not itsm._get_accounts():
+                    if not itsm._get_accounts(timeout=4):
                         raise serializers.ValidationError(
                             "ManageEngine integration is not accessible."
                         )
@@ -170,7 +170,7 @@ class IntegrationSerializer(serializers.ModelSerializer):
                     port=credentials.get("port"),
                     token=credentials.get("api_key"),
                 ) as soar:
-                    if not soar._get_accounts():
+                    if not soar._get_accounts(timeout=4):
                         raise serializers.ValidationError(
                             "Cortex SOAR integration is not accessible."
                         )
@@ -188,7 +188,7 @@ class IntegrationSerializer(serializers.ModelSerializer):
                     secret_key=credentials.get("secret_key"),
                     access_key=credentials.get("access_key"),
                 ) as cyware:
-                    respomse = cyware.get_alert_list()
+                    respomse = cyware.get_alert_list(timeout=4)
                     if respomse.status_code != 200:
                         raise serializers.ValidationError(
                             "Cyware integration is not accessible."
