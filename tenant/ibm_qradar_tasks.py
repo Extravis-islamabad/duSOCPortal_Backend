@@ -314,3 +314,10 @@ def sync_ibm():
             port=result.port,
             integration_id=result.integration.id,
         )
+        sync_eps_for_domain_for_admin(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
