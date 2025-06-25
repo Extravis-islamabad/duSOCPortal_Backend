@@ -171,13 +171,9 @@ class FilterType(Enum):
     MONTH = 3
     YEAR = 4
     QUARTER = 5
-    LAST_6_MONTHS = 6 # Represents "Last 6 months"
+    LAST_6_MONTHS = 6  # Represents "Last 6 months"
     LAST_3_WEEKS = 7  # Represents "Last 3 weeks"
-    LAST_MONTH = 8     # Repre
-    
-
-
-    
+    LAST_MONTH = 8  # Repre
 
 
 SEVERITY_LABELS = {0: "Unknown", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
