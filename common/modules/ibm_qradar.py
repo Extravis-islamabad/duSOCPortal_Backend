@@ -9,6 +9,7 @@ from requests.auth import HTTPBasicAuth
 from common.constants import IBMQradarConstants, SSLConstants
 from common.utils import DBMappings
 from tenant.models import (
+    CustomerEPS,
     DuIbmQradarTenants,
     IBMQradarAssests,
     IBMQradarEPS,
@@ -959,4 +960,69 @@ class IBMQradar:
                 )
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._insert_eps(): {str(e)}")
+            transaction.rollback()
+
+    def _transform_customer_eps_data(self, data_list, integration):
+        """
+        Transforms raw EPS data into CustomerEPS model-ready dicts.
+
+        :param data_list: List of dicts with 'Customer' and 'EPS'
+        :param integration: Integration instance
+        :return: List of dictionaries for CustomerEPS model creation
+        """
+        name_to_id_map = DBMappings.get_name_to_id_mapping(DuIbmQradarTenants)
+        transformed = []
+
+        for entry in data_list:
+            customer = entry.get("Customer")
+            eps = entry.get("EPS")
+
+            if not customer or eps is None:
+                logger.warning(f"Skipping invalid EPS data: {entry}")
+                continue
+
+            tenant_id = name_to_id_map.get(customer)
+            if not tenant_id:
+                logger.warning(
+                    f"No matching QRadar tenant found for customer: {customer}"
+                )
+                continue
+
+            transformed.append(
+                {
+                    "customer": customer.strip(),
+                    "eps": eps,
+                    "qradar_tenant_id": tenant_id,
+                    "integration_id": integration,
+                }
+            )
+
+        return transformed
+
+    def _insert_customer_eps(self, data):
+        """
+        Inserts or updates CustomerEPS records in bulk.
+
+        :param data: A list of dictionaries (transformed EPS data)
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._insert_customer_eps() started : {start}")
+
+        records = [CustomerEPS(**item) for item in data]
+        logger.info(f"Inserting CustomerEPS records: {len(records)}")
+
+        try:
+            with transaction.atomic():
+                CustomerEPS.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=["eps", "qradar_tenant", "integration"],
+                    unique_fields=["customer"],
+                )
+                logger.success(f"Inserted CustomerEPS records: {len(records)}")
+                logger.success(
+                    f"IBMQRadar._insert_customer_eps() took: {time.time() - start:.2f} seconds"
+                )
+        except Exception as e:
+            logger.error(f"Error in IBMQRadar._insert_customer_eps(): {str(e)}")
             transaction.rollback()
