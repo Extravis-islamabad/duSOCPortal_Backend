@@ -11,7 +11,7 @@ from integration.models import (
     IntegrationTypes,
     SiemSubTypes,
 )
-from tenant.models import DuIbmQradarTenants, IBMQradarEPS
+from tenant.models import CustomerEPS, DuIbmQradarTenants, IBMQradarEPS
 
 
 @shared_task
@@ -314,6 +314,17 @@ def sync_ibm():
             port=result.port,
             integration_id=result.integration.id,
         )
+
+
+@shared_task
+def sync_ibm_admin_eps():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+    CustomerEPS.objects.all().delete()
+    for result in results:
         sync_eps_for_domain_for_admin(
             username=result.username,
             password=result.password,
