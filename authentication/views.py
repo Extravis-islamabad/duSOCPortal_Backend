@@ -342,9 +342,27 @@ class LDAPGroupUsersView(APIView):
 
     def get(self, request, group_name):
         try:
-            users = LDAP.fetch_users_in_group(group_name)
+            ldap_users = LDAP.fetch_users_in_group(group_name)
+            ldap_usernames = {user["username"].lower() for user in ldap_users}
+            existing_usernames = set(
+                User.objects.filter(username__in=ldap_usernames).values_list(
+                    "username", flat=True
+                )
+            )
+            new_users = [
+                user
+                for user in ldap_users
+                if user["username"] not in existing_usernames
+            ]
+            if not new_users:
+                return Response(
+                    {
+                        "error": "All users of this group are already assigned to some tenants."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             return Response(
-                {"group": group_name, "users": users}, status=status.HTTP_200_OK
+                {"group": group_name, "users": new_users}, status=status.HTTP_200_OK
             )
         except Exception as e:
             return Response(
