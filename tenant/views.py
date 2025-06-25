@@ -36,7 +36,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_requests_for_soar
+from tenant.itsm_tasks import sync_itsm_tenants
 from tenant.models import (
     Alert,
     CywareAlertDetails,
@@ -209,7 +209,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_requests_for_soar.delay()
+        sync_itsm_tenants.delay()
         # sync_threat_intel.delay()
         # sync_threat_intel_for_tenants.delay()
         # sync_threat_alert_details.delay()
