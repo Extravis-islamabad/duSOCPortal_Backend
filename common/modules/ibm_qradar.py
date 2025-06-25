@@ -799,6 +799,41 @@ class IBMQradar:
         search_id = response.json().get("search_id")
         return search_id
 
+    def _get_do_aql_query(self, query: str):
+        """
+        Execute an AQL query to get the EPS by domain ID.
+
+        The query will be executed against the IBM QRadar API and the results will be
+        returned as a search ID which can be used to retrieve the results.
+
+        :param domain_id: The domain ID to query.
+        :return: The search ID which can be used to retrieve the results.
+        """
+        endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_EPS_ENDPOINT}"
+        try:
+            response = requests.post(
+                endpoint,
+                auth=HTTPBasicAuth(
+                    self.username,
+                    self.password,
+                ),
+                data={"query_expression": query},
+                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                timeout=SSLConstants.TIMEOUT,
+            )
+        except Exception as e:
+            logger.error(f"An error occurred in IBMQRadar._get_eps_domain(): {str(e)}")
+            return
+
+        if response.status_code not in [200, 201]:
+            logger.warning(
+                f"IBMQRadar._get_eps_domain() return the status code {response.status_code}"
+            )
+            return
+
+        search_id = response.json().get("search_id")
+        return search_id
+
     def _check_eps_results_by_search_id(self, search_id: int):
         """
         Returns the results for a given search ID.
