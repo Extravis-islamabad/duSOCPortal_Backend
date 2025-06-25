@@ -1737,7 +1737,7 @@ class IncidentDetailView(APIView):
             # Fetch incident using numeric incident_id
             incident = (
                 DUCortexSOARIncidentFinalModel.objects.filter(
-                    id=incident_id, cortex_soar_tenant__in=soar_ids
+                    id=incident_id,  # cortex_soar_tenant__in=soar_ids
                 )
                 .values(
                     "id",
@@ -1927,7 +1927,9 @@ class IncidentDetailView(APIView):
                         else "Unknown"
                     ),
                     "creator": "System",  # No creator field in schema
-                    "assignee": incident["owner"],
+                    "assignee": (
+                        "N/A" if incident["owner"] == " " else incident["owner"]
+                    ),
                     "description": incident["name"].strip().split(" ", 1)[1],
                     "customFields": {
                         "phase": incident["incident_phase"] or "Detection",
@@ -1955,7 +1957,7 @@ class IncidentDetailView(APIView):
             return Response(response, status=status.HTTP_200_OK)
 
         except Exception as e:
-            logger.error("Error in IncidentDetailView: %s", str(e))
+            logger.error(f"Error in IncidentDetailView: {str(e)}")
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
