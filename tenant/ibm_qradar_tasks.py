@@ -258,84 +258,6 @@ def sync_eps_for_domain_for_admin(
 
 
 @shared_task
-def sync_ibm_qradar_data():
-    results = IntegrationCredentials.objects.filter(
-        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
-        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
-        credential_type=CredentialTypes.USERNAME_PASSWORD,
-    )
-
-    for result in results:
-        sync_qradar_tenants.delay(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
-        sync_event_collectors.delay(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
-        sync_event_log_assets.delay(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
-        sync_event_log_sources_types.delay()
-        sync_offenses.delay()
-        IBMQradarEPS.objects.all().delete()
-        sync_eps_for_domain.delay(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
-
-
-@shared_task
-def sync_ibm():
-    results = IntegrationCredentials.objects.filter(
-        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
-        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
-        credential_type=CredentialTypes.USERNAME_PASSWORD,
-    )
-    IBMQradarEPS.objects.all().delete()
-    for result in results:
-        sync_eps_for_domain(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
-
-
-@shared_task
-def sync_ibm_admin_eps():
-    results = IntegrationCredentials.objects.filter(
-        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
-        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
-        credential_type=CredentialTypes.USERNAME_PASSWORD,
-    )
-    CustomerEPS.objects.all().delete()
-    for result in results:
-        sync_eps_for_domain_for_admin(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
-
-
-@shared_task
 def sync_total_events_for_domain(
     username: str, password: str, ip_address: str, port: int, integration_id: int
 ):
@@ -395,3 +317,88 @@ def sync_total_events_for_domain(
             logger.info(
                 f"IBM QRadar Total Events sync completed for integration {integration_id}"
             )
+
+
+@shared_task
+def sync_ibm_qradar_data():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    for result in results:
+        sync_qradar_tenants.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+        sync_event_collectors.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+        sync_event_log_assets.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+        sync_event_log_sources_types.delay()
+        sync_offenses.delay()
+        IBMQradarEPS.objects.all().delete()
+        sync_eps_for_domain.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+
+@shared_task
+def sync_ibm():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+    IBMQradarEPS.objects.all().delete()
+    for result in results:
+        sync_eps_for_domain(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+        sync_total_events_for_domain(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+
+@shared_task
+def sync_ibm_admin_eps():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+    CustomerEPS.objects.all().delete()
+    for result in results:
+        sync_eps_for_domain_for_admin(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
