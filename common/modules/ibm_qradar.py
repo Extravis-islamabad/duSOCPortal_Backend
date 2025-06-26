@@ -1037,6 +1037,8 @@ class IBMQradar:
         :param domain_id: QRadar domain ID
         :return: Dictionary for TotalEvents model creation
         """
+        print(data)
+        print(type(data))
         total_events = data.get("total_events")
         if total_events is None:
             logger.warning(f"Invalid total events data for domain {domain_id}: {data}")
