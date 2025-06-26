@@ -4787,6 +4787,7 @@ class SLAIncidentsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class SLAComplianceView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4893,7 +4894,9 @@ class SLAComplianceView(APIView):
 
                 # Calculate TTA compliance
                 if incident.incident_tta and incident.created:
-                    tta_delta = (incident.incident_tta - incident.created).total_seconds() / 60
+                    tta_delta = (
+                        incident.incident_tta - incident.created
+                    ).total_seconds() / 60
                     if tta_delta <= sla_metric.tta_minutes:
                         met_sla_count += 1
                         tta_met_count += 1
@@ -4917,14 +4920,22 @@ class SLAComplianceView(APIView):
                 incident_met_percentage = 0.0
                 total_breach_incident_percentage = 0.0
             else:
-                overall_compliance_percentage = (met_sla_count / total_incident_count) * 100
+                overall_compliance_percentage = (
+                    met_sla_count / total_incident_count
+                ) * 100
                 incident_met_percentage = (tta_met_count / total_incident_count) * 100
-                total_breach_incident_percentage = (breached_sla_count / total_incident_count) * 100
+                total_breach_incident_percentage = (
+                    breached_sla_count / total_incident_count
+                ) * 100
 
             # Format percentages
-            overall_compliance_percentage = "{:.2f}".format(overall_compliance_percentage)
+            overall_compliance_percentage = "{:.2f}".format(
+                overall_compliance_percentage
+            )
             incident_met_percentage = "{:.2f}".format(incident_met_percentage)
-            total_breach_incident_percentage = "{:.2f}".format(total_breach_incident_percentage)
+            total_breach_incident_percentage = "{:.2f}".format(
+                total_breach_incident_percentage
+            )
 
             # Step 10: Prepare response
             sla_compliance = {
@@ -4935,14 +4946,15 @@ class SLAComplianceView(APIView):
                 "total_breach_incident_percentage": total_breach_incident_percentage,
             }
 
-            logger.debug("SLA Compliance: %s", sla_compliance)
             return Response(sla_compliance)
 
         except Exception as e:
-            logger.error("Error in SLAComplianceView: %s", str(e))
+            logger.error(f"Error in SLAComplianceView: {str(e)}")
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 class SLASeverityIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
