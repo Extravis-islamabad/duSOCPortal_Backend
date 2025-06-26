@@ -1,3 +1,4 @@
+from datetime import datetime
 import time
 
 from celery import shared_task
@@ -332,3 +333,70 @@ def sync_ibm_admin_eps():
             port=result.port,
             integration_id=result.integration.id,
         )
+
+
+
+
+
+@shared_task
+def sync_total_events_for_domain(
+    username: str, password: str, ip_address: str, port: int, integration_id: int
+):
+    """
+    Syncs total event counts for each domain using AQL query and stores in TotalEvents model.
+
+    :param username: QRadar username
+    :param password: QRadar password
+    :param ip_address: QRadar IP address
+    :param port: QRadar port
+    :param integration_id: Integration ID
+    :param start_date: Query start date (default: '2025-04-01 00:00:00')
+    :param stop_date: Query stop date (default: '2025-04-30 23:59:59')
+    """
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+    transformed_data = []
+    today = datetime.today().date()
+ 
+    # Combine with time.min and time.max
+    min_dt = datetime.combine(today, time.min)  # 00:00:00
+    max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
+    
+    # Format as "DD-MM-YYYY HH:MM:SS"
+    start_date= min_dt.strftime("%d-%m-%Y %H:%M:%S")
+    end_date = max_dt.strftime("%d-%m-%Y %H:%M:%S")
+ 
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_total_events_for_domain() task")
+        for domain_id in db_ids:
+            logger.info(f"Syncing Total Events for domain {domain_id}")
+            aql_query = f"""
+                SELECT SUM(eventcount) AS total_events
+                FROM events
+                WHERE domainid = {domain_id}
+                START PARSEDATETIME('{start_date}')
+                STOP PARSEDATETIME('{end_date}')
+            """
+            search_id = ibm_qradar._get_do_aql_query(query=aql_query)
+            flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
+            if not flag:
+                logger.warning(
+                    f"IBM QRadar Total Events sync failed for domain {domain_id}, integration {integration_id}"
+                )
+                continue
+            data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+            transformed = ibm_qradar._transform_total_events_data(
+                data=data, integration=integration_id, domain_id=domain_id
+            )
+            if transformed:
+                transformed_data.append(transformed)
+                logger.info(
+                    f"IBM QRadar Total Events data transformed for domain {domain_id}"
+                )
+
+        if transformed_data:
+            ibm_qradar._insert_total_events(transformed_data)
+            logger.info(
+                f"IBM QRadar Total Events sync completed for integration {integration_id}"
+            )

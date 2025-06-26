@@ -16,6 +16,7 @@ from tenant.models import (
     IBMQradarEventCollector,
     IBMQradarLogSourceTypes,
     IBMQradarOffense,
+    TotalEvents,
 )
 
 
@@ -1026,3 +1027,74 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error in IBMQRadar._insert_customer_eps(): {str(e)}")
             transaction.rollback()
+
+    
+    
+    
+    def _transform_total_events_data(self, data, integration, domain_id):
+        """
+        Transforms raw total events data into TotalEvents model-ready dicts.
+
+        :param data: Dict with 'total_events' (e.g., {'total_events': 542657416.0})
+        :param integration: Integration ID
+        :param domain_id: QRadar domain ID
+        :return: Dictionary for TotalEvents model creation
+        """
+        total_events = data.get("total_events")
+        if total_events is None:
+            logger.warning(f"Invalid total events data for domain {domain_id}: {data}")
+            return None
+
+        tenant_id = self._get_tenant_id_for_domain(domain_id)
+        if not tenant_id:
+            logger.warning(f"No matching QRadar tenant found for domain: {domain_id}")
+            return None
+
+        return {
+            "domain_id": domain_id,
+            "total_events": total_events,
+            "qradar_tenant_id": tenant_id,
+            "integration_id": integration,
+        }
+
+    def _insert_total_events(self, data_list):
+        """
+        Inserts or updates TotalEvents records in bulk.
+
+        :param data_list: List of dictionaries (transformed total events data)
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._insert_total_events() started: {start}")
+
+        records = [TotalEvents(**item) for item in data_list if item]
+        logger.info(f"Inserting TotalEvents records: {len(records)}")
+
+        try:
+            with transaction.atomic():
+                TotalEvents.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=["total_events", "qradar_tenant_id", "integration_id"],
+                    unique_fields=["domain_id", "integration_id"],
+                )
+                logger.info(f"Inserted TotalEvents records: {len(records)}")
+                logger.info(
+                    f"IBMQRadar._insert_total_events() took: {time.time() - start:.2f} seconds"
+                )
+        except Exception as e:
+            logger.error(f"Error in IBMQRadar._insert_total_events(): {str(e)}")
+            transaction.rollback()
+
+    
+    def _get_tenant_id_for_domain(self, domain_id):
+            """
+            Maps QRadar domain ID to DuIbmQradarTenants ID.
+
+            :param domain_id: QRadar domain ID
+            :return: Corresponding tenant ID or None
+            """
+            try:
+                tenant = DuIbmQradarTenants.objects.get(db_id=domain_id)
+                return tenant.id
+            except DuIbmQradarTenants.DoesNotExist:
+                return None
