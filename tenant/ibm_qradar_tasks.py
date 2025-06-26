@@ -1,5 +1,4 @@
-import time
-from datetime import datetime
+from datetime import datetime, time
 
 from celery import shared_task
 from loguru import logger
