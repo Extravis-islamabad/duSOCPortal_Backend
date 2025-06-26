@@ -1028,9 +1028,6 @@ class IBMQradar:
             logger.error(f"Error in IBMQRadar._insert_customer_eps(): {str(e)}")
             transaction.rollback()
 
-    
-    
-    
     def _transform_total_events_data(self, data, integration, domain_id):
         """
         Transforms raw total events data into TotalEvents model-ready dicts.
@@ -1045,13 +1042,13 @@ class IBMQradar:
             logger.warning(f"Invalid total events data for domain {domain_id}: {data}")
             return None
 
-        tenant_id = self._get_tenant_id_for_domain(domain_id)
+        mappings = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = mappings.get(domain_id)
         if not tenant_id:
             logger.warning(f"No matching QRadar tenant found for domain: {domain_id}")
             return None
 
         return {
-            "domain_id": domain_id,
             "total_events": total_events,
             "qradar_tenant_id": tenant_id,
             "integration_id": integration,
@@ -1074,7 +1071,11 @@ class IBMQradar:
                 TotalEvents.objects.bulk_create(
                     records,
                     update_conflicts=True,
-                    update_fields=["total_events", "qradar_tenant_id", "integration_id"],
+                    update_fields=[
+                        "total_events",
+                        "qradar_tenant_id",
+                        "integration_id",
+                    ],
                     unique_fields=["domain_id", "integration_id"],
                 )
                 logger.info(f"Inserted TotalEvents records: {len(records)}")
@@ -1084,17 +1085,3 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error in IBMQRadar._insert_total_events(): {str(e)}")
             transaction.rollback()
-
-    
-    def _get_tenant_id_for_domain(self, domain_id):
-            """
-            Maps QRadar domain ID to DuIbmQradarTenants ID.
-
-            :param domain_id: QRadar domain ID
-            :return: Corresponding tenant ID or None
-            """
-            try:
-                tenant = DuIbmQradarTenants.objects.get(db_id=domain_id)
-                return tenant.id
-            except DuIbmQradarTenants.DoesNotExist:
-                return None
