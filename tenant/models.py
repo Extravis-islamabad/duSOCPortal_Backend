@@ -814,13 +814,9 @@ class SoarTenantSlaMetric(models.Model):
         )
 
 
-
-
-
 class TotalEvents(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
-    domain_id = models.IntegerField()
     total_events = models.FloatField()
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -828,7 +824,7 @@ class TotalEvents(models.Model):
 
     class Meta:
         db_table = "total_events"
-        unique_together = ['domain_id', 'integration']
+        unique_together = ["qradar_tenant", "integration"]
 
     def __str__(self):
-        return f"Domain {self.domain_id} - Total Events: {self.total_events}"
+        return f"{self.qradar_tenant} - {self.integration}"
