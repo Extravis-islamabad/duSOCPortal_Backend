@@ -5309,6 +5309,8 @@ class SLASeverityMetricsView(APIView):
 
 
 
+
+
 class IncidentReportView(APIView):
     def get(self, request):
         try:
@@ -5438,11 +5440,11 @@ class IncidentReportView(APIView):
             cards_data = []
 
             # Total incidents card
-            total_incidents = incidents.count()
+            total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters).count()
 
             # Calculate change percentage for total incidents
-            current_filter = Q(created__gte=date_threshold)
-            previous_filter = Q(created__gte=comparison_period, created__lt=date_threshold)
+            current_filter = Q(cortex_soar_tenant_id__in=soar_ids, created__gte=date_threshold)
+            previous_filter = Q(cortex_soar_tenant_id__in=soar_ids, created__gte=comparison_period, created__lt=date_threshold)
 
             if severity_filter:
                 current_filter &= Q(severity=severity_value)
@@ -5453,18 +5455,19 @@ class IncidentReportView(APIView):
 
             if previous_period_count > 0:
                 change_percent = ((current_period_count - previous_period_count) / previous_period_count) * 100
+                change_direction = "up" if current_period_count >= previous_period_count else "down"
             else:
                 change_percent = 0 if current_period_count == 0 else 100
+                change_direction = "up" if current_period_count > 0 else "up"
 
-            change_direction = "up" if change_percent >= 0 else "down"
-            change_percent = round(abs(change_percent), 2)
+            change_percent = round(change_percent, 2)
 
             # Get alert count for open tickets
-            alert_filter = Q(status=1)
+            alert_filter = Q(cortex_soar_tenant_id__in=soar_ids, status=1, created__gte=date_threshold)
             if severity_filter:
                 alert_filter &= Q(severity=severity_value)
 
-            alert_count = DUCortexSOARIncidentFinalModel.objects.filter(alert_filter, created__gte=date_threshold).count()
+            alert_count = DUCortexSOARIncidentFinalModel.objects.filter(alert_filter).count()
 
             # Add total incidents card
             cards_data.append({
@@ -5508,26 +5511,38 @@ class IncidentReportView(APIView):
                 })
 
                 # Calculate total count and change percentage for all severities
-                current_severity_filter = Q(created__gte=date_threshold, severity=severity_value)
-                if severity_filter and severity_value == int(severity_filter):
-                    current_severity_filter &= Q(severity=severity_value)
+                current_severity_filter = Q(cortex_soar_tenant_id__in=soar_ids, created__gte=date_threshold, severity=severity_value)
+                if severity_filter:
+                    try:
+                        if severity_value == int(severity_filter):
+                            current_severity_filter &= Q(severity=severity_value)
+                        else:
+                            current_severity_filter &= Q(severity=severity_value)
+                    except ValueError:
+                        pass  # Skip severity filter if invalid
                 total_count = DUCortexSOARIncidentFinalModel.objects.filter(current_severity_filter).count()
 
                 # Calculate total incidents for the previous period
-                previous_severity_filter = Q(created__gte=comparison_period, created__lt=date_threshold, severity=severity_value)
-                if severity_filter and severity_value == int(severity_filter):
-                    previous_severity_filter &= Q(severity=severity_value)
+                previous_severity_filter = Q(cortex_soar_tenant_id__in=soar_ids, created__gte=comparison_period, created__lt=date_threshold, severity=severity_value)
+                if severity_filter:
+                    try:
+                        if severity_value == int(severity_filter):
+                            previous_severity_filter &= Q(severity=severity_value)
+                        else:
+                            previous_severity_filter &= Q(severity=severity_value)
+                    except ValueError:
+                        pass  # Skip severity filter if invalid
                 previous_count = DUCortexSOARIncidentFinalModel.objects.filter(previous_severity_filter).count()
 
-                # Calculate change percentage
+                # Calculate change percentage and direction
                 if previous_count > 0:
                     change_percent_severity = ((total_count - previous_count) / previous_count) * 100
+                    change_direction_severity = "up" if total_count >= previous_count else "down"
                 else:
                     change_percent_severity = 0 if total_count == 0 else 100
+                    change_direction_severity = "up" if total_count > 0 else "up"
 
-                # Determine change direction
-                change_direction_severity = "up" if change_percent_severity >= 0 else "down"
-                change_percent_severity = round(abs(change_percent_severity), 2)
+                change_percent_severity = round(change_percent_severity, 2)
 
                 # Create the card data
                 cards_data.append({
@@ -5542,57 +5557,6 @@ class IncidentReportView(APIView):
                     "avg_time_to_acknowledge": round(severity_metrics["avg_time_to_acknowledge"], 2),
                     "avg_time_to_detection": round(severity_metrics["avg_time_to_detection"], 2)
                 })
-
-            # Add new cards for created and open requests in the last 7 days
-            last_7_days_threshold = now - timedelta(days=7)
-            created_last_7_days_filter = Q(cortex_soar_tenant_id__in=soar_ids, created__gte=last_7_days_threshold)
-            open_last_7_days_filter = Q(cortex_soar_tenant_id__in=soar_ids, created__gte=last_7_days_threshold, status=1)
-
-            if severity_filter:
-                created_last_7_days_filter &= Q(severity=severity_value)
-                open_last_7_days_filter &= Q(severity=severity_value)
-
-            # Calculate total counts
-            created_last_7_days_total = DUCortexSOARIncidentFinalModel.objects.filter(created_last_7_days_filter).count()
-            open_last_7_days_total = DUCortexSOARIncidentFinalModel.objects.filter(open_last_7_days_filter).count()
-
-            created_last_7_days_counts = DUCortexSOARIncidentFinalModel.objects.filter(
-                created_last_7_days_filter
-            ).values("severity").annotate(count=Count("id"))
-
-            open_last_7_days_counts = DUCortexSOARIncidentFinalModel.objects.filter(
-                open_last_7_days_filter
-            ).values("severity").annotate(count=Count("id"))
-
-            created_last_7_days = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
-            open_last_7_days = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
-
-            for entry in created_last_7_days_counts:
-                if entry["severity"] == SlaLevelChoices.P1:
-                    created_last_7_days["Critical"] = entry["count"]
-                elif entry["severity"] == SlaLevelChoices.P2:
-                    created_last_7_days["High"] = entry["count"]
-                elif entry["severity"] == SlaLevelChoices.P3:
-                    created_last_7_days["Medium"] = entry["count"]
-                elif entry["severity"] == SlaLevelChoices.P4:
-                    created_last_7_days["Low"] = entry["count"]
-                elif entry["severity"] == 0:
-                    created_last_7_days["Unknown"] = entry["count"]
-
-            for entry in open_last_7_days_counts:
-                if entry["severity"] == SlaLevelChoices.P1:
-                    open_last_7_days["Critical"] = entry["count"]
-                elif entry["severity"] == SlaLevelChoices.P2:
-                    open_last_7_days["High"] = entry["count"]
-                elif entry["severity"] == SlaLevelChoices.P3:
-                    open_last_7_days["Medium"] = entry["count"]
-                elif entry["severity"] == SlaLevelChoices.P4:
-                    open_last_7_days["Low"] = entry["count"]
-                elif entry["severity"] == 0:
-                    open_last_7_days["Unknown"] = entry["count"]
-
-            # Add new cards to cards_data with total counts
-           
 
             # Calculate closed, pending, and assigned incident counts
             closed_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
@@ -5871,8 +5835,6 @@ class IncidentReportView(APIView):
                 "closed_request_count": closed_incidents,
                 "open_requests": open_severity_counts,
                 "closed_requests": closed_severity_counts,
-                "created_request_last_7_days": created_last_7_days,
-                "open_request_last_7_days": open_last_7_days
             }
 
             # Return response
