@@ -1,4 +1,4 @@
-from datetime import datetime, time
+import time
 
 from celery import shared_task
 from loguru import logger
@@ -273,7 +273,11 @@ def sync_total_events_for_domain(
     """
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
     transformed_data = []
+    from datetime import datetime, time
+
+    # Get today's date
     today = datetime.today().date()
+
     # Combine with time.min and time.max
     min_dt = datetime.combine(today, time.min)  # 00:00:00
     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
@@ -281,6 +285,7 @@ def sync_total_events_for_domain(
     # Format as "DD-MM-YYYY HH:MM:SS"
     start_date = min_dt.strftime("%d-%m-%Y %H:%M:%S")
     end_date = max_dt.strftime("%d-%m-%Y %H:%M:%S")
+
     with IBMQradar(
         username=username, password=password, ip_address=ip_address, port=port
     ) as ibm_qradar:
