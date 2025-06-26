@@ -1737,7 +1737,7 @@ class IncidentDetailView(APIView):
             # Fetch incident using numeric incident_id
             incident = (
                 DUCortexSOARIncidentFinalModel.objects.filter(
-                    id=incident_id,  # cortex_soar_tenant__in=soar_ids
+                    id=incident_id, cortex_soar_tenant__in=soar_ids
                 )
                 .values(
                     "id",
