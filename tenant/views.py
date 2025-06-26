@@ -5307,7 +5307,6 @@ class SLASeverityMetricsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class IncidentReportView(APIView):
     def get(self, request):
         try:
@@ -5450,34 +5449,26 @@ class IncidentReportView(APIView):
                 ),
             )
 
-            # Create cards data
+            # Create cards data as a list of card objects
+           # Create cards data as a list of card objects
             cards_data = []
 
-            # Total incidents and change percentage
+            # Total incidents card
             total_incidents = incidents.count()
 
             # Calculate change percentage
             current_filter = Q(created__gte=date_threshold)
-            previous_filter = Q(
-                created__gte=comparison_period, created__lt=date_threshold
-            )
+            previous_filter = Q(created__gte=comparison_period, created__lt=date_threshold)
 
             if severity_filter:
                 current_filter &= Q(severity=severity_value)
                 previous_filter &= Q(severity=severity_value)
 
-            current_period_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                current_filter
-            ).count()
-            previous_period_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                previous_filter
-            ).count()
+            current_period_count = DUCortexSOARIncidentFinalModel.objects.filter(current_filter).count()
+            previous_period_count = DUCortexSOARIncidentFinalModel.objects.filter(previous_filter).count()
 
             if previous_period_count > 0:
-                change_percent = (
-                    (current_period_count - previous_period_count)
-                    / previous_period_count
-                ) * 100
+                change_percent = ((current_period_count - previous_period_count) / previous_period_count) * 100
             else:
                 change_percent = 0 if current_period_count == 0 else 100
 
@@ -5486,18 +5477,88 @@ class IncidentReportView(APIView):
             if severity_filter:
                 alert_filter &= Q(severity=severity_value)
 
-            alert_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                alert_filter, created__gte=date_threshold
-            ).count()
+            alert_count = DUCortexSOARIncidentFinalModel.objects.filter(alert_filter, created__gte=date_threshold).count()
 
-            cards_data.append(
-                {
-                    "total_incidents": total_incidents,
-                    f"{period_name.lower().replace(' ', '_')}_change_percent": change_percent,
-                    "log_activity": "N/A",
-                    "alert_count": alert_count,
-                }
-            )
+            # Add total incidents card
+            cards_data.append({
+                "card_type": "total_incidents",
+                "title": f"({period_name})",
+                "total_incidents": total_incidents,
+                "change_percent": round(change_percent, 2),
+                "alert_count": alert_count,
+                "log_activity": "N/A"
+            })
+
+            # Create a dictionary from severity_data for easier lookup
+            severity_data_dict = {
+                entry["severity"]: {
+                    "open_tickets": entry["open_tickets"],
+                    "avg_time_to_notify": entry["avg_time_to_notify"].total_seconds() / 60 if entry["avg_time_to_notify"] else 0,
+                    "avg_time_to_acknowledge": entry["avg_time_to_acknowledge"].total_seconds() / 60 if entry["avg_time_to_acknowledge"] else 0,
+                    "avg_time_to_detection": entry["avg_time_to_detection"].total_seconds() / 60 if entry["avg_time_to_detection"] else 0
+                } for entry in severity_data
+            }
+
+            # Define all expected severity levels
+            severity_levels = [
+                (SlaLevelChoices.P1, "Critical"),
+                (SlaLevelChoices.P2, "High"),
+                (SlaLevelChoices.P3, "Medium"),
+                (SlaLevelChoices.P4, "Low"),
+                (0, "Unknown")
+            ]
+
+            # Add severity cards for each level, even if no data exists
+            for severity_value, severity_label in severity_levels:
+                severity_metrics = severity_data_dict.get(severity_value, {
+                    "open_tickets": 0,
+                    "avg_time_to_notify": 0,
+                    "avg_time_to_acknowledge": 0,
+                    "avg_time_to_detection": 0
+                })
+                cards_data.append({
+                    "card_type": "severity",
+                    "title": f"{severity_label} Incidents",
+                    "severity": severity_label,
+                    "open_tickets": severity_metrics["open_tickets"],
+                    "avg_time_to_notify": round(severity_metrics["avg_time_to_notify"], 2),
+                    "avg_time_to_acknowledge": round(severity_metrics["avg_time_to_acknowledge"], 2),
+                    "avg_time_to_detection": round(severity_metrics["avg_time_to_detection"], 2)
+                })
+
+            # Add severity cards
+            for severity in severity_data:
+                severity_label = (
+                    SEVERITY_LABELS.get(severity["severity"], "Unknown")
+                    .replace("P1 - ", "")
+                    .replace("P2 - ", "")
+                    .replace("P3 - ", "")
+                    .replace("P4 - ", "")
+                )
+                cards_data.append({
+                    "card_type": "severity",
+                    "title": f"{severity_label} Incidents",
+                    "severity": severity_label,
+                    "open_tickets": severity["open_tickets"],
+                    "avg_time_to_notify": round(
+                        severity["avg_time_to_notify"].total_seconds() / 60
+                        if severity["avg_time_to_notify"]
+                        else 0,
+                        2
+                    ),
+                    "avg_time_to_acknowledge": round(
+                        severity["avg_time_to_acknowledge"].total_seconds() / 60
+                        if severity["avg_time_to_acknowledge"]
+                        else 0,
+                        2
+                    ),
+                    "avg_time_to_detection": round(
+                        severity["avg_time_to_detection"].total_seconds() / 60
+                        if severity["avg_time_to_detection"]
+                        else 0,
+                        2
+                    )
+                })
 
             # Calculate closed, pending, and assigned incident counts
             closed_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
@@ -5634,7 +5695,7 @@ class IncidentReportView(APIView):
                 current_time = start_time
                 while current_time <= end_time:
                     next_time = current_time + delta
-                    time_filter = Q(created__gte=current_time, created__lt=next_time)
+                    time_filter = Q(created__gte=current_time, created__lt=next_final_time)
                     counts = (
                         incidents.filter(time_filter)
                         .values("severity")
@@ -5663,6 +5724,7 @@ class IncidentReportView(APIView):
                     )
                     current_time = next_time
             elif filter_type in [FilterType.WEEK.value, FilterType.LAST_3_WEEKS.value]:
+                #-pitfalls of code analysis: 
                 # Daily intervals for week or last 3 weeks
                 start_time = date_threshold
                 end_time = now
@@ -5813,41 +5875,6 @@ class IncidentReportView(APIView):
                         {"timestamp": current_time.isoformat(), **severity_counts}
                     )
                     current_time = next_time
-
-            # Add severity data to cards_data
-            for severity in severity_data:
-                severity_label = (
-                    SEVERITY_LABELS.get(severity["severity"], "Unknown")
-                    .replace("P1 - ", "")
-                    .replace("P2 - ", "")
-                    .replace("P3 - ", "")
-                    .replace("P4 - ", "")
-                )
-                cards_data.append(
-                    {
-                        severity_label: {
-                            "open_ticket": severity["open_tickets"],
-                            "avg_time_to_notify": severity[
-                                "avg_time_to_notify"
-                            ].total_seconds()
-                            / 60
-                            if severity["avg_time_to_notify"]
-                            else 0,
-                            "avg_time_to_acknowledge": severity[
-                                "avg_time_to_acknowledge"
-                            ].total_seconds()
-                            / 60
-                            if severity["avg_time_to_acknowledge"]
-                            else 0,
-                            "avg_time_to_detection": severity[
-                                "avg_time_to_detection"
-                            ].total_seconds()
-                            / 60
-                            if severity["avg_time_to_detection"]
-                            else 0,
-                        }
-                    }
-                )
 
             # Initialize service_request_summary
             # Calculate open and closed request counts by severity
