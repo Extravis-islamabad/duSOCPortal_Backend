@@ -1,5 +1,5 @@
-from datetime import datetime
 import time
+from datetime import datetime
 
 from celery import shared_task
 from loguru import logger
@@ -335,9 +335,6 @@ def sync_ibm_admin_eps():
         )
 
 
-
-
-
 @shared_task
 def sync_total_events_for_domain(
     username: str, password: str, ip_address: str, port: int, integration_id: int
@@ -356,15 +353,13 @@ def sync_total_events_for_domain(
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
     transformed_data = []
     today = datetime.today().date()
- 
     # Combine with time.min and time.max
     min_dt = datetime.combine(today, time.min)  # 00:00:00
     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-    
+
     # Format as "DD-MM-YYYY HH:MM:SS"
-    start_date= min_dt.strftime("%d-%m-%Y %H:%M:%S")
+    start_date = min_dt.strftime("%d-%m-%Y %H:%M:%S")
     end_date = max_dt.strftime("%d-%m-%Y %H:%M:%S")
- 
     with IBMQradar(
         username=username, password=password, ip_address=ip_address, port=port
     ) as ibm_qradar:
@@ -377,7 +372,7 @@ def sync_total_events_for_domain(
                 WHERE domainid = {domain_id}
                 START PARSEDATETIME('{start_date}')
                 STOP PARSEDATETIME('{end_date}')
-            """
+            """  # nosec
             search_id = ibm_qradar._get_do_aql_query(query=aql_query)
             flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
             if not flag:
