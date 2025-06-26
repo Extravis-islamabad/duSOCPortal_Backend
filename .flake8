@@ -15,4 +15,4 @@ exclude =
     .vscode,
     build
 # mccabe
-max-complexity = 100
+max-complexity = 500

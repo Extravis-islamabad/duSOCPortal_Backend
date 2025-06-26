@@ -5309,8 +5309,6 @@ class SLASeverityMetricsView(APIView):
 
 
 
-
-
 class IncidentReportView(APIView):
     def get(self, request):
         try:
@@ -5547,7 +5545,7 @@ class IncidentReportView(APIView):
                 # Create the card data
                 cards_data.append({
                     "card_type": "severity",
-                    "title": f"{severity_label} Incidents",
+                    "title": f"{severity_label}",
                     "severity": severity_label,
                     "total_count": total_count,
                     "change_percent": change_percent_severity,
@@ -5595,7 +5593,7 @@ class IncidentReportView(APIView):
                         "severity_level": severity_level,
                         "open_tickets": 0,
                         "sla_breach_tickets": 0,
-                        "avg_tta_minutes": 0,
+                        "avg_tstaan_minutes": 0,
                         "avg_ttn_minutes": 0,
                         "avg_ttdn_minutes": 0,
                         "sla_tta_minutes": 0,
@@ -5800,98 +5798,80 @@ class IncidentReportView(APIView):
                     current_time = next_time
 
             # Initialize service_request_summary
-            # Initialize service_request_summary
+            created_incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters).count()
             open_counts = DUCortexSOARIncidentFinalModel.objects.filter(filters, status=1).values("severity").annotate(count=Count("id"))
             closed_counts = DUCortexSOARIncidentFinalModel.objects.filter(filters, status=2).values("severity").annotate(count=Count("id"))
             created_counts = DUCortexSOARIncidentFinalModel.objects.filter(filters).values("severity").annotate(count=Count("id"))
-
-            # Get counts for last 30 days open requests
-            last_30_days = now - timedelta(days=30)
             last_30_days_open_counts = DUCortexSOARIncidentFinalModel.objects.filter(
-                Q(cortex_soar_tenant_id__in=soar_ids, status=1, created__gte=last_30_days)
+                Q(cortex_soar_tenant_id__in=soar_ids, status=1, created__gte=now - timedelta(days=30))
             ).values("severity").annotate(count=Count("id"))
 
-            open_severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
-            closed_severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
-            created_severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
-            last_30_days_open_severity_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
+            open_severity_counts = {"total_count": 0, "Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
+            closed_severity_counts = {"total_count": 0, "Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
+            created_severity_counts = {"total_count": 0, "Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
+            last_30_days_open_severity_counts = {"filter_type": period_name, "total_count": 0, "Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
 
-            # Process open counts
-            total_open = 0
             for entry in open_counts:
-                count = entry["count"]
-                total_open += count
                 if entry["severity"] == SlaLevelChoices.P1:
-                    open_severity_counts["Critical"] = count
+                    open_severity_counts["Critical"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P2:
-                    open_severity_counts["High"] = count
+                    open_severity_counts["High"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P3:
-                    open_severity_counts["Medium"] = count
+                    open_severity_counts["Medium"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P4:
-                    open_severity_counts["Low"] = count
+                    open_severity_counts["Low"] = entry["count"]
                 elif entry["severity"] == 0:
-                    open_severity_counts["Unknown"] = count
-            open_severity_counts["total"] = total_open
+                    open_severity_counts["Unknown"] = entry["count"]
+                open_severity_counts["total_count"] += entry["count"]
 
-            # Process closed counts
-            total_closed = 0
             for entry in closed_counts:
-                count = entry["count"]
-                total_closed += count
                 if entry["severity"] == SlaLevelChoices.P1:
-                    closed_severity_counts["Critical"] = count
+                    closed_severity_counts["Critical"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P2:
-                    closed_severity_counts["High"] = count
+                    closed_severity_counts["High"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P3:
-                    closed_severity_counts["Medium"] = count
+                    closed_severity_counts["Medium"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P4:
-                    closed_severity_counts["Low"] = count
+                    closed_severity_counts["Low"] = entry["count"]
                 elif entry["severity"] == 0:
-                    closed_severity_counts["Unknown"] = count
-            closed_severity_counts["total"] = total_closed
+                    closed_severity_counts["Unknown"] = entry["count"]
+                closed_severity_counts["total_count"] += entry["count"]
 
-            # Process created counts
-            total_created = 0
             for entry in created_counts:
-                count = entry["count"]
-                total_created += count
                 if entry["severity"] == SlaLevelChoices.P1:
-                    created_severity_counts["Critical"] = count
+                    created_severity_counts["Critical"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P2:
-                    created_severity_counts["High"] = count
+                    created_severity_counts["High"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P3:
-                    created_severity_counts["Medium"] = count
+                    created_severity_counts["Medium"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P4:
-                    created_severity_counts["Low"] = count
+                    created_severity_counts["Low"] = entry["count"]
                 elif entry["severity"] == 0:
-                    created_severity_counts["Unknown"] = count
-            created_severity_counts["total"] = total_created
+                    created_severity_counts["Unknown"] = entry["count"]
+                created_severity_counts["total_count"] += entry["count"]
 
-            # Process last 30 days open counts
-            total_last_30_days_open = 0
             for entry in last_30_days_open_counts:
-                count = entry["count"]
-                total_last_30_days_open += count
                 if entry["severity"] == SlaLevelChoices.P1:
-                    last_30_days_open_severity_counts["Critical"] = count
+                    last_30_days_open_severity_counts["Critical"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P2:
-                    last_30_days_open_severity_counts["High"] = count
+                    last_30_days_open_severity_counts["High"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P3:
-                    last_30_days_open_severity_counts["Medium"] = count
+                    last_30_days_open_severity_counts["Medium"] = entry["count"]
                 elif entry["severity"] == SlaLevelChoices.P4:
-                    last_30_days_open_severity_counts["Low"] = count
+                    last_30_days_open_severity_counts["Low"] = entry["count"]
                 elif entry["severity"] == 0:
-                    last_30_days_open_severity_counts["Unknown"] = count
-            last_30_days_open_severity_counts["total"] = total_last_30_days_open
+                    last_30_days_open_severity_counts["Unknown"] = entry["count"]
+                last_30_days_open_severity_counts["total_count"] += entry["count"]
 
             service_request_summary = {
-                "created_request_count": total_created,
-                "closed_request_count": total_closed,
+                "created_request_count": created_incidents,
+                "closed_request_count": closed_incidents,
                 "open_requests": open_severity_counts,
                 "closed_requests": closed_severity_counts,
-                "created_requests": created_severity_counts,  # New object with severity breakdown
-                "last_30_days_open_requests": last_30_days_open_severity_counts,  # New object for last 30 days open requests
+                "created_requests": created_severity_counts,
+                "last_30_days_open_requests": last_30_days_open_severity_counts,
             }
+
             # Return response
             return Response(
                 {
