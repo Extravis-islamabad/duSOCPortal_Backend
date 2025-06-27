@@ -4,20 +4,34 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('tenant', '0105_totalevents'),
+        ("tenant", "0105_totalevents"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='defaultsoarslametric',
-            name='sla_level',
-            field=models.IntegerField(choices=[(4, 'P1 Critical'), (3, 'P2 High'), (2, 'P3 Medium'), (1, 'P4 Low')], unique=True),
+            model_name="defaultsoarslametric",
+            name="sla_level",
+            field=models.IntegerField(
+                choices=[
+                    (4, "P1 Critical"),
+                    (3, "P2 High"),
+                    (2, "P3 Medium"),
+                    (1, "P4 Low"),
+                ],
+                unique=True,
+            ),
         ),
         migrations.AlterField(
-            model_name='soartenantslametric',
-            name='sla_level',
-            field=models.IntegerField(choices=[(4, 'P1 Critical'), (3, 'P2 High'), (2, 'P3 Medium'), (1, 'P4 Low')]),
+            model_name="soartenantslametric",
+            name="sla_level",
+            field=models.IntegerField(
+                choices=[
+                    (4, "P1 Critical"),
+                    (3, "P2 High"),
+                    (2, "P3 Medium"),
+                    (1, "P4 Low"),
+                ]
+            ),
         ),
     ]
