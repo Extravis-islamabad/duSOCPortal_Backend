@@ -4511,7 +4511,6 @@ class IncidentSummaryView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-
 class SLAIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4531,7 +4530,10 @@ class SLAIncidentsView(APIView):
                 status=True,
             )
             if not soar_integrations.exists():
-                return Response({"error": "No active SOAR integration configured for tenant."}, status=400)
+                return Response(
+                    {"error": "No active SOAR integration configured for tenant."},
+                    status=400,
+                )
 
             soar_tenants = tenant.soar_tenants.all()
             if not soar_tenants:
@@ -4548,11 +4550,21 @@ class SLAIncidentsView(APIView):
             end_date_str = request.query_params.get("end_date")
             filter_type = request.query_params.get("filter_type")
 
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else None
-            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date() if end_date_str else None
+            start_date = (
+                datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                if start_date_str
+                else None
+            )
+            end_date = (
+                datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                if end_date_str
+                else None
+            )
 
             if start_date and end_date and start_date > end_date:
-                return Response({"error": "start_date cannot be after end_date."}, status=400)
+                return Response(
+                    {"error": "start_date cannot be after end_date."}, status=400
+                )
 
             if not (start_date or end_date) and filter_type:
                 try:
@@ -4641,7 +4653,9 @@ class SLAIncidentsView(APIView):
                         any_breach = True
 
                 if incident.incident_ttdn:
-                    ttdn_minutes = (incident.incident_ttdn - created).total_seconds() / 60
+                    ttdn_minutes = (
+                        incident.incident_ttdn - created
+                    ).total_seconds() / 60
                     if ttdn_minutes > sla_metric.ttdn_minutes:
                         any_breach = True
 
@@ -4666,31 +4680,42 @@ class SLAIncidentsView(APIView):
             incident_counts = []
             for level, count in priority_counts.items():
                 label = reverse_priority_label.get(level, f"Priority {level}")
-                met_pct = round((per_priority_sla_met.get(level, 0) / count) * 100, 2) if count else 0.0
-                incident_counts.append({
-                    "priority_level": level,
-                    "priority_label": label,
-                    "incident_count": count,
-                    "total_incident_count": total_incident_count,
-                    "met_sla_count": per_priority_sla_met.get(level, 0),
-                    "breached_sla_count": breached_sla_count,
-                    "breached_sla_percentage": round((breached_sla_count / total_incident_count) * 100, 2)
-                    if total_incident_count > 0 else 0,
-                    "sla_met_percentage": met_pct,
-                    "tta_minutes": sla_metrics_dict.get(level).tta_minutes,
-                    "ttn_minutes": sla_metrics_dict.get(level).ttn_minutes,
-                    "ttdn_minutes": sla_metrics_dict.get(level).ttdn_minutes,
-                })
+                met_pct = (
+                    round((per_priority_sla_met.get(level, 0) / count) * 100, 2)
+                    if count
+                    else 0.0
+                )
+                incident_counts.append(
+                    {
+                        "priority_level": level,
+                        "priority_label": label,
+                        "incident_count": count,
+                        "total_incident_count": total_incident_count,
+                        "met_sla_count": per_priority_sla_met.get(level, 0),
+                        "breached_sla_count": breached_sla_count,
+                        "breached_sla_percentage": round(
+                            (breached_sla_count / total_incident_count) * 100, 2
+                        )
+                        if total_incident_count > 0
+                        else 0,
+                        "sla_met_percentage": met_pct,
+                        "tta_minutes": sla_metrics_dict.get(level).tta_minutes,
+                        "ttn_minutes": sla_metrics_dict.get(level).ttn_minutes,
+                        "ttdn_minutes": sla_metrics_dict.get(level).ttdn_minutes,
+                    }
+                )
 
             # Calculating overall SLA compliance details
             incident_met_percentage = (
                 round((met_sla_count / total_incident_count) * 100, 2)
-                if total_incident_count > 0 else 0
+                if total_incident_count > 0
+                else 0
             )
 
             total_breach_incident_percentage = (
                 round((breached_sla_count / total_incident_count) * 100, 2)
-                if total_incident_count > 0 else 0
+                if total_incident_count > 0
+                else 0
             )
 
             overall = {
@@ -4701,16 +4726,19 @@ class SLAIncidentsView(APIView):
                 "total_breach_incident_percentage": total_breach_incident_percentage,
             }
 
-            return Response({
-                "sla_details": sla_details,
-                "incident_counts": incident_counts,
-                "overall_sla_compliance": overall,
-            })
+            return Response(
+                {
+                    "sla_details": sla_details,
+                    "incident_counts": incident_counts,
+                    "overall_sla_compliance": overall,
+                }
+            )
 
         except Exception as e:
             logger.error(f"SLAIncidentsView Error: {str(e)}")
             return Response({"error": str(e)}, status=500)
-        
+
+
 class SLAComplianceView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4729,7 +4757,9 @@ class SLAComplianceView(APIView):
                 status=True,
             )
             if not soar_integrations.exists():
-                return Response({"error": "No active SOAR integration configured."}, status=400)
+                return Response(
+                    {"error": "No active SOAR integration configured."}, status=400
+                )
 
             soar_tenants = tenant.soar_tenants.all()
             if not soar_tenants:
@@ -4789,7 +4819,9 @@ class SLAComplianceView(APIView):
                         any_breach = True
 
                 if incident.incident_ttdn:
-                    ttdn_minutes = (incident.incident_ttdn - created).total_seconds() / 60
+                    ttdn_minutes = (
+                        incident.incident_ttdn - created
+                    ).total_seconds() / 60
                     if ttdn_minutes > sla_metric.ttdn_minutes:
                         any_breach = True
 
@@ -4800,28 +4832,31 @@ class SLAComplianceView(APIView):
 
             incident_met_percentage = (
                 round((met_sla_count / total_incident_count) * 100, 2)
-                if total_incident_count > 0 else 0.0
+                if total_incident_count > 0
+                else 0.0
             )
             total_breach_incident_percentage = (
                 round((breached_sla_count / total_incident_count) * 100, 2)
-                if total_incident_count > 0 else 0.0
+                if total_incident_count > 0
+                else 0.0
             )
 
-            return Response({
-                "total_breached_incidents": breached_sla_count,
-                "total_met_target_incidents": met_sla_count,
-                "overall_compliance_percentage": incident_met_percentage,
-                "incident_met_percentage": incident_met_percentage,
-                "total_breach_incident_percentage": total_breach_incident_percentage,
-            })
+            return Response(
+                {
+                    "total_breached_incidents": breached_sla_count,
+                    "total_met_target_incidents": met_sla_count,
+                    "overall_compliance_percentage": incident_met_percentage,
+                    "incident_met_percentage": incident_met_percentage,
+                    "total_breach_incident_percentage": total_breach_incident_percentage,
+                }
+            )
 
         except Exception as e:
             logger.error(f"SLAComplianceView Error: {str(e)}")
             return Response({"error": str(e)}, status=500)
 
 
-
-class SLASeverityIncidentsView(APIView): 
+class SLASeverityIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
@@ -4848,11 +4883,20 @@ class SLASeverityIncidentsView(APIView):
 
             if start_date and end_date:
                 try:
-                    start_date = timezone.make_aware(datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone)
-                    end_date = timezone.make_aware(datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(microseconds=1), timezone=db_timezone)
+                    start_date = timezone.make_aware(
+                        datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
+                    )
+                    end_date = timezone.make_aware(
+                        datetime.strptime(end_date, "%Y-%m-%d")
+                        + timedelta(days=1)
+                        - timedelta(microseconds=1),
+                        timezone=db_timezone,
+                    )
                     filters &= Q(created__range=[start_date, end_date])
                 except ValueError:
-                    return Response({"error": "Invalid date format. Use YYYY-MM-DD."}, status=400)
+                    return Response(
+                        {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
+                    )
             elif filter_type:
                 try:
                     filter_type = FilterType(int(filter_type))
@@ -4919,13 +4963,19 @@ class SLASeverityIncidentsView(APIView):
                 any_breach = False
 
                 if incident.incident_tta:
-                    if (incident.incident_tta - created).total_seconds() / 60 > sla_metric.tta_minutes:
+                    if (
+                        incident.incident_tta - created
+                    ).total_seconds() / 60 > sla_metric.tta_minutes:
                         any_breach = True
                 if incident.incident_ttn:
-                    if (incident.incident_ttn - created).total_seconds() / 60 > sla_metric.ttn_minutes:
+                    if (
+                        incident.incident_ttn - created
+                    ).total_seconds() / 60 > sla_metric.ttn_minutes:
                         any_breach = True
                 if incident.incident_ttdn:
-                    if (incident.incident_ttdn - created).total_seconds() / 60 > sla_metric.ttdn_minutes:
+                    if (
+                        incident.incident_ttdn - created
+                    ).total_seconds() / 60 > sla_metric.ttdn_minutes:
                         any_breach = True
 
                 severity_counts[label]["total_incidents"] += 1
@@ -4939,8 +4989,6 @@ class SLASeverityIncidentsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-
-
 class SLASeverityMetricsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4950,18 +4998,25 @@ class SLASeverityMetricsView(APIView):
             tenant = Tenant.objects.get(tenant=request.user)
             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
         except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         try:
             soar_tenants = tenant.soar_tenants.all()
             if not soar_tenants:
-                return Response({"error": "No SOAR tenants found."}, status=status.HTTP_404_NOT_FOUND)
+                return Response(
+                    {"error": "No SOAR tenants found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
             soar_ids = [t.id for t in soar_tenants]
 
             if tenant.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
-                sla_metrics = SoarTenantSlaMetric.objects.filter(soar_tenant__in=soar_tenants)
+                sla_metrics = SoarTenantSlaMetric.objects.filter(
+                    soar_tenant__in=soar_tenants
+                )
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
@@ -5014,22 +5069,25 @@ class SLASeverityMetricsView(APIView):
 
                 compliance = round((met / total) * 100, 2) if total > 0 else 0.0
 
-                response_list.append({
-                    "severity_label": SlaLevelChoices(level).label,
-                    "tta_minutes": sla.tta_minutes,
-                    "ttn_minutes": sla.ttn_minutes,
-                    "ttdn_minutes": sla.ttdn_minutes,
-                    "target_sla": f"TTA: {sla.tta_minutes} mins, TTN: {sla.ttn_minutes} mins, TTDN: {sla.ttdn_minutes} mins",
-                    "compliance_percentage": compliance,
-                    "status": "Fulfilled" if compliance >= 80 else "Breached"
-                })
+                response_list.append(
+                    {
+                        "severity_label": SlaLevelChoices(level).label,
+                        "tta_minutes": sla.tta_minutes,
+                        "ttn_minutes": sla.ttn_minutes,
+                        "ttdn_minutes": sla.ttdn_minutes,
+                        "target_sla": f"TTA: {sla.tta_minutes} mins, TTN: {sla.ttn_minutes} mins, TTDN: {sla.ttdn_minutes} mins",
+                        "compliance_percentage": compliance,
+                        "status": "Fulfilled" if compliance >= 80 else "Breached",
+                    }
+                )
 
             return Response(response_list)
 
         except Exception as e:
             logger.error(f"Error in SLASeverityMetricsView: {str(e)}")
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class IncidentReportView(APIView):
@@ -5052,7 +5110,10 @@ class IncidentReportView(APIView):
                 status=True,
             )
             if not soar_integrations.exists():
-                return Response({"error": "No active SOAR integration configured for tenant."}, status=400)
+                return Response(
+                    {"error": "No active SOAR integration configured for tenant."},
+                    status=400,
+                )
 
             # Get SOAR tenant IDs
             soar_tenants = tenant.soar_tenants.all()
@@ -5068,7 +5129,9 @@ class IncidentReportView(APIView):
                 except ValueError:
                     return Response({"error": "Invalid filter_type."}, status=400)
 
-            priority_filter = request.query_params.get("incident_priority")  # Optional priority filter
+            priority_filter = request.query_params.get(
+                "incident_priority"
+            )  # Optional priority filter
 
             # Apply date filters based on FilterType Enum
             now = timezone.now()
@@ -5125,7 +5188,9 @@ class IncidentReportView(APIView):
                     priority_value = priority_filter
                     filters &= Q(incident_priority=priority_value)
                 except ValueError:
-                    return Response({"error": "Invalid incident_priority format."}, status=400)
+                    return Response(
+                        {"error": "Invalid incident_priority format."}, status=400
+                    )
 
             # Filter incidents
             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
@@ -5141,7 +5206,9 @@ class IncidentReportView(APIView):
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
                 logger.info("SLA source: SoarTenantSlaMetric")
-                sla_metrics = SoarTenantSlaMetric.objects.filter(soar_tenant__in=soar_tenants)
+                sla_metrics = SoarTenantSlaMetric.objects.filter(
+                    soar_tenant__in=soar_tenants
+                )
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
             # Priority mapping
@@ -5178,10 +5245,14 @@ class IncidentReportView(APIView):
             cards_data = []
 
             # Total incidents card
-            total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters).count()
+            total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                filters
+            ).count()
 
             # Calculate change percentage for total incidents
-            current_filter = Q(cortex_soar_tenant_id__in=soar_ids, created__gte=date_threshold)
+            current_filter = Q(
+                cortex_soar_tenant_id__in=soar_ids, created__gte=date_threshold
+            )
             previous_filter = Q(
                 cortex_soar_tenant_id__in=soar_ids,
                 created__gte=comparison_period,
@@ -5192,44 +5263,71 @@ class IncidentReportView(APIView):
                 current_filter &= Q(incident_priority=priority_value)
                 previous_filter &= Q(incident_priority=priority_value)
 
-            current_period_count = DUCortexSOARIncidentFinalModel.objects.filter(current_filter).count()
-            previous_period_count = DUCortexSOARIncidentFinalModel.objects.filter(previous_filter).count()
+            current_period_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                current_filter
+            ).count()
+            previous_period_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                previous_filter
+            ).count()
 
             if previous_period_count > 0:
-                change_percent = ((current_period_count - previous_period_count) / previous_period_count) * 100
-                change_direction = "up" if current_period_count >= previous_period_count else "down"
+                change_percent = (
+                    (current_period_count - previous_period_count)
+                    / previous_period_count
+                ) * 100
+                change_direction = (
+                    "up" if current_period_count >= previous_period_count else "down"
+                )
             else:
                 change_percent = 0 if current_period_count == 0 else 100
                 change_direction = "up" if current_period_count > 0 else "up"
             change_percent = round(change_percent, 2)
 
             # Get alert count for open tickets
-            alert_filter = Q(cortex_soar_tenant_id__in=soar_ids, status=1, created__gte=date_threshold)
+            alert_filter = Q(
+                cortex_soar_tenant_id__in=soar_ids,
+                status=1,
+                created__gte=date_threshold,
+            )
             if priority_filter:
                 alert_filter &= Q(incident_priority=priority_value)
-            alert_count = DUCortexSOARIncidentFinalModel.objects.filter(alert_filter).count()
+            alert_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                alert_filter
+            ).count()
 
-            cards_data.append({
-                "card_type": "total_incidents",
-                "title": f"Total Incidents ({period_name})",
-                "total_incidents": total_incidents,
-                "change_percent": change_percent,
-                "change_direction": change_direction,
-                "alert_count": alert_count,
-                "log_activity": "N/A",
-            })
+            cards_data.append(
+                {
+                    "card_type": "total_incidents",
+                    "title": f"Total Incidents ({period_name})",
+                    "total_incidents": total_incidents,
+                    "change_percent": change_percent,
+                    "change_direction": change_direction,
+                    "alert_count": alert_count,
+                    "log_activity": "N/A",
+                }
+            )
 
             # Create priority data dictionary
             priority_data_dict = {
                 priority_map.get(entry["incident_priority"], 0): {
                     "total_incidents": entry["total_incidents"],
                     "open_tickets": entry["open_tickets"],
-                    "avg_time_to_notify": entry["avg_time_to_notify"].total_seconds() / 60
-                    if entry["avg_time_to_notify"] else 0,
-                    "avg_time_to_acknowledge": entry["avg_time_to_acknowledge"].total_seconds() / 60
-                    if entry["avg_time_to_acknowledge"] else 0,
-                    "avg_time_to_detection": entry["avg_time_to_detection"].total_seconds() / 60
-                    if entry["avg_time_to_detection"] else 0,
+                    "avg_time_to_notify": entry["avg_time_to_notify"].total_seconds()
+                    / 60
+                    if entry["avg_time_to_notify"]
+                    else 0,
+                    "avg_time_to_acknowledge": entry[
+                        "avg_time_to_acknowledge"
+                    ].total_seconds()
+                    / 60
+                    if entry["avg_time_to_acknowledge"]
+                    else 0,
+                    "avg_time_to_detection": entry[
+                        "avg_time_to_detection"
+                    ].total_seconds()
+                    / 60
+                    if entry["avg_time_to_detection"]
+                    else 0,
                 }
                 for entry in priority_data
             }
@@ -5245,61 +5343,93 @@ class IncidentReportView(APIView):
 
             # Add priority cards
             for priority_value, priority_label in priority_levels:
-                priority_metrics = priority_data_dict.get(priority_value, {
-                    "total_incidents": 0,
-                    "open_tickets": 0,
-                    "avg_time_to_notify": 0,
-                    "avg_time_to_acknowledge": 0,
-                    "avg_time_to_detection": 0,
-                })
+                priority_metrics = priority_data_dict.get(
+                    priority_value,
+                    {
+                        "total_incidents": 0,
+                        "open_tickets": 0,
+                        "avg_time_to_notify": 0,
+                        "avg_time_to_acknowledge": 0,
+                        "avg_time_to_detection": 0,
+                    },
+                )
 
                 current_priority_filter = Q(
                     cortex_soar_tenant_id__in=soar_ids,
                     created__gte=date_threshold,
-                    incident_priority=reverse_priority_label.get(priority_value, "Unknown").split(" ")[0]
+                    incident_priority=reverse_priority_label.get(
+                        priority_value, "Unknown"
+                    ).split(" ")[0],
                 )
                 if priority_filter:
                     current_priority_filter &= Q(incident_priority=priority_value)
-                total_count = DUCortexSOARIncidentFinalModel.objects.filter(current_priority_filter).count()
+                total_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    current_priority_filter
+                ).count()
 
                 previous_priority_filter = Q(
                     cortex_soar_tenant_id__in=soar_ids,
                     created__gte=comparison_period,
                     created__lt=date_threshold,
-                    incident_priority=reverse_priority_label.get(priority_value, "Unknown").split(" ")[0]
+                    incident_priority=reverse_priority_label.get(
+                        priority_value, "Unknown"
+                    ).split(" ")[0],
                 )
                 if priority_filter:
                     previous_priority_filter &= Q(incident_priority=priority_value)
-                previous_count = DUCortexSOARIncidentFinalModel.objects.filter(previous_priority_filter).count()
+                previous_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    previous_priority_filter
+                ).count()
 
                 if previous_count > 0:
-                    change_percent_priority = ((total_count - previous_count) / previous_count) * 100
-                    change_direction_priority = "up" if total_count >= previous_count else "down"
+                    change_percent_priority = (
+                        (total_count - previous_count) / previous_count
+                    ) * 100
+                    change_direction_priority = (
+                        "up" if total_count >= previous_count else "down"
+                    )
                 else:
                     change_percent_priority = 0 if total_count == 0 else 100
                     change_direction_priority = "up" if total_count > 0 else "up"
                 change_percent_priority = round(change_percent_priority, 2)
 
-                cards_data.append({
-                    "card_type": "priority",
-                    "title": f"{priority_label}",
-                    "priority": priority_label,
-                    "total_count": total_count,
-                    "change_percent": change_percent_priority,
-                    "change_direction": change_direction_priority,
-                    "open_tickets": priority_metrics["open_tickets"],
-                    "avg_time_to_notify": round(priority_metrics["avg_time_to_notify"], 2),
-                    "avg_time_to_acknowledge": round(priority_metrics["avg_time_to_acknowledge"], 2),
-                    "avg_time_to_detection": round(priority_metrics["avg_time_to_detection"], 2),
-                })
+                cards_data.append(
+                    {
+                        "card_type": "priority",
+                        "title": f"{priority_label}",
+                        "priority": priority_label,
+                        "total_count": total_count,
+                        "change_percent": change_percent_priority,
+                        "change_direction": change_direction_priority,
+                        "open_tickets": priority_metrics["open_tickets"],
+                        "avg_time_to_notify": round(
+                            priority_metrics["avg_time_to_notify"], 2
+                        ),
+                        "avg_time_to_acknowledge": round(
+                            priority_metrics["avg_time_to_acknowledge"], 2
+                        ),
+                        "avg_time_to_detection": round(
+                            priority_metrics["avg_time_to_detection"], 2
+                        ),
+                    }
+                )
 
             # Calculate closed, pending, and assigned incident counts
             closed_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                status=2, created__gte=date_threshold, cortex_soar_tenant_id__in=soar_ids).count()
+                status=2,
+                created__gte=date_threshold,
+                cortex_soar_tenant_id__in=soar_ids,
+            ).count()
             pending_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                status=1, created__gte=date_threshold, cortex_soar_tenant_id__in=soar_ids).count()
+                status=1,
+                created__gte=date_threshold,
+                cortex_soar_tenant_id__in=soar_ids,
+            ).count()
             assigned_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                owner__isnull=False, created__gte=date_threshold, cortex_soar_tenant_id__in=soar_ids).count()
+                owner__isnull=False,
+                created__gte=date_threshold,
+                cortex_soar_tenant_id__in=soar_ids,
+            ).count()
 
             incident_status_graph = {
                 "closed": closed_incidents,
@@ -5309,26 +5439,43 @@ class IncidentReportView(APIView):
 
             # Process incident ticket details
             incident_ticket_details = []
-            for priority_level in [SlaLevelChoices.P4, SlaLevelChoices.P3, SlaLevelChoices.P2, SlaLevelChoices.P1]:
+            for priority_level in [
+                SlaLevelChoices.P4,
+                SlaLevelChoices.P3,
+                SlaLevelChoices.P2,
+                SlaLevelChoices.P1,
+            ]:
                 sla_metric = sla_metrics_dict.get(priority_level)
-                priority_label = reverse_priority_label.get(priority_level, "Unknown").replace("P1 ", "").replace("P2 ", "").replace("P3 ", "").replace("P4 ", "")
+                priority_label = (
+                    reverse_priority_label.get(priority_level, "Unknown")
+                    .replace("P1 ", "")
+                    .replace("P2 ", "")
+                    .replace("P3 ", "")
+                    .replace("P4 ", "")
+                )
 
                 if not sla_metric:
-                    incident_ticket_details.append({
-                        "priority_label": priority_label,
-                        "priority_level": priority_level,
-                        "open_tickets": 0,
-                        "sla_breach_tickets": 0,
-                        "avg_tta_minutes": 0,
-                        "avg_ttn_minutes": 0,
-                        "avg_ttdn_minutes": 0,
-                        "sla_tta_minutes": 0,
-                        "sla_ttn_minutes": 0,
-                        "sla_ttdn_minutes": 0,
-                    })
+                    incident_ticket_details.append(
+                        {
+                            "priority_label": priority_label,
+                            "priority_level": priority_level,
+                            "open_tickets": 0,
+                            "sla_breach_tickets": 0,
+                            "avg_tta_minutes": 0,
+                            "avg_ttn_minutes": 0,
+                            "avg_ttdn_minutes": 0,
+                            "sla_tta_minutes": 0,
+                            "sla_ttn_minutes": 0,
+                            "sla_ttdn_minutes": 0,
+                        }
+                    )
                     continue
 
-                priority_incidents = incidents.filter(incident_priority=reverse_priority_label.get(priority_level, "Unknown").split(" ")[0])
+                priority_incidents = incidents.filter(
+                    incident_priority=reverse_priority_label.get(
+                        priority_level, "Unknown"
+                    ).split(" ")[0]
+                )
                 open_tickets = priority_incidents.filter(status=1).count()
 
                 sla_breach_tickets = 0
@@ -5341,19 +5488,25 @@ class IncidentReportView(APIView):
                     any_breach = False
 
                     if incident.incident_tta and created:
-                        tta_delta = (incident.incident_tta - created).total_seconds() / 60
+                        tta_delta = (
+                            incident.incident_tta - created
+                        ).total_seconds() / 60
                         tta_times.append(tta_delta)
                         if tta_delta > sla_metric.tta_minutes:
                             any_breach = True
 
                     if incident.incident_ttn and created:
-                        ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+                        ttn_delta = (
+                            incident.incident_ttn - created
+                        ).total_seconds() / 60
                         ttn_times.append(ttn_delta)
                         if ttn_delta > sla_metric.ttn_minutes:
                             any_breach = True
 
                     if incident.incident_ttdn and created:
-                        ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+                        ttdn_delta = (
+                            incident.incident_ttdn - created
+                        ).total_seconds() / 60
                         ttdn_times.append(ttdn_delta)
                         if ttdn_delta > sla_metric.ttdn_minutes:
                             any_breach = True
@@ -5365,18 +5518,20 @@ class IncidentReportView(APIView):
                 avg_ttn = sum(ttn_times) / len(ttn_times) if ttn_times else 0
                 avg_ttdn = sum(ttdn_times) / len(ttdn_times) if ttdn_times else 0
 
-                incident_ticket_details.append({
-                    "priority_label": priority_label,
-                    "priority_level": priority_level,
-                    "open_tickets": open_tickets,
-                    "sla_breach_tickets": sla_breach_tickets,
-                    "avg_tta_minutes": round(avg_tta, 2),
-                    "avg_ttn_minutes": round(avg_ttn, 2),
-                    "avg_ttdn_minutes": round(avg_ttdn, 2),
-                    "sla_tta_minutes": sla_metric.tta_minutes,
-                    "sla_ttn_minutes": sla_metric.ttn_minutes,
-                    "sla_ttdn_minutes": sla_metric.ttdn_minutes,
-                })
+                incident_ticket_details.append(
+                    {
+                        "priority_label": priority_label,
+                        "priority_level": priority_level,
+                        "open_tickets": open_tickets,
+                        "sla_breach_tickets": sla_breach_tickets,
+                        "avg_tta_minutes": round(avg_tta, 2),
+                        "avg_ttn_minutes": round(avg_ttn, 2),
+                        "avg_ttdn_minutes": round(avg_ttdn, 2),
+                        "sla_tta_minutes": sla_metric.tta_minutes,
+                        "sla_ttn_minutes": sla_metric.ttn_minutes,
+                        "sla_ttdn_minutes": sla_metric.ttdn_minutes,
+                    }
+                )
 
             # Process incident ticket trend by priority
             incident_ticket_trend_by_priority_graph = []
@@ -5388,16 +5543,34 @@ class IncidentReportView(APIView):
                 while current_time <= end_time:
                     next_time = current_time + delta
                     time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = incidents.filter(time_filter).values("incident_priority").annotate(count=Count("id"))
-                    priority_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
+                    counts = (
+                        incidents.filter(time_filter)
+                        .values("incident_priority")
+                        .annotate(count=Count("id"))
+                    )
+                    priority_counts = {
+                        "Critical": 0,
+                        "High": 0,
+                        "Medium": 0,
+                        "Low": 0,
+                        "Unknown": 0,
+                    }
                     for entry in counts:
                         priority_key = entry["incident_priority"]
                         if priority_key in priority_map:
-                            label = reverse_priority_label[priority_map[priority_key]].replace("P1 ", "").replace("P2 ", "").replace("P3 ", "").replace("P4 ", "")
+                            label = (
+                                reverse_priority_label[priority_map[priority_key]]
+                                .replace("P1 ", "")
+                                .replace("P2 ", "")
+                                .replace("P3 ", "")
+                                .replace("P4 ", "")
+                            )
                             priority_counts[label] = entry["count"]
                         else:
                             priority_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_priority_graph.append({"timestamp": current_time.isoformat(), **priority_counts})
+                    incident_ticket_trend_by_priority_graph.append(
+                        {"timestamp": current_time.isoformat(), **priority_counts}
+                    )
                     current_time = next_time
             elif filter_type in [FilterType.WEEK.value, FilterType.LAST_3_WEEKS.value]:
                 start_time = date_threshold
@@ -5407,18 +5580,41 @@ class IncidentReportView(APIView):
                 while current_time <= end_time:
                     next_time = current_time + delta
                     time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = incidents.filter(time_filter).values("incident_priority").annotate(count=Count("id"))
-                    priority_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
+                    counts = (
+                        incidents.filter(time_filter)
+                        .values("incident_priority")
+                        .annotate(count=Count("id"))
+                    )
+                    priority_counts = {
+                        "Critical": 0,
+                        "High": 0,
+                        "Medium": 0,
+                        "Low": 0,
+                        "Unknown": 0,
+                    }
                     for entry in counts:
                         priority_key = entry["incident_priority"]
                         if priority_key in priority_map:
-                            label = reverse_priority_label[priority_map[priority_key]].replace("P1 ", "").replace("P2 ", "").replace("P3 ", "").replace("P4 ", "")
+                            label = (
+                                reverse_priority_label[priority_map[priority_key]]
+                                .replace("P1 ", "")
+                                .replace("P2 ", "")
+                                .replace("P3 ", "")
+                                .replace("P4 ", "")
+                            )
                             priority_counts[label] = entry["count"]
                         else:
                             priority_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_priority_graph.append({"timestamp": current_time.isoformat(), **priority_counts})
+                    incident_ticket_trend_by_priority_graph.append(
+                        {"timestamp": current_time.isoformat(), **priority_counts}
+                    )
                     current_time = next_time
-            elif filter_type in [FilterType.MONTH.value, FilterType.LAST_MONTH.value, FilterType.QUARTER.value, FilterType.LAST_6_MONTHS.value]:
+            elif filter_type in [
+                FilterType.MONTH.value,
+                FilterType.LAST_MONTH.value,
+                FilterType.QUARTER.value,
+                FilterType.LAST_6_MONTHS.value,
+            ]:
                 start_time = date_threshold
                 end_time = now
                 delta = timedelta(weeks=1)
@@ -5426,34 +5622,72 @@ class IncidentReportView(APIView):
                 while current_time <= end_time:
                     next_time = current_time + delta
                     time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = incidents.filter(time_filter).values("incident_priority").annotate(count=Count("id"))
-                    priority_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
+                    counts = (
+                        incidents.filter(time_filter)
+                        .values("incident_priority")
+                        .annotate(count=Count("id"))
+                    )
+                    priority_counts = {
+                        "Critical": 0,
+                        "High": 0,
+                        "Medium": 0,
+                        "Low": 0,
+                        "Unknown": 0,
+                    }
                     for entry in counts:
                         priority_key = entry["incident_priority"]
                         if priority_key in priority_map:
-                            label = reverse_priority_label[priority_map[priority_key]].replace("P1 ", "").replace("P2 ", "").replace("P3 ", "").replace("P4 ", "")
+                            label = (
+                                reverse_priority_label[priority_map[priority_key]]
+                                .replace("P1 ", "")
+                                .replace("P2 ", "")
+                                .replace("P3 ", "")
+                                .replace("P4 ", "")
+                            )
                             priority_counts[label] = entry["count"]
                         else:
                             priority_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_priority_graph.append({"timestamp": current_time.isoformat(), **priority_counts})
+                    incident_ticket_trend_by_priority_graph.append(
+                        {"timestamp": current_time.isoformat(), **priority_counts}
+                    )
                     current_time = next_time
             elif filter_type == FilterType.YEAR.value:
                 start_time = date_threshold
                 end_time = now
                 current_time = start_time
                 while current_time <= end_time:
-                    next_time = (current_time.replace(day=1) + timedelta(days=32)).replace(day=1)
+                    next_time = (
+                        current_time.replace(day=1) + timedelta(days=32)
+                    ).replace(day=1)
                     time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = incidents.filter(time_filter).values("incident_priority").annotate(count=Count("id"))
-                    priority_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
+                    counts = (
+                        incidents.filter(time_filter)
+                        .values("incident_priority")
+                        .annotate(count=Count("id"))
+                    )
+                    priority_counts = {
+                        "Critical": 0,
+                        "High": 0,
+                        "Medium": 0,
+                        "Low": 0,
+                        "Unknown": 0,
+                    }
                     for entry in counts:
                         priority_key = entry["incident_priority"]
                         if priority_key in priority_map:
-                            label = reverse_priority_label[priority_map[priority_key]].replace("P1 ", "").replace("P2 ", "").replace("P3 ", "").replace("P4 ", "")
+                            label = (
+                                reverse_priority_label[priority_map[priority_key]]
+                                .replace("P1 ", "")
+                                .replace("P2 ", "")
+                                .replace("P3 ", "")
+                                .replace("P4 ", "")
+                            )
                             priority_counts[label] = entry["count"]
                         else:
                             priority_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_priority_graph.append({"timestamp": current_time.isoformat(), **priority_counts})
+                    incident_ticket_trend_by_priority_graph.append(
+                        {"timestamp": current_time.isoformat(), **priority_counts}
+                    )
                     current_time = next_time
             else:
                 start_time = date_threshold
@@ -5463,36 +5697,111 @@ class IncidentReportView(APIView):
                 while current_time <= end_time:
                     next_time = current_time + delta
                     time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = incidents.filter(time_filter).values("incident_priority").annotate(count=Count("id"))
-                    priority_counts = {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
+                    counts = (
+                        incidents.filter(time_filter)
+                        .values("incident_priority")
+                        .annotate(count=Count("id"))
+                    )
+                    priority_counts = {
+                        "Critical": 0,
+                        "High": 0,
+                        "Medium": 0,
+                        "Low": 0,
+                        "Unknown": 0,
+                    }
                     for entry in counts:
                         priority_key = entry["incident_priority"]
                         if priority_key in priority_map:
-                            label = reverse_priority_label[priority_map[priority_key]].replace("P1 ", "").replace("P2 ", "").replace("P3 ", "").replace("P4 ", "")
+                            label = (
+                                reverse_priority_label[priority_map[priority_key]]
+                                .replace("P1 ", "")
+                                .replace("P2 ", "")
+                                .replace("P3 ", "")
+                                .replace("P4 ", "")
+                            )
                             priority_counts[label] = entry["count"]
                         else:
                             priority_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_priority_graph.append({"timestamp": current_time.isoformat(), **priority_counts})
+                    incident_ticket_trend_by_priority_graph.append(
+                        {"timestamp": current_time.isoformat(), **priority_counts}
+                    )
                     current_time = next_time
 
             # Service request summary
-            created_incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters).count()
-            open_counts = DUCortexSOARIncidentFinalModel.objects.filter(filters, status=1).values("incident_priority").annotate(count=Count("id"))
-            closed_counts = DUCortexSOARIncidentFinalModel.objects.filter(filters, status=2).values("incident_priority").annotate(count=Count("id"))
-            created_counts = DUCortexSOARIncidentFinalModel.objects.filter(filters).values("incident_priority").annotate(count=Count("id"))
-            last_30_days_open_counts = DUCortexSOARIncidentFinalModel.objects.filter(
-                Q(cortex_soar_tenant_id__in=soar_ids, status=1, created__gte=now - timedelta(days=30))
-            ).values("incident_priority").annotate(count=Count("id"))
+            created_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                filters
+            ).count()
+            open_counts = (
+                DUCortexSOARIncidentFinalModel.objects.filter(filters, status=1)
+                .values("incident_priority")
+                .annotate(count=Count("id"))
+            )
+            closed_counts = (
+                DUCortexSOARIncidentFinalModel.objects.filter(filters, status=2)
+                .values("incident_priority")
+                .annotate(count=Count("id"))
+            )
+            created_counts = (
+                DUCortexSOARIncidentFinalModel.objects.filter(filters)
+                .values("incident_priority")
+                .annotate(count=Count("id"))
+            )
+            last_30_days_open_counts = (
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    Q(
+                        cortex_soar_tenant_id__in=soar_ids,
+                        status=1,
+                        created__gte=now - timedelta(days=30),
+                    )
+                )
+                .values("incident_priority")
+                .annotate(count=Count("id"))
+            )
 
-            open_priority_counts = {"total_count": 0, "Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
-            closed_priority_counts = {"total_count": 0, "Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
-            created_priority_counts = {"total_count": 0, "Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
-            last_30_days_open_priority_counts = {"filter_type": period_name, "total_count": 0, "Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Unknown": 0}
+            open_priority_counts = {
+                "total_count": 0,
+                "Critical": 0,
+                "High": 0,
+                "Medium": 0,
+                "Low": 0,
+                "Unknown": 0,
+            }
+            closed_priority_counts = {
+                "total_count": 0,
+                "Critical": 0,
+                "High": 0,
+                "Medium": 0,
+                "Low": 0,
+                "Unknown": 0,
+            }
+            created_priority_counts = {
+                "total_count": 0,
+                "Critical": 0,
+                "High": 0,
+                "Medium": 0,
+                "Low": 0,
+                "Unknown": 0,
+            }
+            last_30_days_open_priority_counts = {
+                "filter_type": period_name,
+                "total_count": 0,
+                "Critical": 0,
+                "High": 0,
+                "Medium": 0,
+                "Low": 0,
+                "Unknown": 0,
+            }
 
             for entry in open_counts:
                 priority_key = entry["incident_priority"]
                 if priority_key in priority_map:
-                    label = reverse_priority_label[priority_map[priority_key]].replace("P1 ", "").replace("P2 ", "").replace("P3 ", "").replace("P4 ", "")
+                    label = (
+                        reverse_priority_label[priority_map[priority_key]]
+                        .replace("P1 ", "")
+                        .replace("P2 ", "")
+                        .replace("P3 ", "")
+                        .replace("P4 ", "")
+                    )
                     open_priority_counts[label] = entry["count"]
                 else:
                     open_priority_counts["Unknown"] = entry["count"]
@@ -5501,7 +5810,13 @@ class IncidentReportView(APIView):
             for entry in closed_counts:
                 priority_key = entry["incident_priority"]
                 if priority_key in priority_map:
-                    label = reverse_priority_label[priority_map[priority_key]].replace("P1 ", "").replace("P2 ", "").replace("P3 ", "").replace("P4 ", "")
+                    label = (
+                        reverse_priority_label[priority_map[priority_key]]
+                        .replace("P1 ", "")
+                        .replace("P2 ", "")
+                        .replace("P3 ", "")
+                        .replace("P4 ", "")
+                    )
                     closed_priority_counts[label] = entry["count"]
                 else:
                     closed_priority_counts["Unknown"] = entry["count"]
@@ -5510,7 +5825,13 @@ class IncidentReportView(APIView):
             for entry in created_counts:
                 priority_key = entry["incident_priority"]
                 if priority_key in priority_map:
-                    label = reverse_priority_label[priority_map[priority_key]].replace("P1 ", "").replace("P2 ", "").replace("P3 ", "").replace("P4 ", "")
+                    label = (
+                        reverse_priority_label[priority_map[priority_key]]
+                        .replace("P1 ", "")
+                        .replace("P2 ", "")
+                        .replace("P3 ", "")
+                        .replace("P4 ", "")
+                    )
                     created_priority_counts[label] = entry["count"]
                 else:
                     created_priority_counts["Unknown"] = entry["count"]
@@ -5519,7 +5840,13 @@ class IncidentReportView(APIView):
             for entry in last_30_days_open_counts:
                 priority_key = entry["incident_priority"]
                 if priority_key in priority_map:
-                    label = reverse_priority_label[priority_map[priority_key]].replace("P1 ", "").replace("P2 ", "").replace("P3 ", "").replace("P4 ", "")
+                    label = (
+                        reverse_priority_label[priority_map[priority_key]]
+                        .replace("P1 ", "")
+                        .replace("P2 ", "")
+                        .replace("P3 ", "")
+                        .replace("P4 ", "")
+                    )
                     last_30_days_open_priority_counts[label] = entry["count"]
                 else:
                     last_30_days_open_priority_counts["Unknown"] = entry["count"]
@@ -5534,13 +5861,16 @@ class IncidentReportView(APIView):
                 "last_30_days_open_requests": last_30_days_open_priority_counts,
             }
 
-            return Response({
-                "cards_data": cards_data,
-                "incident_status_graph": incident_status_graph,
-                "incident_ticket_details": incident_ticket_details,
-                "incident_ticket_trend_by_priority_graph": incident_ticket_trend_by_priority_graph,
-                "service_request_summary": service_request_summary,
-            }, status=200)
+            return Response(
+                {
+                    "cards_data": cards_data,
+                    "incident_status_graph": incident_status_graph,
+                    "incident_ticket_details": incident_ticket_details,
+                    "incident_ticket_trend_by_priority_graph": incident_ticket_trend_by_priority_graph,
+                    "service_request_summary": service_request_summary,
+                },
+                status=200,
+            )
 
         except Exception as e:
             logger.error(f"Error in IncidentReportView: {str(e)}")
