@@ -769,10 +769,10 @@ class TenantRolePermissions(models.Model):
 
 
 class SlaLevelChoices(models.IntegerChoices):
-    P1 = 4, "P1 - Critical"
-    P2 = 3, "P2 - High"
-    P3 = 2, "P3 - Medium"
-    P4 = 1, "P4 - Low"
+    P1 = 4, "P1 Critical"
+    P2 = 3, "P2 High"
+    P3 = 2, "P3 Medium"
+    P4 = 1, "P4 Low"
 
 
 class DefaultSoarSlaMetric(models.Model):
