@@ -386,12 +386,12 @@ class DUCortexSOARIncidentFinalModel(models.Model):
         return f"{self.incident_id} - {self.name}"
 
 
-class Tenant(models.Model):
-    tenant = models.ForeignKey(User, on_delete=models.CASCADE)
+class Company(models.Model):
+    company_name = models.CharField(max_length=100, unique=True)
     created_by = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, related_name="created_tenants"
+        User, on_delete=models.SET_NULL, null=True, related_name="companies_created_by"
     )
-    qradar_tenants = models.ManyToManyField(DuIbmQradarTenants, blank=True)
+    qradar_tenant = models.ManyToManyField(DuIbmQradarTenants, blank=True)
     event_collectors = models.ManyToManyField(IBMQradarEventCollector, blank=True)
     integrations = models.ManyToManyField(Integration, blank=True)
     itsm_tenants = models.ManyToManyField(DuITSMTenants, blank=True)
@@ -399,8 +399,31 @@ class Tenant(models.Model):
     is_defualt_threat_intel = models.BooleanField(default=True)
     phone_number = models.CharField(max_length=20, blank=True)
     industry = models.CharField(max_length=100, blank=True)
-    ldap_group = models.CharField(max_length=100, blank=True)
     is_default_sla = models.BooleanField(default=True)
+    country = models.CharField(max_length=2, blank=True)
+    profile_picture = models.ImageField(
+        upload_to="profile_pictures/", blank=True, null=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "companies"
+
+    def __str__(self):
+        return self.company_name
+
+
+class Tenant(models.Model):
+    company = models.ForeignKey(
+        Company, on_delete=models.CASCADE, related_name="tenants"
+    )
+    tenant = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name="tenants_created_by"
+    )
+    ldap_group = models.CharField(max_length=100, blank=True)
+
     country = models.CharField(max_length=2, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -412,7 +435,13 @@ class VolumeTypeChoices(models.IntegerChoices):
 
 
 class TenantQradarMapping(models.Model):
-    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="qradar_mappings",
+        null=True,
+        blank=True,
+    )
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
     event_collectors = models.ManyToManyField(IBMQradarEventCollector, blank=True)
     contracted_volume_type = models.IntegerField(
@@ -428,7 +457,7 @@ class TenantQradarMapping(models.Model):
     )
 
     class Meta:
-        unique_together = ("tenant", "qradar_tenant")
+        unique_together = ("company", "qradar_tenant")
 
 
 class ThreatIntelligenceTenant(models.Model):
