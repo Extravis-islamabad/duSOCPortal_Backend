@@ -822,8 +822,10 @@ class DefaultSoarSlaMetric(models.Model):
 
 
 class SoarTenantSlaMetric(models.Model):
-    tenant = models.ForeignKey(
-        Tenant, on_delete=models.CASCADE, related_name="soar_sla_metrics"
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="soar_sla_metrics",
     )
     soar_tenant = models.ForeignKey(
         DuCortexSOARTenants, on_delete=models.CASCADE, related_name="sla_metrics"
@@ -837,12 +839,10 @@ class SoarTenantSlaMetric(models.Model):
 
     class Meta:
         db_table = "soar_tenant_sla_metrics"
-        unique_together = ("tenant", "soar_tenant", "sla_level")
+        unique_together = ("company", "soar_tenant", "sla_level")
 
     def __str__(self):
-        return (
-            f"SLA - {self.tenant} - {self.soar_tenant} - {self.get_sla_level_display()}"
-        )
+        return f"SLA  - {self.company} - {self.soar_tenant} - {self.get_sla_level_display()}"
 
 
 class TotalEvents(models.Model):
