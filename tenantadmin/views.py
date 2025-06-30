@@ -340,33 +340,44 @@ class NonActiveTenantsAPIView(APIView):
         )
 
         companies = Company.objects.filter(created_by=request.user)
-        response_data = []
+        result = []
 
         for company in companies:
             inactive_tenants = Tenant.objects.filter(
-                company=company,
-                tenant__is_active=False,
+                company=company, tenant__is_active=False
             )
 
-            if not inactive_tenants.exists():
+            tenant_count = inactive_tenants.count()
+            if tenant_count == 0:
                 continue
 
-            response_data.append(
+            result.append(
                 {
-                    "company_id": company.id,
-                    "company_name": company.company_name,
+                    "id": company.id,
+                    "name": company.company_name,
+                    "phone_number": company.phone_number,
+                    "industry": company.industry,
+                    "country": company.country,
+                    "tenant_count": tenant_count,
+                    "profile_picture": request.build_absolute_uri(
+                        company.profile_picture.url
+                    )
+                    if company.profile_picture
+                    else None,
+                    "created_at": company.created_at,
+                    "updated_at": company.updated_at,
                 }
             )
 
-        if not response_data:
+        if not result:
             return Response(
                 {"message": "No companies found with inactive tenants."},
                 status=200,
             )
 
-        logger.success(f"Found {len(response_data)} companies with inactive tenants.")
+        logger.success(f"Found {len(result)} companies with inactive tenants.")
 
-        return Response({"companies": response_data}, status=200)
+        return Response({"companies": result}, status=200)
 
 
 class SyncIBMQradarDataAPIView(APIView):
