@@ -23,6 +23,8 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 class UserDetailSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
+    profile_picture = serializers.SerializerMethodField()
+    company_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -70,6 +72,20 @@ class UserDetailSerializer(serializers.ModelSerializer):
                 return []
         # For admins (or non-tenants), return an empty list
         return []
+
+    def get_profile_picture(self, obj):
+        if obj.is_tenant:
+            tenant = Tenant.objects.filter(tenant=obj).first()
+            if tenant and tenant.company and tenant.company.profile_picture:
+                request = self.context.get("request")
+                return request.build_absolute_uri(tenant.company.profile_picture.url)
+        return None
+
+    def get_company_name(self, obj):
+        if obj.is_tenant:
+            tenant = Tenant.objects.filter(tenant=obj).first()
+            return tenant.company.company_name if tenant else None
+        return None
 
 
 class ProfilePictureUploadSerializer(serializers.ModelSerializer):
