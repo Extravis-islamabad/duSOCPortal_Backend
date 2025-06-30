@@ -4518,13 +4518,12 @@ class SLAIncidentsView(APIView):
     def get(self, request):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
-            print("Authenticated Tenant ID:", tenant.id)
             logger.info(f"Authenticated Tenant ID: {tenant.id}")
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
         try:
-            soar_integrations = tenant.integrations.filter(
+            soar_integrations = tenant.company.integrations.filter(
                 integration_type=IntegrationTypes.SOAR_INTEGRATION,
                 soar_subtype=SoarSubTypes.CORTEX_SOAR,
                 status=True,
@@ -4535,7 +4534,7 @@ class SLAIncidentsView(APIView):
                     status=400,
                 )
 
-            soar_tenants = tenant.soar_tenants.all()
+            soar_tenants = tenant.company.soar_tenants.all()
             if not soar_tenants:
                 return Response({"error": "No SOAR tenants found."}, status=404)
             soar_ids = [t.id for t in soar_tenants]
@@ -4601,7 +4600,7 @@ class SLAIncidentsView(APIView):
             )
 
             # SLA Metrics selection based on is_default_sla
-            if tenant.is_default_sla:
+            if tenant.company.is_default_sla:
                 logger.info("SLA source: DefaultSoarSlaMetric")
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
