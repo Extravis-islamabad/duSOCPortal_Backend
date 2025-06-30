@@ -144,29 +144,39 @@ class DeleteTenantByCompanyView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def delete(self, request):
-        company_name = request.data.get("company_name")
-
-        if not company_name:
-            return Response({"error": "Company name is required."}, status=400)
-
-        tenants = Tenant.objects.filter(tenant__company_name__iexact=company_name)
-
-        if not tenants.exists():
+    def delete(self, request, company_id):
+        try:
+            company = Company.objects.get(id=company_id, created_by=request.user)
+        except Exception:
             return Response(
-                {"error": "No tenant found for the given company name."}, status=404
+                {"error": "Company with the given ID does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Delete all associated users
-        user_deleted_count, _ = User.objects.filter(
-            company_name__iexact=company_name
-        ).delete()
+        # Get all tenants under this company
+        tenants = Tenant.objects.filter(company=company)
 
-        # Delete all related tenants
+        # if not tenants.exists():
+        #     return Response(
+        #         {"error": "No tenants found for the given company."},
+        #         status=status.HTTP_404_NOT_FOUND,
+        #     )
+
+        # Get all associated users
+        user_ids = tenants.values_list("tenant__id", flat=True)
+
+        # Delete users
+        user_deleted_count, _ = User.objects.filter(id__in=user_ids).delete()
+
+        # Delete tenants
         tenant_deleted_count, _ = tenants.delete()
 
+        # Delete the company itself
+        company.company_name
+        company.delete()
+
         return Response(
-            {"message": "Deleted tenant(s)  user(s) under company."},
+            {"message": "Deleted Tenants"},
             status=status.HTTP_200_OK,
         )
 

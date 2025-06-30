@@ -45,7 +45,7 @@ urlpatterns = [
         name="deleted-tenants",
     ),
     path(
-        "delete_tenant/",
+        "delete_tenant/<int:company_id>/",
         DeleteTenantByCompanyView.as_view(),
         name="tenant-delete",
     ),
