@@ -255,6 +255,107 @@ class TenantRolePermissionsSerializer(serializers.ModelSerializer):
         fields = ["permission", "permission_text"]
 
 
+# class AllTenantDetailSerializer(serializers.ModelSerializer):
+#     username = serializers.CharField(source="tenant.username", read_only=True)
+#     email = serializers.EmailField(source="tenant.email", read_only=True)
+#     permissions = serializers.SerializerMethodField()
+#     tenant_admin = serializers.SerializerMethodField()
+#     total_incidents = serializers.SerializerMethodField()
+#     active_incidents = serializers.SerializerMethodField()
+#     tickets_count = serializers.SerializerMethodField()
+#     sla = serializers.SerializerMethodField()
+#     asset_count = serializers.SerializerMethodField()
+#     created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
+#     role = serializers.SerializerMethodField()
+#     company_name = serializers.CharField(source="tenant.company_name", read_only=True)
+
+#     class Meta:
+#         model = Tenant
+#         fields = [
+#             "id",
+#             "username",
+#             "company_name",
+#             "email",
+#             "phone_number",
+#             "created_at",
+#             "updated_at",
+#             "permissions",
+#             "asset_count",
+#             "total_incidents",
+#             "active_incidents",
+#             "tickets_count",
+#             "sla",
+#             "tenant_admin",
+#             "created_by_id",
+#             "role",
+#         ]
+
+#     def get_permissions(self, obj):
+#         try:
+#             role = obj.roles.get()
+#             return [
+#                 {"id": perm.permission, "name": perm.permission_text}
+#                 for perm in role.role_permissions.all()
+#             ]
+#         except Exception as e:
+#             logger.error(e)
+#             return []
+
+#     def get_tenant_admin(self, obj):
+#         if obj.tenant:
+#             return obj.created_by.username or None
+#         return None
+
+#     def get_asset_count(self, obj):
+#         try:
+#             # Get all event collector IDs for the tenant
+#             collector_ids = TenantQradarMapping.objects.filter(tenant=obj).values_list(
+#                 "event_collectors__id", flat=True
+#             )
+
+#             # Count assets for these collectors
+#             asset_count = IBMQradarAssests.objects.filter(
+#                 event_collector__id__in=collector_ids
+#             ).aggregate(totalAssets=Count("id"))
+
+#             return asset_count["totalAssets"] or 0
+#         except Exception:
+#             return 0
+
+#     def get_active_incidents(self, obj):
+#         return self.get_total_incidents(obj)
+
+#     def get_sla(self, obj):
+#         try:
+#             return obj.sla.name
+#         except Exception:
+#             return 0
+
+#     def get_total_incidents(self, obj):
+#         try:
+#             soar_tenants = obj.soar_tenants.all()
+#             return DUCortexSOARIncidentFinalModel.objects.filter(
+#                 cortex_soar_tenant__in=soar_tenants
+#             ).count()
+#         except Exception:
+#             return 0
+
+#     def get_tickets_count(self, obj):
+#         try:
+#             itsm_tenants = obj.itsm_tenants.all()
+#             return DuITSMFinalTickets.objects.filter(
+#                 itsm_tenant__in=itsm_tenants
+#             ).count()
+#         except Exception:
+#             return 0
+
+
+#     def get_role(self, obj):
+#         try:
+#             role = obj.roles.get()
+#             return role.get_role_type_display()
+#         except Exception:
+#             return None
 class AllTenantDetailSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="tenant.username", read_only=True)
     email = serializers.EmailField(source="tenant.email", read_only=True)
@@ -267,16 +368,25 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
     asset_count = serializers.SerializerMethodField()
     created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
     role = serializers.SerializerMethodField()
-    company_name = serializers.CharField(source="tenant.company_name", read_only=True)
+
+    # ✅ Fields from Company
+    company_name = serializers.SerializerMethodField()
+    phone_number = serializers.SerializerMethodField()
+    industry = serializers.SerializerMethodField()
+    country = serializers.SerializerMethodField()
+    profile_picture = serializers.SerializerMethodField()
 
     class Meta:
         model = Tenant
         fields = [
             "id",
             "username",
-            "company_name",
             "email",
+            "company_name",
             "phone_number",
+            "industry",
+            "country",
+            "profile_picture",
             "created_at",
             "updated_at",
             "permissions",
@@ -289,6 +399,24 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
             "created_by_id",
             "role",
         ]
+
+    def get_company_name(self, obj):
+        return obj.company.company_name if obj.company else None
+
+    def get_phone_number(self, obj):
+        return obj.company.phone_number if obj.company else None
+
+    def get_industry(self, obj):
+        return obj.company.industry if obj.company else None
+
+    def get_country(self, obj):
+        return obj.company.country if obj.company else None
+
+    def get_profile_picture(self, obj):
+        if obj.company and obj.company.profile_picture:
+            request = self.context.get("request")
+            return request.build_absolute_uri(obj.company.profile_picture.url)
+        return None
 
     def get_permissions(self, obj):
         try:
@@ -308,16 +436,12 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
 
     def get_asset_count(self, obj):
         try:
-            # Get all event collector IDs for the tenant
             collector_ids = TenantQradarMapping.objects.filter(tenant=obj).values_list(
                 "event_collectors__id", flat=True
             )
-
-            # Count assets for these collectors
             asset_count = IBMQradarAssests.objects.filter(
                 event_collector__id__in=collector_ids
             ).aggregate(totalAssets=Count("id"))
-
             return asset_count["totalAssets"] or 0
         except Exception:
             return 0
@@ -329,7 +453,7 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
         try:
             return obj.sla.name
         except Exception:
-            return 0
+            return None
 
     def get_total_incidents(self, obj):
         try:
