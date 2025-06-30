@@ -334,54 +334,39 @@ class NonActiveTenantsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def get(self, request, company_id):
+    def get(self, request):
         logger.info(
-            f"Non-active tenants for company ID {company_id} requested by: {request.user.username}"
+            f"Non-active tenant companies requested by: {request.user.username}"
         )
 
-        try:
-            company = Company.objects.get(id=company_id, created_by=request.user)
-        except Company.DoesNotExist:
-            return Response(
-                {
-                    "error": "Company with the given ID does not exist or not owned by user."
-                },
-                status=404,
+        companies = Company.objects.filter(created_by=request.user)
+        response_data = []
+
+        for company in companies:
+            inactive_tenants = Tenant.objects.filter(
+                company=company,
+                tenant__is_active=False,
             )
 
-        # Fetch inactive tenants under this company
-        inactive_tenants = Tenant.objects.filter(
-            company=company,
-            tenant__is_active=False,
-        )
+            if not inactive_tenants.exists():
+                continue
 
-        if not inactive_tenants.exists():
-            return Response(
+            response_data.append(
                 {
-                    "message": f"No inactive tenants found for company '{company.company_name}'."
-                },
+                    "company_id": company.id,
+                    "company_name": company.company_name,
+                }
+            )
+
+        if not response_data:
+            return Response(
+                {"message": "No companies found with inactive tenants."},
                 status=200,
             )
 
-        result = [
-            {
-                "id": tenant.id,
-                "username": tenant.tenant.username,
-                "email": tenant.tenant.email,
-                "created_at": tenant.created_at,
-                "updated_at": tenant.updated_at,
-            }
-            for tenant in inactive_tenants
-        ]
+        logger.success(f"Found {len(response_data)} companies with inactive tenants.")
 
-        logger.success(
-            f"Retrieved {len(result)} inactive tenants for company: {company.company_name}"
-        )
-
-        return Response(
-            {"company": company.company_name, "inactive_tenants": result},
-            status=200,
-        )
+        return Response({"companies": response_data}, status=200)
 
 
 class SyncIBMQradarDataAPIView(APIView):
