@@ -473,7 +473,9 @@ class ThreatIntelligenceTenant(models.Model):
     base_url = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    tenants = models.ManyToManyField(Tenant, related_name="custom_threat_intels")
+    company = models.OneToOneField(
+        Company, on_delete=models.CASCADE, related_name="threat_intelligence_tenants"
+    )
 
     class Meta:
         unique_together = ("access_key", "secret_key", "base_url")
