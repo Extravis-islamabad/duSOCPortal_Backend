@@ -15,8 +15,9 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 
-from .models import (
+from .models import (  # SoarTenantSlaMetric,
     Alert,
+    Company,
     CustomerEPS,
     CywareAlertDetails,
     CywareCategories,
@@ -741,7 +742,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         required=True,
         write_only=True,
     )
-    ldap_group = serializers.CharField(required=True, write_only=True)
     qradar_tenants = QradarTenantInputSerializer(
         many=True, required=False, write_only=True
     )
@@ -751,9 +751,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     itsm_tenant_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
     )
-    # soar_tenant_ids = serializers.ListField(
-    #     child=serializers.IntegerField(), required=False, write_only=True
-    # )
     soar_tenants = SoarTenantInputSerializer(many=True, required=False, write_only=True)
     role_permissions = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
@@ -768,7 +765,11 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     )
     base_url = serializers.CharField(required=False, allow_blank=True, write_only=True)
     company_name = serializers.CharField(write_only=True)
-    is_default_sla = serializers.BooleanField(required=False, write_only=True)
+    is_default_sla = serializers.BooleanField(write_only=True)
+
+    phone_number = serializers.CharField(write_only=True)
+    industry = serializers.CharField(write_only=True)
+    country = serializers.CharField(write_only=True)
 
     class Meta:
         model = Tenant
@@ -781,7 +782,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             "qradar_tenants",
             "integration_ids",
             "itsm_tenant_ids",
-            # "soar_tenant_ids",
             "soar_tenants",
             "role_permissions",
             "id",
@@ -799,14 +799,9 @@ class TenantCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         company_name = data.get("company_name")
-        if not company_name:
+        if Company.objects.filter(company_name__iexact=company_name).exists():
             raise serializers.ValidationError(
-                {"company_name": "Company name is required"}
-            )
-
-        if User.objects.filter(company_name__iexact=company_name).exists():
-            raise serializers.ValidationError(
-                {"company_name": "Tenant with this company name already exists"}
+                {"company_name": "Company name already exists"}
             )
 
         ldap_users = data.get("ldap_users")
@@ -814,14 +809,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"ldap_users": "At least one LDAP user is required"}
             )
-        ldap_group = data.get("ldap_group")
-        if not ldap_group:
-            raise serializers.ValidationError(
-                {"ldap_group": "At least one LDAP group is required"}
-            )
-        industry = data.get("industry")
-        if not industry:
-            raise serializers.ValidationError({"industry": "Industry is required"})
+
         existing_usernames = User.objects.filter(
             username__in=[u["username"] for u in ldap_users]
         ).values_list("username", flat=True)
@@ -835,6 +823,11 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         if len(usernames) != len(set(usernames)):
             raise serializers.ValidationError(
                 {"ldap_users": "Duplicate usernames detected"}
+            )
+
+        if not all(user.get("ldap_group") for user in ldap_users):
+            raise serializers.ValidationError(
+                {"ldap_users": "Each user must have a non-empty ldap_group."}
             )
 
         if not any(user.get("is_admin") for user in ldap_users):
@@ -884,59 +877,77 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"itsm_tenant_ids": f"Invalid ITSM tenant IDs: {missing}"}
                 )
-
-        # if "soar_tenant_ids" in data:
-        #     is_default_sla = data.get("is_default_sla", None)
-        #     soar_ids = data["soar_tenant_ids"]
-        #     found = DuCortexSOARTenants.objects.filter(id__in=soar_ids).values_list(
-        #         "id", flat=True
-        #     )
-        #     if len(found) != len(soar_ids):
-        #         missing = set(soar_ids) - set(found)
-        #         raise serializers.ValidationError(
-        #             {"soar_tenant_ids": f"Invalid SOAR tenant IDs: {missing}"}
-        #         )
-
-        if "soar_tenants" in data:
-            is_default_sla = data.get("is_default_sla", None)
-            if is_default_sla is None:
-                raise serializers.ValidationError(
-                    {"is_default_sla": "is_default_sla is required"}
-                )
+        if "soar_tenants" in data and not data.get("is_default_sla", True):
+            required_levels = {level for level, _ in SlaLevelChoices.choices}
             for soar in data["soar_tenants"]:
-                if not DuCortexSOARTenants.objects.filter(
-                    id=soar["soar_tenant_id"]
-                ).exists():
+                provided_levels = {
+                    sla["sla_level"] for sla in soar.get("sla_overrides", [])
+                }
+                if provided_levels != required_levels:
                     raise serializers.ValidationError(
                         {
-                            "soar_tenants": f"Invalid SOAR tenant ID: {soar['soar_tenant_id']}"
+                            "soar_tenants": "Custom SLA must cover all SLA levels (P1 to P4)"
                         }
                     )
-                if not is_default_sla:
-                    provided_levels = set(
-                        [sla["sla_level"] for sla in soar.get("sla_overrides", [])]
-                    )
-                    required_levels = set(
-                        [level for level, _ in SlaLevelChoices.choices]
-                    )
-                    if provided_levels != required_levels:
-                        raise serializers.ValidationError(
-                            {
-                                "soar_tenants": "Custom SLA must be provided for all SLA levels (P1 to P4)"
-                            }
-                        )
+
+        if "soar_tenants" in data:
+            soar_ids = [s["soar_tenant_id"] for s in data["soar_tenants"]]
+            already_assigned = DuCortexSOARTenants.objects.filter(
+                id__in=soar_ids, company__isnull=False
+            ).values_list("id", flat=True)
+            if already_assigned:
+                raise serializers.ValidationError(
+                    {
+                        "soar_tenants": f"SOAR tenants already assigned: {list(already_assigned)}"
+                    }
+                )
+
+        if "qradar_tenants" in data:
+            qradar_ids = [q["qradar_tenant_id"] for q in data["qradar_tenants"]]
+
+            # Check if DuIbmQradarTenants already assigned to a company
+            already_assigned = DuIbmQradarTenants.objects.filter(
+                id__in=qradar_ids, company__isnull=False
+            ).values_list("id", flat=True)
+            if already_assigned:
+                raise serializers.ValidationError(
+                    {
+                        "qradar_tenants": f"QRadar tenants already assigned: {list(already_assigned)}"
+                    }
+                )
+
+            # Check if TenantQradarMapping already has qradar_tenant assigned to another company
+            mapping_assigned = TenantQradarMapping.objects.filter(
+                qradar_tenant_id__in=qradar_ids
+            ).values_list("qradar_tenant_id", flat=True)
+            if mapping_assigned:
+                raise serializers.ValidationError(
+                    {
+                        "qradar_tenants": f"QRadar tenant IDs already mapped: {list(mapping_assigned)}"
+                    }
+                )
+
+        if "itsm_tenant_ids" in data:
+            itsm_ids = data["itsm_tenant_ids"]
+            already_assigned = DuITSMTenants.objects.filter(
+                id__in=itsm_ids, company__isnull=False
+            ).values_list("id", flat=True)
+            if already_assigned:
+                raise serializers.ValidationError(
+                    {
+                        "itsm_tenant_ids": f"ITSM tenants already assigned: {list(already_assigned)}"
+                    }
+                )
 
         return data
 
     def create(self, validated_data):
         industry = validated_data.pop("industry")
-        ldap_group = validated_data.pop("ldap_group")
         ldap_users = validated_data.pop("ldap_users")
         role_permissions = validated_data.pop("role_permissions", [])
         integration_ids = validated_data.pop("integration_ids", [])
         qradar_tenants_data = validated_data.pop("qradar_tenants", [])
         itsm_tenant_ids = validated_data.pop("itsm_tenant_ids", [])
-        # soar_tenant_ids = validated_data.pop("soar_tenant_ids", [])
         soar_tenant_data = validated_data.pop("soar_tenants", [])
         is_defualt_threat_intel = validated_data.pop("is_defualt_threat_intel", True)
         threat_intelligence = validated_data.pop("threat_intelligence", None)
@@ -945,33 +956,39 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         base_url = validated_data.pop("base_url", None)
         is_default_sla = validated_data.pop("is_default_sla", False)
         company_name = validated_data.pop("company_name", None)
-
+        phone_number = validated_data.pop("phone_number", None)
+        country = validated_data.pop("country", None)
         created_by = self.context["request"].user
 
-        created_tenants = []
-
         with transaction.atomic():
-            for index, user_data in enumerate(ldap_users):
+            company = Company.objects.create(
+                company_name=company_name,
+                created_by=created_by,
+                phone_number=phone_number,
+                industry=industry,
+                is_default_sla=is_default_sla,
+                is_defualt_threat_intel=is_defualt_threat_intel,
+                country=country,
+            )
+
+            for user_data in ldap_users:
                 email = user_data.get("email")
                 email = None if email == "N/A" else email
-                user, created = User.objects.get_or_create(
+                user, _ = User.objects.get_or_create(
                     username=user_data["username"],
                     defaults={
                         "email": email,
                         "name": user_data.get("name"),
-                        "company_name": company_name,
                         "is_tenant": True,
                         "is_active": True,
                     },
                 )
-
+                ldap_group = user_data["ldap_group"]
                 tenant = Tenant.objects.create(
                     tenant=user,
+                    company=company,
                     created_by=created_by,
                     ldap_group=ldap_group,
-                    industry=industry,
-                    is_default_sla=is_default_sla,
-                    is_defualt_threat_intel=is_defualt_threat_intel,
                     **validated_data,
                 )
 
@@ -991,54 +1008,47 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                         role=role, permission=permission
                     )
 
-                if integration_ids:
-                    tenant.integrations.set(
-                        Integration.objects.filter(id__in=integration_ids)
-                    )
+            if integration_ids:
+                company.integrations.set(
+                    Integration.objects.filter(id__in=integration_ids)
+                )
 
-                if itsm_tenant_ids:
-                    tenant.itsm_tenants.set(
-                        DuITSMTenants.objects.filter(id__in=itsm_tenant_ids)
-                    )
+            if itsm_tenant_ids:
+                company.itsm_tenants.set(
+                    DuITSMTenants.objects.filter(id__in=itsm_tenant_ids)
+                )
 
-                # if soar_tenant_ids:
-                #     tenant.soar_tenants.set(
-                #         DuCortexSOARTenants.objects.filter(id__in=soar_tenant_ids)
-                #     )
-                for soar in soar_tenant_data:
-                    soar_tenant = DuCortexSOARTenants.objects.get(
-                        id=soar["soar_tenant_id"]
-                    )
-                    tenant.soar_tenants.set(
-                        DuCortexSOARTenants.objects.filter(id=soar["soar_tenant_id"])
-                    )
-                    if not is_default_sla:
-                        for override in soar.get("sla_overrides", []):
-                            SoarTenantSlaMetric.objects.create(
-                                tenant=tenant,
-                                soar_tenant=soar_tenant,
-                                sla_level=override["sla_level"],
-                                tta_minutes=override["tta_minutes"],
-                                ttn_minutes=override["ttn_minutes"],
-                                ttdn_minutes=override["ttdn_minutes"],
-                            )
-                for qt in qradar_tenants_data:
-                    qradar_tenant = DuIbmQradarTenants.objects.get(
-                        id=qt["qradar_tenant_id"]
-                    )
-                    mapping = TenantQradarMapping.objects.create(
-                        tenant=tenant,
-                        qradar_tenant=qradar_tenant,
-                        contracted_volume_type=qt["contracted_volume_type"],
-                        contracted_volume=qt["contracted_volume"],
-                    )
-                    mapping.event_collectors.set(
-                        IBMQradarEventCollector.objects.filter(
-                            id__in=qt.get("event_collector_ids", [])
+            for soar in soar_tenant_data:
+                soar_tenant = DuCortexSOARTenants.objects.get(id=soar["soar_tenant_id"])
+                company.soar_tenants.set(
+                    DuCortexSOARTenants.objects.filter(id=soar["soar_tenant_id"])
+                )
+                if not is_default_sla:
+                    for override in soar.get("sla_overrides", []):
+                        SoarTenantSlaMetric.objects.create(
+                            tenant=tenant,
+                            soar_tenant=soar_tenant,
+                            sla_level=override["sla_level"],
+                            tta_minutes=override["tta_minutes"],
+                            ttn_minutes=override["ttn_minutes"],
+                            ttdn_minutes=override["ttdn_minutes"],
                         )
+            for qt in qradar_tenants_data:
+                qradar_tenant = DuIbmQradarTenants.objects.get(
+                    id=qt["qradar_tenant_id"]
+                )
+                mapping = TenantQradarMapping.objects.create(
+                    company=company,
+                    qradar_tenant=qradar_tenant,
+                    contracted_volume_type=qt["contracted_volume_type"],
+                    contracted_volume=qt["contracted_volume"],
+                )
+                mapping.event_collectors.set(
+                    IBMQradarEventCollector.objects.filter(
+                        id__in=qt.get("event_collector_ids", [])
                     )
+                )
 
-                created_tenants.append(tenant)
             if not is_defualt_threat_intel and threat_intelligence and base_url:
                 try:
                     with Cyware(
@@ -1056,17 +1066,18 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                         "Failed to validate Cyware integration."
                     )
 
-                ti_obj, _ = ThreatIntelligenceTenant.objects.get_or_create(
-                    base_url=base_url,
-                    defaults={
-                        "threat_intelligence": threat_intelligence,
-                        "access_key": access_key,
-                        "secret_key": secret_key,
-                    },
-                )
-                ti_obj.tenants.set(created_tenants)
+                if not is_defualt_threat_intel and threat_intelligence and base_url:
+                    ThreatIntelligenceTenant.objects.get_or_create(
+                        base_url=base_url,
+                        defaults={
+                            "threat_intelligence": threat_intelligence,
+                            "access_key": access_key,
+                            "secret_key": secret_key,
+                            "company": company,
+                        },
+                    )
 
-        return created_tenants
+        return company
 
 
 class CustomerEPSSerializer(serializers.ModelSerializer):
