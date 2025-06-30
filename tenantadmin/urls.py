@@ -54,7 +54,11 @@ urlpatterns = [
         ReactivateTenantUsersAPIView.as_view(),
         name="reactivate-tenant",
     ),
-    path("inactivate_tenant/", TenantInactiveView.as_view(), name="inactivate_tenant"),
+    path(
+        "inactivate_tenant/<int:company_id>/",
+        TenantInactiveView.as_view(),
+        name="inactivate_tenant",
+    ),
     path("sync_qradar/", SyncIBMQradarDataAPIView.as_view(), name="sync-ibm-qradar"),
     path("sync_soar/", SyncCortexSOARDataAPIView.as_view(), name="sync-cortex-soar"),
     path("sync_itsm/", SyncITSMDataAPIView.as_view(), name="sync-itsm"),

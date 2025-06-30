@@ -78,27 +78,64 @@ class TenantUpdateAPIView(APIView):
         return Response(serializer.errors, status=400)
 
 
+# class TenantInactiveView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAdminUser]
+
+#     def post(self, request, compan):
+#         company_name = request.data.get("company_name")
+
+#         if not company_name:
+#             return Response({"error": "Company name is required."}, status=400)
+
+#         users = User.objects.filter(company_name__iexact=company_name)
+
+#         if not users.exists():
+#             return Response(
+#                 {"error": "No users found for the given company name."}, status=404
+#             )
+
+#         users.update(is_active=False)
+
+#         return Response(
+#             {"message": f"Users under company '{company_name}' have been deactivated."},
+#             status=200,
+#         )
+
+
 class TenantInactiveView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def post(self, request):
-        company_name = request.data.get("company_name")
-
-        if not company_name:
-            return Response({"error": "Company name is required."}, status=400)
-
-        users = User.objects.filter(company_name__iexact=company_name)
-
-        if not users.exists():
+    def post(self, request, company_id):
+        try:
+            company = Company.objects.get(id=company_id, created_by=request.user)
+        except Exception:
             return Response(
-                {"error": "No users found for the given company name."}, status=404
+                {"error": "Company with the given ID does not exist."},
+                status=404,
             )
 
-        users.update(is_active=False)
+        # Get all tenant users under this company
+        tenant_users = User.objects.filter(
+            id__in=Tenant.objects.filter(
+                company=company, created_by=request.user
+            ).values_list("tenant__id", flat=True),
+            is_active=True,
+            is_deleted=False,
+        )
+
+        if not tenant_users.exists():
+            return Response(
+                {"error": "No active users found for the given company."}, status=404
+            )
+
+        tenant_users.update(is_active=False)
 
         return Response(
-            {"message": f"Users under company '{company_name}' have been deactivated."},
+            {
+                "message": f"{tenant_users.count()} user(s) under company '{company.company_name}' have been deactivated."
+            },
             status=200,
         )
 
