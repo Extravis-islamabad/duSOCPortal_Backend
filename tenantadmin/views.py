@@ -13,17 +13,19 @@ from common.constants import PaginationConstants
 from tenant.cortex_soar_tasks import sync_soar_data
 from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
 from tenant.itsm_tasks import sync_itsm
-from tenant.models import CustomerEPS, SlaLevelChoices, Tenant, VolumeTypeChoices
+from tenant.models import (
+    Company,
+    CustomerEPS,
+    SlaLevelChoices,
+    Tenant,
+    VolumeTypeChoices,
+)
 from tenant.serializers import (
     AllTenantDetailSerializer,
     CustomerEPSSerializer,
     TenantCreateSerializer,
     TenantDetailSerializer,
     TenantUpdateSerializer,
-)
-from tenant.threat_intelligence_tasks import (
-    sync_threat_intel,
-    sync_threat_intel_for_tenants,
 )
 
 
@@ -36,18 +38,14 @@ class TenantCreateAPIView(APIView):
             data=request.data, context={"request": request}
         )
         if serializer.is_valid():
-            tenants = serializer.save()
-            sync_threat_intel.delay()
-            sync_threat_intel_for_tenants.delay()
+            company = serializer.save()
+            # sync_threat_intel.delay()
+            # sync_threat_intel_for_tenants.delay()
             return Response(
                 {
                     "message": "Tenants created successfully",
-                    "tenants": [
-                        {
-                            "tenant_id": tenant.id,
-                        }
-                        for tenant in tenants
-                    ],
+                    "company_name": company.company_name,
+                    "company_id": company.id,
                 },
                 status=status.HTTP_201_CREATED,
             )
@@ -253,27 +251,35 @@ class DistinctCompaniesAPIView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        companies = (
-            Tenant.objects.filter(
-                created_by=request.user,
+        # Filter companies created by this user and having active, non-deleted tenants
+        companies = Company.objects.filter(
+            created_by=request.user,
+        ).distinct()
+
+        result = []
+        for company in companies:
+            tenant_count = company.tenants.filter(
                 tenant__is_active=True,
                 tenant__is_deleted=False,
-                tenant__company_name__isnull=False,
-            )
-            .values("tenant__company_name")
-            .annotate(tenant_count=Count("id"))
-            .order_by("tenant__company_name")
-        )
+            ).count()
 
-        # Format the response
-        result = [
-            {
-                "name": entry["tenant__company_name"],
-                "tenant_count": entry["tenant_count"],
-            }
-            for entry in companies
-            if entry["tenant__company_name"]
-        ]
+            result.append(
+                {
+                    "id": company.id,
+                    "name": company.company_name,
+                    "phone_number": company.phone_number,
+                    "industry": company.industry,
+                    "country": company.country,
+                    "tenant_count": tenant_count,
+                    "profile_picture": request.build_absolute_uri(
+                        company.profile_picture.url
+                    )
+                    if company.profile_picture
+                    else None,
+                    "created_at": company.created_at,
+                    "updated_at": company.updated_at,
+                }
+            )
 
         return Response({"companies": result}, status=200)
 
