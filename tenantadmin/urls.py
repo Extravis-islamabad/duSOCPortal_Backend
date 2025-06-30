@@ -40,7 +40,7 @@ urlpatterns = [
         name="tenants-by-company",
     ),
     path(
-        "get_deleted_tenants/",
+        "get_deleted_tenants/<int:company_id>/",
         NonActiveTenantsAPIView.as_view(),
         name="deleted-tenants",
     ),
