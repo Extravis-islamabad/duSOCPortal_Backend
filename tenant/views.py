@@ -3777,7 +3777,7 @@ class AlertDetailView(APIView):
                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
-        if tenant.is_defualt_threat_intel:
+        if tenant.company.is_defualt_threat_intel:
             # Default TI mode (CywareAlertDetails)
 
             try:
