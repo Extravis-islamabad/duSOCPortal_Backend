@@ -325,7 +325,9 @@ class TenantsByCompanyAPIView(APIView):
         paginator.page_size = PaginationConstants.PAGE_SIZE
         paginated_tenants = paginator.paginate_queryset(tenants, request)
 
-        serializer = AllTenantDetailSerializer(paginated_tenants, many=True)
+        serializer = AllTenantDetailSerializer(
+            paginated_tenants, many=True, context={"request": request}
+        )
 
         logger.success(
             f"Retrieved {tenants.count()} tenants for company: {company.company_name}"
