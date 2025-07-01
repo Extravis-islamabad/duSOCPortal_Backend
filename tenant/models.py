@@ -861,17 +861,15 @@ class TotalEvents(models.Model):
         return f"{self.qradar_tenant} - {self.integration}"
 
 
-
 class EventCountLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
-    
+
     event_name = models.CharField(max_length=512)
     event_count = models.FloatField()
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
 
     class Meta:
         db_table = "event_count_log"
