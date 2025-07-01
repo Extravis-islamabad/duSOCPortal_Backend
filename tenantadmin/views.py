@@ -83,29 +83,6 @@ class CompanyTenantSettingsUpdateAPIView(APIView):
             return Response(serializer.errors, status=400)
 
 
-# class TenantUpdateAPIView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAdminUser]
-
-#     def put(self, request, company_id):
-
-#         company = Company.objects.get(id=company_id, created_by=request.user)
-
-#         serializer = TenantUpdateSerializer(
-#             tenant, data=request.data, partial=True, context={"request": request}
-#         )
-#         related_tenants = Tenant.objects.filter(tenant__company_name=company_name)
-#         data = [{"tenant_id": t.id} for t in related_tenants]
-
-#         if serializer.is_valid():
-#             serializer.save()
-#             return Response(
-#                 {"message": "Tenant updated successfully", "tenants": data},
-#                 status=status.HTTP_200_OK,
-#             )
-#         return Response(serializer.errors, status=400)
-
-
 class TenantInactiveView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
@@ -159,12 +136,6 @@ class DeleteTenantByCompanyView(APIView):
         # Get all tenants under this company
         tenants = Tenant.objects.filter(company=company)
 
-        # if not tenants.exists():
-        #     return Response(
-        #         {"error": "No tenants found for the given company."},
-        #         status=status.HTTP_404_NOT_FOUND,
-        #     )
-
         # Get all associated users
         user_ids = tenants.values_list("tenant__id", flat=True)
 
@@ -210,33 +181,6 @@ class ReactivateTenantUsersAPIView(APIView):
         )
 
 
-# class TenantDetailAPIView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAdminUser]
-
-#     def get(self, request, tenant_id):
-#         logger.info(
-#             f"Tenant detail request by user: {request.user.username} for tenant_id: {tenant_id}"
-#         )
-#         try:
-#             # Only allow the creator to view their tenant
-#             tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
-#         except Tenant.DoesNotExist:
-#             logger.warning(
-#                 f"Tenant with id {tenant_id} not found or not owned by {request.user.username}"
-#             )
-#             return Response(
-#                 {"error": "Tenant not found or you do not have permission to view it."},
-#                 status=status.HTTP_404_NOT_FOUND,
-#             )
-
-#         serializer = TenantDetailSerializer(tenant, context={"request": request})
-#         logger.success(
-#             f"Tenant details retrieved: {tenant.tenant.username} (ID: {tenant.id})"
-#         )
-#         return Response(serializer.data, status=status.HTTP_200_OK)
-
-
 class TenantDetailAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
@@ -271,29 +215,6 @@ class TenantDetailAPIView(APIView):
             f"Tenant details retrieved for company: {company.company_name} (Tenant ID: {tenant.id})"
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
-
-
-# class AllTenantsAPIView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAdminUser]
-
-#     def get(self, request):
-#         logger.info(f"All tenants request by user: {request.user.username}")
-#         tenants = Tenant.objects.filter(
-#             created_by=request.user, tenant__is_active=True, tenant__is_deleted=False
-#         ).order_by("-created_at")
-
-#         paginator = PageNumberPagination()
-#         paginator.page_size = PaginationConstants.PAGE_SIZE
-
-#         paginated_tenants = paginator.paginate_queryset(tenants, request)
-#         serializer = AllTenantDetailSerializer(paginated_tenants, many=True)
-
-#         logger.success(
-#             f"Retrieved {tenants.count()} tenants for user: {request.user.username}"
-#         )
-
-#         return paginator.get_paginated_response(serializer.data)
 
 
 class TenantsByCompanyAPIView(APIView):
