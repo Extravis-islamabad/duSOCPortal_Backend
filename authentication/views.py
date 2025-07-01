@@ -225,10 +225,12 @@ class CompanyProfilePictureUpdateAPIView(APIView):
     parser_classes = (MultiPartParser, FormParser)
 
     def patch(self, request):
-        company_id = request.data.get("company_id")
-        if not company_id:
+        company_id = request.data.get("company_id", None)
+        company_name = request.data.get("company_name", None)
+
+        if not company_id or not company_name:
             return Response(
-                {"error": "company_id is required."},
+                {"error": "company_id is required or company_name is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -250,6 +252,7 @@ class CompanyProfilePictureUpdateAPIView(APIView):
             )
 
         company.profile_picture = profile_picture
+        company.company_name = company_name
         company.save(update_fields=["profile_picture"])
 
         return Response(
