@@ -459,7 +459,7 @@ class TenantITSMTicketsView(APIView):
 
         try:
             # Step 2: Check for active ITSM integration
-            itsm_integrations = tenant.integrations.filter(
+            itsm_integrations = tenant.company.integrations.filter(
                 integration_type=IntegrationTypes.ITSM_INTEGRATION,
                 itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
                 status=True,
@@ -471,7 +471,7 @@ class TenantITSMTicketsView(APIView):
                 )
 
             # Step 3: Get ITSM tenant IDs
-            itsm_tenant_ids = tenant.itsm_tenants.values_list("id", flat=True)
+            itsm_tenant_ids = tenant.company.itsm_tenants.values_list("id", flat=True)
             if not itsm_tenant_ids:
                 return Response(
                     {"error": "No ITSM tenants found."},
@@ -593,7 +593,7 @@ class TenantITSMTicketsView(APIView):
             return paginator.get_paginated_response(serializer.data)
 
         except Exception as e:
-            logger.error("Error in TenantITSMTicketsView: %s", str(e))
+            logger.error(f"Error in TenantITSMTicketsView: {str(e)}")
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
