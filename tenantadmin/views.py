@@ -423,24 +423,26 @@ class CustomerEPSAPIView(APIView):
         return Response(serializer.data)
 
 
-class CheckCompanyNameExisitView(APIView):
-    permission_classes = [JWTAuthentication]
+class CheckCompanyNameExistView(APIView):
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        company_name = request.query_params.get("company_name", None)
+        company_name = request.query_params.get("company_name")
         if not company_name:
             return Response(
                 {"error": "Company name is required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        flag = Tenant.objects.filter(tenant__company_name__iexact=company_name).exists()
-        if flag:
+        exists = Company.objects.filter(company_name__iexact=company_name).exists()
+        if exists:
             return Response(
-                {"error": "Company with this name already exisits."},
+                {"error": "Company with this name already exists."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
         return Response(
-            {"message": "Company name is available."}, status=status.HTTP_200_OK
+            {"message": "Company name is available."},
+            status=status.HTTP_200_OK,
         )
