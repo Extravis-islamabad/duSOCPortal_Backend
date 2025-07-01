@@ -1,8 +1,8 @@
 from django.urls import path
 
 from tenantadmin.views import (
-    AllTenantsAPIView,
     CheckCompanyNameExistView,
+    CompanyTenantSettingsUpdateAPIView,
     CustomerEPSAPIView,
     DeleteTenantByCompanyView,
     DistinctCompaniesAPIView,
@@ -16,15 +16,14 @@ from tenantadmin.views import (
     TenantDetailAPIView,
     TenantInactiveView,
     TenantsByCompanyAPIView,
-    TenantUpdateAPIView,
     VolumeTypeChoicesAPIView,
 )
 
 urlpatterns = [
     path("create_tenant/", TenantCreateAPIView.as_view(), name="tenant-create"),
     path(
-        "update_tenant/<int:tenant_id>/",
-        TenantUpdateAPIView.as_view(),
+        "update_tenant/<int:company_id>/",
+        CompanyTenantSettingsUpdateAPIView.as_view(),
         name="tenant-update",
     ),
     path(
@@ -32,7 +31,7 @@ urlpatterns = [
         TenantDetailAPIView.as_view(),
         name="tenant-detail",
     ),
-    path("get_all_tenants/", AllTenantsAPIView.as_view(), name="all-tenants"),
+    # path("get_all_tenants/", AllTenantsAPIView.as_view(), name="all-tenants"),
     path("companies/", DistinctCompaniesAPIView.as_view(), name="distinct-companies"),
     path(
         "tenants/by-company/<int:company_id>/",

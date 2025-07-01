@@ -19,12 +19,12 @@ from tenant.models import (
     Tenant,
     VolumeTypeChoices,
 )
-from tenant.serializers import (
+from tenant.serializers import (  # TenantUpdateSerializer,
     AllTenantDetailSerializer,
+    CompanyTenantUpdateSerializer,
     CustomerEPSSerializer,
     TenantCreateSerializer,
     TenantDetailSerializer,
-    TenantUpdateSerializer,
 )
 from tenant.threat_intelligence_tasks import (
     sync_threat_intel,
@@ -55,30 +55,55 @@ class TenantCreateAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class TenantUpdateAPIView(APIView):
+class CompanyTenantSettingsUpdateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def put(self, request, tenant_id):
+    def put(self, request, company_id):
         try:
-            tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
-        except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found"}, status=404)
-        company_name = tenant.tenant.company_name
+            company = Company.objects.get(id=company_id, created_by=request.user)
+        except Company.DoesNotExist:
+            return Response({"error": "Company not found or unauthorized."}, status=404)
 
-        serializer = TenantUpdateSerializer(
-            tenant, data=request.data, partial=True, context={"request": request}
+        serializer = CompanyTenantUpdateSerializer(
+            company, data=request.data, context={"request": request, "company": company}
         )
-        related_tenants = Tenant.objects.filter(tenant__company_name=company_name)
-        data = [{"tenant_id": t.id} for t in related_tenants]
-
         if serializer.is_valid():
             serializer.save()
-            return Response(
-                {"message": "Tenant updated successfully", "tenants": data},
-                status=status.HTTP_200_OK,
+            logger.success(
+                f"Company settings and tenant sync completed for company_id={company_id}"
             )
-        return Response(serializer.errors, status=400)
+            return Response(
+                {"message": "Company settings updated successfully."}, status=200
+            )
+        else:
+            logger.warning(
+                f"Validation failed for company update - {serializer.errors}"
+            )
+            return Response(serializer.errors, status=400)
+
+
+# class TenantUpdateAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAdminUser]
+
+#     def put(self, request, company_id):
+
+#         company = Company.objects.get(id=company_id, created_by=request.user)
+
+#         serializer = TenantUpdateSerializer(
+#             tenant, data=request.data, partial=True, context={"request": request}
+#         )
+#         related_tenants = Tenant.objects.filter(tenant__company_name=company_name)
+#         data = [{"tenant_id": t.id} for t in related_tenants]
+
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response(
+#                 {"message": "Tenant updated successfully", "tenants": data},
+#                 status=status.HTTP_200_OK,
+#             )
+#         return Response(serializer.errors, status=400)
 
 
 class TenantInactiveView(APIView):
@@ -248,27 +273,27 @@ class TenantDetailAPIView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class AllTenantsAPIView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+# class AllTenantsAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAdminUser]
 
-    def get(self, request):
-        logger.info(f"All tenants request by user: {request.user.username}")
-        tenants = Tenant.objects.filter(
-            created_by=request.user, tenant__is_active=True, tenant__is_deleted=False
-        ).order_by("-created_at")
+#     def get(self, request):
+#         logger.info(f"All tenants request by user: {request.user.username}")
+#         tenants = Tenant.objects.filter(
+#             created_by=request.user, tenant__is_active=True, tenant__is_deleted=False
+#         ).order_by("-created_at")
 
-        paginator = PageNumberPagination()
-        paginator.page_size = PaginationConstants.PAGE_SIZE
+#         paginator = PageNumberPagination()
+#         paginator.page_size = PaginationConstants.PAGE_SIZE
 
-        paginated_tenants = paginator.paginate_queryset(tenants, request)
-        serializer = AllTenantDetailSerializer(paginated_tenants, many=True)
+#         paginated_tenants = paginator.paginate_queryset(tenants, request)
+#         serializer = AllTenantDetailSerializer(paginated_tenants, many=True)
 
-        logger.success(
-            f"Retrieved {tenants.count()} tenants for user: {request.user.username}"
-        )
+#         logger.success(
+#             f"Retrieved {tenants.count()} tenants for user: {request.user.username}"
+#         )
 
-        return paginator.get_paginated_response(serializer.data)
+#         return paginator.get_paginated_response(serializer.data)
 
 
 class TenantsByCompanyAPIView(APIView):
