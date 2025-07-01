@@ -642,7 +642,7 @@ class SeverityDistributionView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
-        soar_integrations = tenant.integrations.filter(
+        soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
@@ -653,7 +653,7 @@ class SeverityDistributionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        soar_tenants = tenant.soar_tenants.all()
+        soar_tenants = tenant.company.soar_tenants.all()
         if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
@@ -701,7 +701,7 @@ class TypeDistributionView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
-        soar_integrations = tenant.integrations.filter(
+        soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
@@ -712,7 +712,7 @@ class TypeDistributionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        soar_tenants = tenant.soar_tenants.all()
+        soar_tenants = tenant.company.soar_tenants.all()
         if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
@@ -882,7 +882,8 @@ class OwnerDistributionView(APIView):
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
-        soar_integrations = tenant.integrations.filter(
+
+        soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
@@ -892,7 +893,7 @@ class OwnerDistributionView(APIView):
                 {"error": "No active SOAR integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        soar_tenants = tenant.soar_tenants.all()
+        soar_tenants = tenant.company.soar_tenants.all()
         if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
@@ -4153,7 +4154,7 @@ class IncidentSummaryView(APIView):
         try:
             # Step 1: Validate tenant
             tenant = Tenant.objects.get(tenant=request.user)
-            soar_ids = tenant.soar_tenants.values_list("id", flat=True)
+            soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
 
             if not soar_ids:
                 return Response({"error": "No SOAR tenants found."}, status=404)
