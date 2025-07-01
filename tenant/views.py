@@ -3560,8 +3560,8 @@ class AlertListView(APIView):
 
         try:
             # Step 2: Get tenant-specific queryset
-            if tenant.is_defualt_threat_intel:
-                integrations = tenant.integrations.all()
+            if tenant.company.is_defualt_threat_intel:
+                integrations = tenant.company.integrations.all()
                 queryset = Alert.objects.filter(integration__in=integrations)
             else:
                 ti_entry = ThreatIntelligenceTenant.objects.filter(
