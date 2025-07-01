@@ -39,7 +39,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.ibm_qradar_tasks import sync_ibm, sync_ibm_event_counts
+from tenant.ibm_qradar_tasks import sync_ibm_event_counts
 from tenant.models import (
     Alert,
     CywareAlertDetails,

@@ -1090,7 +1090,6 @@ class IBMQradar:
             logger.error(f"Error in IBMQRadar._insert_total_events(): {str(e)}")
             transaction.rollback()
 
-    
     def _transform_event_count_data(self, data_list, integration_id, domain_id):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -1108,19 +1107,17 @@ class IBMQradar:
                 logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
                 continue
 
-            transformed.append({
-                "event_name": event_name.strip(),
-                "event_count": event_count,
-                "qradar_tenant_id": tenant_id,
-                "integration_id": integration_id
-            })
+            transformed.append(
+                {
+                    "event_name": event_name.strip(),
+                    "event_count": event_count,
+                    "qradar_tenant_id": tenant_id,
+                    "integration_id": integration_id,
+                }
+            )
 
         return transformed
 
-        
-        
-        
-        
     def _insert_event_count_data(self, data):
         logger.info(f"Inserting {len(data)} EventCountLog records")
         records = [EventCountLog(**item) for item in data]
@@ -1130,9 +1127,11 @@ class IBMQradar:
                 EventCountLog.objects.bulk_create(
                     records,
                     update_conflicts=True,
-                    update_fields=["event_count","event_name"]
+                    update_fields=["event_count", "event_name"],
                 )
-                logger.success(f"Inserted/Updated EventCountLog records: {len(records)}")
+                logger.success(
+                    f"Inserted/Updated EventCountLog records: {len(records)}"
+                )
         except Exception as e:
             logger.error(f"Error inserting EventCountLog records: {str(e)}")
             transaction.rollback()
