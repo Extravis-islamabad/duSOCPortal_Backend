@@ -612,7 +612,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
 
     def get_qradar_tenants(self, obj):
         try:
-            mappings = TenantQradarMapping.objects.filter(tenant=obj)
+            mappings = TenantQradarMapping.objects.filter(company=obj.company)
             return [
                 {
                     "qradar_tenant_id": mapping.qradar_tenant.id,
@@ -669,13 +669,15 @@ class TenantDetailSerializer(serializers.ModelSerializer):
 
     def get_itsm_tenants(self, obj):
         try:
-            return [{"id": t.id, "name": t.name} for t in obj.itsm_tenants.all()]
+            return [
+                {"id": t.id, "name": t.name} for t in obj.company.itsm_tenants.all()
+            ]
         except Exception:
             return []
 
     def get_soar_tenants(self, obj):
         try:
-            tenants = obj.soar_tenants.all()
+            tenants = obj.company.soar_tenants.all()
             result = []
             for tenant in tenants:
                 if obj.company.is_default_sla:
