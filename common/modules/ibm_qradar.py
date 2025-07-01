@@ -1118,7 +1118,6 @@ class IBMQradar:
 
         return transformed
 
-
     def _insert_event_count_data(self, data):
         logger.info(f"Inserting {len(data)} EventCountLog records")
         records = [EventCountLog(**item) for item in data]
@@ -1130,4 +1129,3 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error inserting EventCountLog records: {str(e)}")
             transaction.rollback()
-
