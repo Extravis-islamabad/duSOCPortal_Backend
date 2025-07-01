@@ -352,7 +352,8 @@ class DistinctCompaniesAPIView(APIView):
                 tenant__is_active=True,
                 tenant__is_deleted=False,
             ).count()
-
+            if tenant_count == 0:
+                continue
             result.append(
                 {
                     "id": company.id,
