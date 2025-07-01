@@ -3357,7 +3357,7 @@ class TotalTicketsByTenantAPIView(APIView):
                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
-        itsm_integrations = tenant.integrations.filter(
+        itsm_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.ITSM_INTEGRATION,
             itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
             status=True,
@@ -3369,10 +3369,7 @@ class TotalTicketsByTenantAPIView(APIView):
             )
         try:
             # Step 1: Retrieve ITSM tenant IDs from Tenant
-            tenant = request.user
-            itsm_tenant_ids = Tenant.objects.filter(tenant=tenant).values_list(
-                "itsm_tenants__id", flat=True
-            )
+            itsm_tenant_ids = tenant.company.itsm_tenants.values_list("id", flat=True)
 
             if not itsm_tenant_ids:
                 return Response(
