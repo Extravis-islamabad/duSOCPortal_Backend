@@ -944,7 +944,7 @@ class DashboardView(APIView):
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
-        soar_integrations = tenant.integrations.filter(
+        soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
@@ -955,7 +955,7 @@ class DashboardView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        soar_tenants = tenant.soar_tenants.all()
+        soar_tenants = tenant.company.soar_tenants.all()
         # Assuming 'request.user.tenant' gives you the logged-in tenant instance
 
         if not soar_tenants:
@@ -1248,7 +1248,7 @@ class IncidentsView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         # Step 2: Check for active SOAR integration
-        soar_integrations = tenant.integrations.filter(
+        soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
@@ -1260,7 +1260,7 @@ class IncidentsView(APIView):
             )
 
         # Step 3: Get SOAR tenant IDs
-        soar_tenants = tenant.soar_tenants.all()
+        soar_tenants = tenant.company.soar_tenants.all()
         if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
@@ -1536,7 +1536,7 @@ class IncidentDetailView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
-        soar_integrations = tenant.integrations.filter(
+        soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
@@ -1547,7 +1547,7 @@ class IncidentDetailView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        soar_tenants = tenant.soar_tenants.all()
+        soar_tenants = tenant.company.soar_tenants.all()
         if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
@@ -3490,9 +3490,7 @@ class EPSCountValuesByDomainAPIView(APIView):
                 eps_entries, many=True, context={"request": request}
             )
 
-            mapping = TenantQradarMapping.objects.filter(
-                tenant__tenant=request.user
-            ).first()
+            mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
 
             contracted_volume = mapping.contracted_volume if mapping else None
             contracted_volume_type = mapping.contracted_volume_type if mapping else None
