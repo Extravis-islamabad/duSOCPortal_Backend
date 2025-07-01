@@ -1,9 +1,6 @@
 # Create your views here.
-import json
 import time
-from io import BytesIO
 
-from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -18,14 +15,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from authentication.permissions import IsAdminUser
 from common.utils import LDAP
-from tenant.models import Tenant
+from tenant.models import Company
 
 from .models import User
-from .serializers import (
-    ProfilePictureUploadSerializer,
-    UserCreateSerializer,
-    UserDetailSerializer,
-)
+from .serializers import UserCreateSerializer, UserDetailSerializer
 
 
 class UserCreateAPIView(APIView):
@@ -226,88 +219,48 @@ class UserLogoutAPIView(APIView):
             )
 
 
-class TenantProfileUpdateAPIView(APIView):
+class CompanyProfilePictureUpdateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
     parser_classes = (MultiPartParser, FormParser)
 
     def patch(self, request):
-        try:
-            tenant_ids_raw = request.data.get("tenant_ids")
-            tenant_ids = (
-                json.loads(tenant_ids_raw)
-                if isinstance(tenant_ids_raw, str)
-                else tenant_ids_raw
+        company_id = request.data.get("company_id")
+        if not company_id:
+            return Response(
+                {"error": "company_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-            if not isinstance(tenant_ids, list) or not tenant_ids:
-                return Response(
-                    {"error": "A list of tenant_ids is required."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            company_name = request.data.get("company_name")
-            profile_picture = request.FILES.get("profile_picture")
-
-            # Read image data once
-            image_content = None
-            if profile_picture:
-                image_content = profile_picture.read()
-                profile_picture.seek(0)
-
-            updated = []
-
-            for tenant in Tenant.objects.filter(
-                id__in=tenant_ids, created_by=request.user
-            ):
-                user = tenant.tenant
-
-                profile_data = {"company_name": company_name}
-
-                # For each user, create a fresh file object
-                if image_content:
-                    file_copy = InMemoryUploadedFile(
-                        file=BytesIO(image_content),
-                        field_name="profile_picture",
-                        name=profile_picture.name,
-                        content_type=profile_picture.content_type,
-                        size=len(image_content),
-                        charset=None,
-                    )
-                    profile_data["profile_picture"] = file_copy
-
-                serializer = ProfilePictureUploadSerializer(
-                    user, data=profile_data, partial=True
-                )
-
-                if serializer.is_valid():
-                    serializer.save()
-                    updated.append({"tenant_id": tenant.id, "username": user.username})
-                else:
-                    return Response(
-                        {
-                            "error": f"Validation failed for tenant {tenant.id}",
-                            "details": serializer.errors,
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
+        try:
+            company = Company.objects.get(id=company_id, created_by=request.user)
+        except Company.DoesNotExist:
             return Response(
                 {
-                    "message": "Profiles updated successfully",
-                    "updated": updated,
+                    "error": "Company with the given ID does not exist or is not owned by you."
                 },
-                status=status.HTTP_200_OK,
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        except Exception as e:
-            logger.error(
-                f"An error occurred in TenantProfileUpdateAPIView.patch: {str(e)}"
-            )
+        profile_picture = request.FILES.get("profile_picture")
+        if not profile_picture:
             return Response(
-                {"error": f"An error occurred: {str(e)}"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                {"error": "profile_picture file is required."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
+        company.profile_picture = profile_picture
+        company.save(update_fields=["profile_picture"])
+
+        return Response(
+            {
+                "message": f"Profile picture updated successfully for company '{company.company_name}'.",
+                "profile_picture": request.build_absolute_uri(
+                    company.profile_picture.url
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class LDAPUsersAPIView(APIView):
