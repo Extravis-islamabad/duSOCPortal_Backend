@@ -3463,7 +3463,7 @@ class EPSCountValuesByDomainAPIView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
-        siem_integrations = tenant.integrations.filter(
+        siem_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SIEM_INTEGRATION,
             siem_subtype=SiemSubTypes.IBM_QRADAR,
             status=True,
@@ -3475,9 +3475,8 @@ class EPSCountValuesByDomainAPIView(APIView):
             )
         try:
             # Step 1: Retrieve collector IDs from TenantQradarMapping
-            tenant = request.user
             qradar_tenant_ids = TenantQradarMapping.objects.filter(
-                tenant__tenant=tenant
+                company=tenant.company
             ).values_list("qradar_tenant__id", flat=True)
 
             if not qradar_tenant_ids:
