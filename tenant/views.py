@@ -3298,7 +3298,7 @@ class TotalAssetsByTenantAPIView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
-        siem_integrations = tenant.integrations.filter(
+        siem_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SIEM_INTEGRATION,
             siem_subtype=SiemSubTypes.IBM_QRADAR,
             status=True,
@@ -3310,9 +3310,8 @@ class TotalAssetsByTenantAPIView(APIView):
             )
         try:
             # Step 1: Retrieve collector IDs from TenantQradarMapping
-            tenant = request.user
             mappings = TenantQradarMapping.objects.filter(
-                tenant__tenant=tenant
+                company=tenant.company
             ).values_list("event_collectors__id", flat=True)
 
             if not mappings:
