@@ -277,7 +277,7 @@ class GetTenantAssetsList(APIView):
 
             # Step 3: Get mapped collector IDs
             collector_ids = (
-                TenantQradarMapping.objects.filter(tenant=tenant)
+                TenantQradarMapping.objects.filter(company=tenant.company)
                 .prefetch_related("event_collectors")
                 .values_list("event_collectors__id", flat=True)
             )
