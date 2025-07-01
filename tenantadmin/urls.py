@@ -49,7 +49,7 @@ urlpatterns = [
         name="tenant-delete",
     ),
     path(
-        "reactivate_tenant/",
+        "reactivate_tenant/<int:company_id>/",
         ReactivateTenantUsersAPIView.as_view(),
         name="reactivate-tenant",
     ),

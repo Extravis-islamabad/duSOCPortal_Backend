@@ -188,25 +188,25 @@ class ReactivateTenantUsersAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def post(self, request):
-        company_name = request.data.get("company_name")
-
-        if not company_name:
-            return Response({"error": "Company name is required."}, status=400)
-
-        users = User.objects.filter(company_name__iexact=company_name)
-        if not users.exists():
+    def post(self, request, company_id):
+        try:
+            company = Company.objects.get(id=company_id, created_by=request.user)
+        except Company.DoesNotExist:
             return Response(
-                {"error": "No users found for the given company name."}, status=404
+                {"error": "Company not found or not owned by the user."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
-        users.update(is_active=True)
+        tenants = Tenant.objects.filter(company=company)
+        user_ids = tenants.values_list("tenant__id", flat=True)
+
+        updated_count = User.objects.filter(id__in=user_ids).update(is_active=True)
 
         return Response(
             {
-                "message": f"All users under company '{company_name}' have been reactivated."
+                "message": f"{updated_count} tenant users under company '{company.company_name}' have been reactivated."
             },
-            status=200,
+            status=status.HTTP_200_OK,
         )
 
 
