@@ -50,10 +50,12 @@ from tenant.models import (
     DuIbmQradarTenants,
     DuITSMFinalTickets,
     DuITSMTenants,
+    EventCountLog,
     IBMQradarAssests,
     IBMQradarEPS,
     IBMQradarEventCollector,
     IBMQradarOffense,
+    ReconEventLog,
     SlaLevelChoices,
     SoarTenantSlaMetric,
     Tenant,
@@ -62,6 +64,7 @@ from tenant.models import (
     TenantRole,
     ThreatIntelligenceTenant,
     ThreatIntelligenceTenantAlerts,
+    TotalEvents,
 )
 from tenant.serializers import (
     AlertSerializer,
@@ -4800,16 +4803,24 @@ class IncidentReportView(APIView):
                 "last_30_days_open_requests": last_30_days_open_priority_counts,
             }
 
-            return Response(
-                {
-                    "cards_data": cards_data,
-                    "incident_status_graph": incident_status_graph,
-                    "incident_ticket_details": incident_ticket_details,
-                    "incident_ticket_trend_by_priority_graph": incident_ticket_trend_by_priority_graph,
-                    "service_request_summary": service_request_summary,
-                },
-                status=200,
-            )
+            total_eps = TotalEvents.objects.aggregate(total_eps=Sum('total_events'))['total_eps'] or 0
+            suspicious_activities = EventCountLog.objects.order_by('-event_count')[:10].values('event_name', 'event_count')
+            recon_event_count = ReconEventLog.objects.aggregate(total=Sum('total_recon_events'))['total'] or 0
+
+            # Add to your response
+            return Response({
+                "cards_data": cards_data,
+                "incident_status_graph": incident_status_graph,
+                "incident_ticket_details": incident_ticket_details,
+                "incident_ticket_trend_by_priority_graph": incident_ticket_trend_by_priority_graph,
+                "service_request_summary": service_request_summary,
+                "total_eps": total_eps,
+                "threat_trending_events": {
+                    
+                    "suspicious_activities": list(suspicious_activities),
+                    "recon_event_count": recon_event_count
+                }
+            }, status=200)
 
         except Exception as e:
             logger.error(f"Error in IncidentReportView: {str(e)}")
