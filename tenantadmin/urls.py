@@ -35,7 +35,7 @@ urlpatterns = [
     path("get_all_tenants/", AllTenantsAPIView.as_view(), name="all-tenants"),
     path("companies/", DistinctCompaniesAPIView.as_view(), name="distinct-companies"),
     path(
-        "tenants/by-company/",
+        "tenants/by-company/<int:company_id>/",
         TenantsByCompanyAPIView.as_view(),
         name="tenants-by-company",
     ),

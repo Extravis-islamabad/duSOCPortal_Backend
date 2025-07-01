@@ -26,6 +26,10 @@ from tenant.serializers import (
     TenantDetailSerializer,
     TenantUpdateSerializer,
 )
+from tenant.threat_intelligence_tasks import (
+    sync_threat_intel,
+    sync_threat_intel_for_tenants,
+)
 
 
 class TenantCreateAPIView(APIView):
@@ -38,8 +42,8 @@ class TenantCreateAPIView(APIView):
         )
         if serializer.is_valid():
             company = serializer.save()
-            # sync_threat_intel.delay()
-            # sync_threat_intel_for_tenants.delay()
+            sync_threat_intel.delay()
+            sync_threat_intel_for_tenants.delay()
             return Response(
                 {
                     "message": "Tenants created successfully",
@@ -75,31 +79,6 @@ class TenantUpdateAPIView(APIView):
                 status=status.HTTP_200_OK,
             )
         return Response(serializer.errors, status=400)
-
-
-# class TenantInactiveView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAdminUser]
-
-#     def post(self, request, compan):
-#         company_name = request.data.get("company_name")
-
-#         if not company_name:
-#             return Response({"error": "Company name is required."}, status=400)
-
-#         users = User.objects.filter(company_name__iexact=company_name)
-
-#         if not users.exists():
-#             return Response(
-#                 {"error": "No users found for the given company name."}, status=404
-#             )
-
-#         users.update(is_active=False)
-
-#         return Response(
-#             {"message": f"Users under company '{company_name}' have been deactivated."},
-#             status=200,
-#         )
 
 
 class TenantInactiveView(APIView):
@@ -260,33 +239,35 @@ class TenantsByCompanyAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def get(self, request):
-        company_name = request.query_params.get("company_name")
-
-        if not company_name:
+    def get(self, request, company_id):
+        try:
+            company = Company.objects.get(id=company_id, created_by=request.user)
+        except Company.DoesNotExist:
             return Response(
-                {"error": "company_name is required as a query parameter."}, status=400
+                {
+                    "error": "Company with the given ID does not exist or is not owned by the user."
+                },
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         logger.info(
-            f"Tenants by company '{company_name}' requested by user: {request.user.username}"
+            f"Tenants by company ID '{company_id}' requested by user: {request.user.username}"
         )
 
         tenants = Tenant.objects.filter(
-            created_by=request.user,
+            company=company,
             tenant__is_active=True,
             tenant__is_deleted=False,
-            tenant__company_name__iexact=company_name,
         ).order_by("-created_at")
 
         paginator = PageNumberPagination()
         paginator.page_size = PaginationConstants.PAGE_SIZE
-
         paginated_tenants = paginator.paginate_queryset(tenants, request)
+
         serializer = AllTenantDetailSerializer(paginated_tenants, many=True)
 
         logger.success(
-            f"Retrieved {tenants.count()} tenants for company: {company_name}"
+            f"Retrieved {tenants.count()} tenants for company: {company.company_name}"
         )
 
         return paginator.get_paginated_response(serializer.data)
