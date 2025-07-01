@@ -19,7 +19,7 @@ urlpatterns = [
     path("user_details/", UserDetailsAPIView.as_view(), name="user_details"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path(
-        "upload-profile-picture/",
+        "upload-profile-picture/<int:company_id>/",
         CompanyProfilePictureUpdateAPIView.as_view(),
         name="upload-profile-picture",
     ),

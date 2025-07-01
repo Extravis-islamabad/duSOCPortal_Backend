@@ -224,49 +224,41 @@ class CompanyProfilePictureUpdateAPIView(APIView):
     permission_classes = [IsAdminUser]
     parser_classes = (MultiPartParser, FormParser)
 
-    def patch(self, request):
-        company_id = request.data.get("company_id", None)
-        company_name = request.data.get("company_name", None)
-
-        if (
-            company_id is None
-            or company_id == "undefined"
-            or company_name is None
-            or company_name == "undefined"
-        ):
-            return Response(
-                {"error": "company_id is required or company_name is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+    def patch(self, request, company_id):
         try:
             company = Company.objects.get(id=company_id, created_by=request.user)
         except Company.DoesNotExist:
             return Response(
-                {
-                    "error": "Company with the given ID does not exist or is not owned by you."
-                },
+                {"error": "Company not found or not owned by the user."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        company_name = request.data.get("company_name")
         profile_picture = request.FILES.get("profile_picture")
-        if not profile_picture:
+
+        if not company_name and not profile_picture:
             return Response(
-                {"error": "profile_picture file is required."},
+                {
+                    "error": "At least one of 'company_name' or 'profile_picture' must be provided."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         if company_name:
             company.company_name = company_name
-        company.profile_picture = profile_picture
-        company.save(update_fields=["profile_picture"])
+        if profile_picture:
+            company.profile_picture = profile_picture
+
+        company.save()
 
         return Response(
             {
-                "message": f"Profile picture updated successfully for company '{company.company_name}'.",
+                "message": f"Company '{company.company_name}' updated successfully.",
                 "profile_picture": request.build_absolute_uri(
                     company.profile_picture.url
-                ),
+                )
+                if company.profile_picture
+                else None,
             },
             status=status.HTTP_200_OK,
         )
