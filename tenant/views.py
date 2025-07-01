@@ -4046,7 +4046,7 @@ class AllIncidentsView(APIView):
         try:
             # Step 1: Validate tenant
             tenant = Tenant.objects.get(tenant=request.user)
-            soar_ids = tenant.soar_tenants.values_list("id", flat=True)
+            soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
 
             if not soar_ids:
                 return Response({"error": "No SOAR tenants found."}, status=404)
