@@ -876,3 +876,18 @@ class EventCountLog(models.Model):
 
     def __str__(self):
         return f"{self.event_name} - Count: {self.event_count}"
+
+
+
+class ReconEventLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    total_recon_events = models.FloatField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "recon_event_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - Recon Events: {self.total_recon_events}"

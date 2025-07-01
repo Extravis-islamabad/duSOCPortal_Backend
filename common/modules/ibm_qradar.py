@@ -17,6 +17,7 @@ from tenant.models import (
     IBMQradarEventCollector,
     IBMQradarLogSourceTypes,
     IBMQradarOffense,
+    ReconEventLog,
     TotalEvents,
 )
 
@@ -1129,3 +1130,40 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error inserting EventCountLog records: {str(e)}")
             transaction.rollback()
+
+
+    def _transform_recon_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        for entry in data_list:
+            count = entry.get("total_recon_events")
+            if count is None:
+                logger.warning(f"Skipping invalid recon data: {entry}")
+                continue
+
+            return [{
+                "total_recon_events": count,
+                "integration_id": integration_id,
+                "qradar_tenant_id": tenant_id,
+            }]
+
+        return []
+    
+    
+    def _insert_recon_event_data(self, data):
+        logger.info(f"Inserting {len(data)} ReconEventLog records")
+        records = [ReconEventLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                ReconEventLog.objects.bulk_create(records)
+                logger.success(f"Inserted ReconEventLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting ReconEventLog records: {str(e)}")
+            transaction.rollback()
+
