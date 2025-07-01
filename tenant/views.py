@@ -760,7 +760,7 @@ class SLAStatusView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
-        soar_integrations = tenant.integrations.filter(
+        soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
@@ -770,7 +770,7 @@ class SLAStatusView(APIView):
                 {"error": "No active SOAR integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        soar_tenants = tenant.soar_tenants.all()
+        soar_tenants = tenant.company.soar_tenants.all()
         if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
