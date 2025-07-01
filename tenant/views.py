@@ -4325,7 +4325,7 @@ class SLAIncidentsView(APIView):
             else:
                 logger.info("SLA source: SoarTenantSlaMetric")
                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-                    soar_tenant__in=soar_tenants
+                    soar_tenant__in=soar_tenants, company=tenant.company
                 )
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
@@ -4469,7 +4469,7 @@ class SLAComplianceView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         try:
-            soar_integrations = tenant.integrations.filter(
+            soar_integrations = tenant.company.integrations.filter(
                 integration_type=IntegrationTypes.SOAR_INTEGRATION,
                 soar_subtype=SoarSubTypes.CORTEX_SOAR,
                 status=True,
@@ -4479,7 +4479,7 @@ class SLAComplianceView(APIView):
                     {"error": "No active SOAR integration configured."}, status=400
                 )
 
-            soar_tenants = tenant.soar_tenants.all()
+            soar_tenants = tenant.company.soar_tenants.all()
             if not soar_tenants:
                 return Response({"error": "No SOAR tenants found."}, status=404)
             soar_ids = [t.id for t in soar_tenants]
@@ -4493,11 +4493,11 @@ class SLAComplianceView(APIView):
                 incident_ttdn__isnull=False,
             )
 
-            if tenant.is_default_sla:
+            if tenant.company.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-                    soar_tenant__in=soar_tenants
+                    soar_tenant__in=soar_tenants, company=tenant.company
                 )
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
@@ -4586,7 +4586,7 @@ class SLASeverityIncidentsView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         try:
-            soar_tenants = tenant.soar_tenants.all()
+            soar_tenants = tenant.company.soar_tenants.all()
             if not soar_tenants:
                 return Response({"error": "No SOAR tenants found."}, status=404)
             soar_ids = [t.id for t in soar_tenants]
@@ -4638,11 +4638,11 @@ class SLASeverityIncidentsView(APIView):
                 incident_ttn__isnull=False,
             )
 
-            if tenant.is_default_sla:
+            if tenant.company.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-                    soar_tenant__in=soar_tenants
+                    soar_tenant__in=soar_tenants, company=tenant.company
                 )
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
@@ -4721,7 +4721,7 @@ class SLASeverityMetricsView(APIView):
             )
 
         try:
-            soar_tenants = tenant.soar_tenants.all()
+            soar_tenants = tenant.company.soar_tenants.all()
             if not soar_tenants:
                 return Response(
                     {"error": "No SOAR tenants found."},
@@ -4729,11 +4729,11 @@ class SLASeverityMetricsView(APIView):
                 )
             soar_ids = [t.id for t in soar_tenants]
 
-            if tenant.is_default_sla:
+            if tenant.company.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-                    soar_tenant__in=soar_tenants
+                    soar_tenant__in=soar_tenants, company=tenant.company
                 )
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
@@ -4822,7 +4822,7 @@ class IncidentReportView(APIView):
                 return Response({"error": "Tenant not found."}, status=404)
 
             # Check for active SOAR integration
-            soar_integrations = tenant.integrations.filter(
+            soar_integrations = tenant.company.integrations.filter(
                 integration_type=IntegrationTypes.SOAR_INTEGRATION,
                 soar_subtype=SoarSubTypes.CORTEX_SOAR,
                 status=True,
@@ -4834,7 +4834,7 @@ class IncidentReportView(APIView):
                 )
 
             # Get SOAR tenant IDs
-            soar_tenants = tenant.soar_tenants.all()
+            soar_tenants = tenant.company.soar_tenants.all()
             if not soar_tenants:
                 return Response({"error": "No SOAR tenants found."}, status=404)
             soar_ids = [t.id for t in soar_tenants]
@@ -4919,13 +4919,13 @@ class IncidentReportView(APIView):
             )
 
             # Fetch SLA metrics based on is_default_sla
-            if tenant.is_default_sla:
+            if tenant.company.is_default_sla:
                 logger.info("SLA source: DefaultSoarSlaMetric")
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
                 logger.info("SLA source: SoarTenantSlaMetric")
                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-                    soar_tenant__in=soar_tenants
+                    soar_tenant__in=soar_tenants, company=tenant.company
                 )
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
