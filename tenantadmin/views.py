@@ -185,29 +185,65 @@ class ReactivateTenantUsersAPIView(APIView):
         )
 
 
+# class TenantDetailAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAdminUser]
+
+#     def get(self, request, tenant_id):
+#         logger.info(
+#             f"Tenant detail request by user: {request.user.username} for tenant_id: {tenant_id}"
+#         )
+#         try:
+#             # Only allow the creator to view their tenant
+#             tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
+#         except Tenant.DoesNotExist:
+#             logger.warning(
+#                 f"Tenant with id {tenant_id} not found or not owned by {request.user.username}"
+#             )
+#             return Response(
+#                 {"error": "Tenant not found or you do not have permission to view it."},
+#                 status=status.HTTP_404_NOT_FOUND,
+#             )
+
+#         serializer = TenantDetailSerializer(tenant, context={"request": request})
+#         logger.success(
+#             f"Tenant details retrieved: {tenant.tenant.username} (ID: {tenant.id})"
+#         )
+#         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 class TenantDetailAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
-    def get(self, request, tenant_id):
+    def get(self, request, company_id):
         logger.info(
-            f"Tenant detail request by user: {request.user.username} for tenant_id: {tenant_id}"
+            f"Tenant detail request by user: {request.user.username} for company_id: {company_id}"
         )
         try:
-            # Only allow the creator to view their tenant
-            tenant = Tenant.objects.get(id=tenant_id, created_by=request.user)
-        except Tenant.DoesNotExist:
+            # Get company created by this admin
+            company = Company.objects.get(id=company_id, created_by=request.user)
+            # Get the primary tenant associated with this company
+            tenant = Tenant.objects.filter(company=company).first()
+            if not tenant:
+                return Response(
+                    {"error": "No tenant associated with this company."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        except Company.DoesNotExist:
             logger.warning(
-                f"Tenant with id {tenant_id} not found or not owned by {request.user.username}"
+                f"Company with id {company_id} not found or not owned by {request.user.username}"
             )
             return Response(
-                {"error": "Tenant not found or you do not have permission to view it."},
+                {
+                    "error": "Company not found or you do not have permission to view it."
+                },
                 status=status.HTTP_404_NOT_FOUND,
             )
 
         serializer = TenantDetailSerializer(tenant, context={"request": request})
         logger.success(
-            f"Tenant details retrieved: {tenant.tenant.username} (ID: {tenant.id})"
+            f"Tenant details retrieved for company: {company.company_name} (Tenant ID: {tenant.id})"
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
 

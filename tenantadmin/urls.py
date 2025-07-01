@@ -28,7 +28,7 @@ urlpatterns = [
         name="tenant-update",
     ),
     path(
-        "tenant_detail/<int:tenant_id>/",
+        "tenant_detail/<int:company_id>/",
         TenantDetailAPIView.as_view(),
         name="tenant-detail",
     ),

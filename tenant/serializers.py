@@ -482,83 +482,72 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
 
 
 class TenantDetailSerializer(serializers.ModelSerializer):
-    itsm_tenants = serializers.SerializerMethodField()
-    soar_tenants = serializers.SerializerMethodField()
-    username = serializers.CharField(source="tenant.username", read_only=True)
-    email = serializers.EmailField(source="tenant.email", read_only=True)
-    company_name = serializers.CharField(source="tenant.company_name", read_only=True)
-    permissions = serializers.SerializerMethodField()
-    tenant_admin = serializers.SerializerMethodField()
+    company_name = serializers.CharField(source="company.company_name", read_only=True)
+    phone_number = serializers.CharField(source="company.phone_number", read_only=True)
+    country = serializers.CharField(source="company.country", read_only=True)
+    industry = serializers.CharField(source="company.industry", read_only=True)
+    logo_url = serializers.SerializerMethodField()
     created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
-    role = serializers.SerializerMethodField()
+    ldap_group = serializers.CharField(read_only=True)
+    is_defualt_threat_intel = serializers.BooleanField(
+        source="company.is_defualt_threat_intel", read_only=True
+    )
+    is_default_sla = serializers.BooleanField(
+        source="company.is_default_sla", read_only=True
+    )
+
+    asset_count = serializers.SerializerMethodField()
     total_incidents = serializers.SerializerMethodField()
     active_incidents = serializers.SerializerMethodField()
     tickets_count = serializers.SerializerMethodField()
-    # sla = serializers.SerializerMethodField()
-    asset_count = serializers.SerializerMethodField()
-    tenant_data = serializers.SerializerMethodField()
+    role = serializers.SerializerMethodField()
+    role_info = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
     qradar_tenants = serializers.SerializerMethodField()
     integrations = serializers.SerializerMethodField()
-    ldap_group = serializers.CharField(read_only=True)
-    logo_url = serializers.SerializerMethodField()
-    tenant_user = serializers.SerializerMethodField()
-    role_info = serializers.SerializerMethodField()
+    itsm_tenants = serializers.SerializerMethodField()
+    soar_tenants = serializers.SerializerMethodField()
     related_tenants = serializers.SerializerMethodField()
 
     class Meta:
         model = Tenant
         fields = [
             "id",
-            "username",
-            "email",
             "company_name",
             "phone_number",
+            "industry",
             "country",
             "created_at",
             "updated_at",
-            "permissions",
+            "ldap_group",
+            "created_by_id",
+            "logo_url",
+            "is_defualt_threat_intel",
+            "is_default_sla",
             "asset_count",
             "total_incidents",
             "active_incidents",
             "tickets_count",
-            # "sla",
-            "tenant_admin",
-            "created_by_id",
             "role",
-            "tenant_data",
+            "role_info",
+            "permissions",
             "qradar_tenants",
             "integrations",
             "itsm_tenants",
             "soar_tenants",
-            "is_defualt_threat_intel",
-            "ldap_group",
-            "logo_url",
-            "tenant_user",
-            "role_info",
             "related_tenants",
-            "industry",
-            "is_default_sla",
         ]
 
-    def get_permissions(self, obj):
-        try:
-            role = obj.roles.get()
-            return [
-                {"id": perm.permission, "name": perm.permission_text}
-                for perm in role.role_permissions.all()
-            ]
-        except Exception:
-            return []
-
-    def get_role(self, obj):
-        try:
-            return obj.roles.get().get_role_type_display()
-        except Exception:
-            return None
-
-    def get_tenant_admin(self, obj):
-        if obj.tenant:
-            return obj.created_by.username if obj.created_by else None
+    def get_logo_url(self, obj):
+        company = obj.company
+        if (
+            company
+            and company.profile_picture
+            and hasattr(company.profile_picture, "url")
+        ):
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(company.profile_picture.url)
         return None
 
     def get_asset_count(self, obj):
@@ -572,39 +561,54 @@ class TenantDetailSerializer(serializers.ModelSerializer):
         except Exception:
             return 0
 
+    def get_total_incidents(self, obj):
+        try:
+            return DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_soar_tenant__in=obj.soar_tenants.all()
+            ).count()
+        except Exception:
+            return 0
+
     def get_active_incidents(self, obj):
         return self.get_total_incidents(obj)
 
-    def get_total_incidents(self, obj):
-        try:
-            soar_tenants = obj.soar_tenants.all()
-            return DUCortexSOARIncidentFinalModel.objects.filter(
-                cortex_soar_tenant__in=soar_tenants
-            ).count()
-        except Exception:
-            return 0
-
     def get_tickets_count(self, obj):
         try:
-            itsm_tenants = obj.itsm_tenants.all()
             return DuITSMFinalTickets.objects.filter(
-                itsm_tenant__in=itsm_tenants
+                itsm_tenant__in=obj.itsm_tenants.all()
             ).count()
         except Exception:
             return 0
 
-    def get_tenant_data(self, obj):
-        user = obj.tenant
-        if not user:
+    def get_role(self, obj):
+        try:
+            return obj.roles.get().get_role_type_display()
+        except Exception:
             return None
-        return {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "company_name": user.company_name,
-            "is_active": user.is_active,
-            "is_deleted": getattr(user, "is_deleted", False),
-        }
+
+    def get_role_info(self, obj):
+        try:
+            role = obj.roles.get()
+            return {
+                "name": role.name,
+                "type": role.get_role_type_display(),
+                "permissions": [
+                    {"id": perm.permission, "name": perm.permission_text}
+                    for perm in role.role_permissions.all()
+                ],
+            }
+        except Exception:
+            return None
+
+    def get_permissions(self, obj):
+        try:
+            role = obj.roles.get()
+            return [
+                {"id": perm.permission, "name": perm.permission_text}
+                for perm in role.role_permissions.all()
+            ]
+        except Exception:
+            return []
 
     def get_qradar_tenants(self, obj):
         try:
@@ -614,13 +618,9 @@ class TenantDetailSerializer(serializers.ModelSerializer):
                     "qradar_tenant_id": mapping.qradar_tenant.id,
                     "qradar_tenant_name": mapping.qradar_tenant.name,
                     "event_collectors": [
-                        {"id": collector.id, "name": collector.name}
-                        for collector in mapping.event_collectors.all()
+                        {"id": c.id, "name": c.name}
+                        for c in mapping.event_collectors.all()
                     ],
-                    # "contracted_volume_type": mapping.get_contracted_volume_type_display()
-                    # if mapping.contracted_volume_type
-                    # else None,
-                    # "contracted_volume": mapping.contracted_volume,
                     "contracted_volume_type": {
                         "id": mapping.contracted_volume_type,
                         "text": mapping.get_contracted_volume_type_display(),
@@ -635,9 +635,8 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             return []
 
     def get_integrations(self, obj):
-        integrations = obj.integrations.all()
         result = []
-        for integration in integrations:
+        for integration in obj.company.integrations.all():
             result.append(
                 {
                     "id": integration.id,
@@ -668,113 +667,33 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             )
         return result
 
-    def get_logo_url(self, obj):
-        user = obj.tenant
-        if user and user.profile_picture and hasattr(user.profile_picture, "url"):
-            return self.context["request"].build_absolute_uri(user.profile_picture.url)
-        return None
-
-    def get_tenant_user(self, obj):
-        user = obj.tenant
-        if not user:
-            return None
-        return {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "company_name": user.company_name,
-            "is_active": user.is_active,
-        }
-
-    def get_role_info(self, obj):
-        try:
-            role = obj.roles.get()
-            return {
-                "name": role.name,
-                "type": role.get_role_type_display(),
-                "permissions": [
-                    {"id": perm.permission, "name": perm.permission_text}
-                    for perm in role.role_permissions.all()
-                ],
-            }
-        except Exception:
-            return None
-
-    def get_related_tenants(self, obj):
-        if not obj.tenant or not obj.tenant.company_name:
-            return []
-
-        related = Tenant.objects.filter(tenant__company_name=obj.tenant.company_name)
-
-        result = []
-        for tenant in related:
-            try:
-                role = tenant.roles.get()
-                role_data = {
-                    "name": role.name,
-                    "type": role.get_role_type_display(),
-                }
-            except Exception:
-                role_data = None
-
-            result.append(
-                {
-                    "id": tenant.id,
-                    "username": tenant.tenant.username,
-                    "email": tenant.tenant.email,
-                    "phone_number": tenant.phone_number,
-                    "country": tenant.country,
-                    "created_at": tenant.created_at,
-                    "is_active": tenant.tenant.is_active,
-                    "role": role_data,
-                    "industry": tenant.industry,
-                }
-            )
-
-        return result
-
     def get_itsm_tenants(self, obj):
         try:
-            return [
-                {"id": tenant.id, "name": tenant.name}
-                for tenant in obj.itsm_tenants.all()
-            ]
+            return [{"id": t.id, "name": t.name} for t in obj.itsm_tenants.all()]
         except Exception:
             return []
-
-    # def get_soar_tenants(self, obj):
-    #     try:
-    #         return [
-    #             {"id": tenant.id, "name": tenant.name}
-    #             for tenant in obj.soar_tenants.all()
-    #         ]
-    #     except Exception:
-    #         return []
 
     def get_soar_tenants(self, obj):
         try:
             tenants = obj.soar_tenants.all()
             result = []
-
             for tenant in tenants:
-                if obj.is_default_sla:
+                if obj.company.is_default_sla:
                     metrics = DefaultSoarSlaMetric.objects.all()
                 else:
                     metrics = SoarTenantSlaMetric.objects.filter(
                         tenant=obj, soar_tenant=tenant
                     )
-
                 sla_overrides = [
                     {
-                        "sla_level": metric.sla_level,
-                        "sla_level_text": SlaLevelChoices(metric.sla_level).label,
-                        "tta_minutes": metric.tta_minutes,
-                        "ttn_minutes": metric.ttn_minutes,
-                        "ttdn_minutes": metric.ttdn_minutes,
+                        "sla_level": m.sla_level,
+                        "sla_level_text": SlaLevelChoices(m.sla_level).label,
+                        "tta_minutes": m.tta_minutes,
+                        "ttn_minutes": m.ttn_minutes,
+                        "ttdn_minutes": m.ttdn_minutes,
                     }
-                    for metric in metrics
+                    for m in metrics
                 ]
-
                 result.append(
                     {
                         "soar_tenant_id": tenant.id,
@@ -782,42 +701,377 @@ class TenantDetailSerializer(serializers.ModelSerializer):
                         "sla_overrides": sla_overrides,
                     }
                 )
-
             return result
         except Exception:
             return []
 
-    # def get_sla(self, obj):
-    #     try:
-    #         if obj.is_default_sla:
-    #             metrics = DefaultSoarSlaMetric.objects.all()
-    #         else:
-    #             metrics = SoarTenantSlaMetric.objects.filter(tenant=obj)
+    def get_related_tenants(self, obj):
+        if not obj.company:
+            return []
+        related = Tenant.objects.filter(company=obj.company)
+        result = []
+        for tenant in related:
+            try:
+                role = tenant.roles.get()
+                role_data = {"name": role.name, "type": role.get_role_type_display()}
+            except Exception:
+                role_data = None
 
-    #         result = []
-    #         for metric in metrics:
-    #             result.append(
-    #                 {
-    #                     "sla_level": {
-    #                         "id": metric.sla_level,
-    #                         "text": SlaLevelChoices(metric.sla_level).label,
-    #                     },
-    #                     "tta_minutes": metric.tta_minutes,
-    #                     "ttn_minutes": metric.ttn_minutes,
-    #                     "ttdn_minutes": metric.ttdn_minutes,
-    #                     **(
-    #                         {
-    #                             "soar_tenant_id": metric.soar_tenant.id,
-    #                             "soar_tenant_name": metric.soar_tenant.name,
-    #                         }
-    #                         if hasattr(metric, "soar_tenant")
-    #                         else {}
-    #                     ),
-    #                 }
-    #             )
-    #         return result
-    #     except Exception:
-    #         return []
+            result.append(
+                {
+                    "id": tenant.id,
+                    "phone_number": tenant.company.phone_number
+                    if tenant.company
+                    else None,
+                    "country": tenant.company.country if tenant.company else None,
+                    "created_at": tenant.created_at,
+                    "is_active": tenant.tenant.is_active if tenant.tenant else None,
+                    "role": role_data,
+                    "industry": tenant.company.industry if tenant.company else None,
+                    "username": tenant.tenant.username if tenant.tenant else None,
+                    "email": tenant.tenant.email if tenant.tenant else None,
+                }
+            )
+        return result
+
+
+# class TenantDetailSerializer(serializers.ModelSerializer):
+#     itsm_tenants = serializers.SerializerMethodField()
+#     soar_tenants = serializers.SerializerMethodField()
+#     username = serializers.CharField(source="tenant.username", read_only=True)
+#     email = serializers.EmailField(source="tenant.email", read_only=True)
+#     company_name = serializers.CharField(source="tenant.company_name", read_only=True)
+#     permissions = serializers.SerializerMethodField()
+#     tenant_admin = serializers.SerializerMethodField()
+#     created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
+#     role = serializers.SerializerMethodField()
+#     total_incidents = serializers.SerializerMethodField()
+#     active_incidents = serializers.SerializerMethodField()
+#     tickets_count = serializers.SerializerMethodField()
+#     # sla = serializers.SerializerMethodField()
+#     asset_count = serializers.SerializerMethodField()
+#     tenant_data = serializers.SerializerMethodField()
+#     qradar_tenants = serializers.SerializerMethodField()
+#     integrations = serializers.SerializerMethodField()
+#     ldap_group = serializers.CharField(read_only=True)
+#     logo_url = serializers.SerializerMethodField()
+#     tenant_user = serializers.SerializerMethodField()
+#     role_info = serializers.SerializerMethodField()
+#     related_tenants = serializers.SerializerMethodField()
+
+#     class Meta:
+#         model = Tenant
+#         fields = [
+#             "id",
+#             "username",
+#             "email",
+#             "company_name",
+#             "phone_number",
+#             "country",
+#             "created_at",
+#             "updated_at",
+#             "permissions",
+#             "asset_count",
+#             "total_incidents",
+#             "active_incidents",
+#             "tickets_count",
+#             # "sla",
+#             "tenant_admin",
+#             "created_by_id",
+#             "role",
+#             "tenant_data",
+#             "qradar_tenants",
+#             "integrations",
+#             "itsm_tenants",
+#             "soar_tenants",
+#             "is_defualt_threat_intel",
+#             "ldap_group",
+#             "logo_url",
+#             "tenant_user",
+#             "role_info",
+#             "related_tenants",
+#             "industry",
+#             "is_default_sla",
+#         ]
+
+#     def get_permissions(self, obj):
+#         try:
+#             role = obj.roles.get()
+#             return [
+#                 {"id": perm.permission, "name": perm.permission_text}
+#                 for perm in role.role_permissions.all()
+#             ]
+#         except Exception:
+#             return []
+
+#     def get_role(self, obj):
+#         try:
+#             return obj.roles.get().get_role_type_display()
+#         except Exception:
+#             return None
+
+#     def get_tenant_admin(self, obj):
+#         if obj.tenant:
+#             return obj.created_by.username if obj.created_by else None
+#         return None
+
+#     def get_asset_count(self, obj):
+#         try:
+#             collector_ids = TenantQradarMapping.objects.filter(tenant=obj).values_list(
+#                 "event_collectors__id", flat=True
+#             )
+#             return IBMQradarAssests.objects.filter(
+#                 event_collector__id__in=collector_ids
+#             ).count()
+#         except Exception:
+#             return 0
+
+#     def get_active_incidents(self, obj):
+#         return self.get_total_incidents(obj)
+
+#     def get_total_incidents(self, obj):
+#         try:
+#             soar_tenants = obj.soar_tenants.all()
+#             return DUCortexSOARIncidentFinalModel.objects.filter(
+#                 cortex_soar_tenant__in=soar_tenants
+#             ).count()
+#         except Exception:
+#             return 0
+
+#     def get_tickets_count(self, obj):
+#         try:
+#             itsm_tenants = obj.itsm_tenants.all()
+#             return DuITSMFinalTickets.objects.filter(
+#                 itsm_tenant__in=itsm_tenants
+#             ).count()
+#         except Exception:
+#             return 0
+
+#     def get_tenant_data(self, obj):
+#         user = obj.tenant
+#         if not user:
+#             return None
+#         return {
+#             "id": user.id,
+#             "username": user.username,
+#             "email": user.email,
+#             "company_name": user.company_name,
+#             "is_active": user.is_active,
+#             "is_deleted": getattr(user, "is_deleted", False),
+#         }
+
+#     def get_qradar_tenants(self, obj):
+#         try:
+#             mappings = TenantQradarMapping.objects.filter(tenant=obj)
+#             return [
+#                 {
+#                     "qradar_tenant_id": mapping.qradar_tenant.id,
+#                     "qradar_tenant_name": mapping.qradar_tenant.name,
+#                     "event_collectors": [
+#                         {"id": collector.id, "name": collector.name}
+#                         for collector in mapping.event_collectors.all()
+#                     ],
+#                     # "contracted_volume_type": mapping.get_contracted_volume_type_display()
+#                     # if mapping.contracted_volume_type
+#                     # else None,
+#                     # "contracted_volume": mapping.contracted_volume,
+#                     "contracted_volume_type": {
+#                         "id": mapping.contracted_volume_type,
+#                         "text": mapping.get_contracted_volume_type_display(),
+#                     }
+#                     if mapping.contracted_volume_type is not None
+#                     else None,
+#                     "contracted_volume": mapping.contracted_volume,
+#                 }
+#                 for mapping in mappings
+#             ]
+#         except Exception:
+#             return []
+
+#     def get_integrations(self, obj):
+#         integrations = obj.integrations.all()
+#         result = []
+#         for integration in integrations:
+#             result.append(
+#                 {
+#                     "id": integration.id,
+#                     "instance_name": integration.instance_name,
+#                     "integration_type": integration.integration_type,
+#                     "integration_type_text": IntegrationTypes(
+#                         integration.integration_type
+#                     ).label,
+#                     "siem_subtype": integration.siem_subtype,
+#                     "siem_subtype_text": SiemSubTypes(integration.siem_subtype).label
+#                     if integration.siem_subtype
+#                     else None,
+#                     "soar_subtype": integration.soar_subtype,
+#                     "soar_subtype_text": SoarSubTypes(integration.soar_subtype).label
+#                     if integration.soar_subtype
+#                     else None,
+#                     "itsm_subtype": integration.itsm_subtype,
+#                     "itsm_subtype_text": ItsmSubTypes(integration.itsm_subtype).label
+#                     if integration.itsm_subtype
+#                     else None,
+#                     "threat_intelligence_subtype": integration.threat_intelligence_subtype,
+#                     "threat_intelligence_subtype_text": ThreatIntelligenceSubTypes(
+#                         integration.threat_intelligence_subtype
+#                     ).label
+#                     if integration.threat_intelligence_subtype
+#                     else None,
+#                 }
+#             )
+#         return result
+
+#     def get_logo_url(self, obj):
+#         user = obj.tenant
+#         if user and user.profile_picture and hasattr(user.profile_picture, "url"):
+#             return self.context["request"].build_absolute_uri(user.profile_picture.url)
+#         return None
+
+#     def get_tenant_user(self, obj):
+#         user = obj.tenant
+#         if not user:
+#             return None
+#         return {
+#             "id": user.id,
+#             "username": user.username,
+#             "email": user.email,
+#             "company_name": user.company_name,
+#             "is_active": user.is_active,
+#         }
+
+#     def get_role_info(self, obj):
+#         try:
+#             role = obj.roles.get()
+#             return {
+#                 "name": role.name,
+#                 "type": role.get_role_type_display(),
+#                 "permissions": [
+#                     {"id": perm.permission, "name": perm.permission_text}
+#                     for perm in role.role_permissions.all()
+#                 ],
+#             }
+#         except Exception:
+#             return None
+
+#     def get_related_tenants(self, obj):
+#         if not obj.tenant or not obj.tenant.company_name:
+#             return []
+
+#         related = Tenant.objects.filter(tenant__company_name=obj.tenant.company_name)
+
+#         result = []
+#         for tenant in related:
+#             try:
+#                 role = tenant.roles.get()
+#                 role_data = {
+#                     "name": role.name,
+#                     "type": role.get_role_type_display(),
+#                 }
+#             except Exception:
+#                 role_data = None
+
+#             result.append(
+#                 {
+#                     "id": tenant.id,
+#                     "username": tenant.tenant.username,
+#                     "email": tenant.tenant.email,
+#                     "phone_number": tenant.phone_number,
+#                     "country": tenant.country,
+#                     "created_at": tenant.created_at,
+#                     "is_active": tenant.tenant.is_active,
+#                     "role": role_data,
+#                     "industry": tenant.industry,
+#                 }
+#             )
+
+#         return result
+
+#     def get_itsm_tenants(self, obj):
+#         try:
+#             return [
+#                 {"id": tenant.id, "name": tenant.name}
+#                 for tenant in obj.itsm_tenants.all()
+#             ]
+#         except Exception:
+#             return []
+
+#     # def get_soar_tenants(self, obj):
+#     #     try:
+#     #         return [
+#     #             {"id": tenant.id, "name": tenant.name}
+#     #             for tenant in obj.soar_tenants.all()
+#     #         ]
+#     #     except Exception:
+#     #         return []
+
+#     def get_soar_tenants(self, obj):
+#         try:
+#             tenants = obj.soar_tenants.all()
+#             result = []
+
+#             for tenant in tenants:
+#                 if obj.is_default_sla:
+#                     metrics = DefaultSoarSlaMetric.objects.all()
+#                 else:
+#                     metrics = SoarTenantSlaMetric.objects.filter(
+#                         tenant=obj, soar_tenant=tenant
+#                     )
+
+#                 sla_overrides = [
+#                     {
+#                         "sla_level": metric.sla_level,
+#                         "sla_level_text": SlaLevelChoices(metric.sla_level).label,
+#                         "tta_minutes": metric.tta_minutes,
+#                         "ttn_minutes": metric.ttn_minutes,
+#                         "ttdn_minutes": metric.ttdn_minutes,
+#                     }
+#                     for metric in metrics
+#                 ]
+
+#                 result.append(
+#                     {
+#                         "soar_tenant_id": tenant.id,
+#                         "soar_tenant_name": tenant.name,
+#                         "sla_overrides": sla_overrides,
+#                     }
+#                 )
+
+#             return result
+#         except Exception:
+#             return []
+
+#     # def get_sla(self, obj):
+#     #     try:
+#     #         if obj.is_default_sla:
+#     #             metrics = DefaultSoarSlaMetric.objects.all()
+#     #         else:
+#     #             metrics = SoarTenantSlaMetric.objects.filter(tenant=obj)
+
+#     #         result = []
+#     #         for metric in metrics:
+#     #             result.append(
+#     #                 {
+#     #                     "sla_level": {
+#     #                         "id": metric.sla_level,
+#     #                         "text": SlaLevelChoices(metric.sla_level).label,
+#     #                     },
+#     #                     "tta_minutes": metric.tta_minutes,
+#     #                     "ttn_minutes": metric.ttn_minutes,
+#     #                     "ttdn_minutes": metric.ttdn_minutes,
+#     #                     **(
+#     #                         {
+#     #                             "soar_tenant_id": metric.soar_tenant.id,
+#     #                             "soar_tenant_name": metric.soar_tenant.name,
+#     #                         }
+#     #                         if hasattr(metric, "soar_tenant")
+#     #                         else {}
+#     #                     ),
+#     #                 }
+#     #             )
+#     #         return result
+#     #     except Exception:
+#     #         return []
 
 
 class TenantPermissionSerializer(serializers.ModelSerializer):
