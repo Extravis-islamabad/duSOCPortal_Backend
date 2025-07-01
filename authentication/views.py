@@ -228,7 +228,12 @@ class CompanyProfilePictureUpdateAPIView(APIView):
         company_id = request.data.get("company_id", None)
         company_name = request.data.get("company_name", None)
 
-        if not company_id or not company_name:
+        if (
+            company_id is None
+            or company_id == "undefined"
+            or company_name is None
+            or company_name == "undefined"
+        ):
             return Response(
                 {"error": "company_id is required or company_name is required."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -251,8 +256,9 @@ class CompanyProfilePictureUpdateAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if company_name:
+            company.company_name = company_name
         company.profile_picture = profile_picture
-        company.company_name = company_name
         company.save(update_fields=["profile_picture"])
 
         return Response(
