@@ -2656,7 +2656,7 @@ class OffenseDetailsByTenantAPIView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         # Step 2: Check for active SIEM integration
-        siem_integrations = tenant.integrations.filter(
+        siem_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SIEM_INTEGRATION,
             siem_subtype=SiemSubTypes.IBM_QRADAR,
             status=True,
@@ -2669,9 +2669,9 @@ class OffenseDetailsByTenantAPIView(APIView):
 
         try:
             # Step 3: Get tenant mappings
-            mappings = TenantQradarMapping.objects.filter(tenant=tenant).values_list(
-                "event_collectors__id", "qradar_tenant__id"
-            )
+            mappings = TenantQradarMapping.objects.filter(
+                company=tenant.company
+            ).values_list("event_collectors__id", "qradar_tenant__id")
 
             if not mappings:
                 return Response(
