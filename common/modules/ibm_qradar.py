@@ -1118,20 +1118,16 @@ class IBMQradar:
 
         return transformed
 
+
     def _insert_event_count_data(self, data):
         logger.info(f"Inserting {len(data)} EventCountLog records")
         records = [EventCountLog(**item) for item in data]
 
         try:
             with transaction.atomic():
-                EventCountLog.objects.bulk_create(
-                    records,
-                    update_conflicts=True,
-                    update_fields=["event_count", "event_name"],
-                )
-                logger.success(
-                    f"Inserted/Updated EventCountLog records: {len(records)}"
-                )
+                EventCountLog.objects.bulk_create(records)
+                logger.success(f"Inserted EventCountLog records: {len(records)}")
         except Exception as e:
             logger.error(f"Error inserting EventCountLog records: {str(e)}")
             transaction.rollback()
+
