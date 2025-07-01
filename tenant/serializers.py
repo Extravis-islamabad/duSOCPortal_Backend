@@ -1684,7 +1684,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 if not is_default_sla:
                     for override in soar.get("sla_overrides", []):
                         SoarTenantSlaMetric.objects.create(
-                            tenant=tenant,
+                            company=tenant.company,
                             soar_tenant=soar_tenant,
                             sla_level=override["sla_level"],
                             tta_minutes=override["tta_minutes"],
