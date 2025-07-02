@@ -919,3 +919,16 @@ class WeeklyCorrelatedEventLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - Week {self.week}: {self.weekly_count}"
+
+
+class SuspiciousEventLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    total_suspicious_events = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "suspicious_event_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - Suspicious Events: {self.total_suspicious_events}"

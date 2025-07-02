@@ -131,6 +131,15 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
+    AQL_QUERY_FOR_SUSPICIOUS_EVENTS = """
+    SELECT COUNT(*) AS total_suspicious_events
+    FROM events
+    WHERE domainid = {domain_id}
+    AND highLevelCategory = 7000
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+        
 
 
 class ITSMConstants:

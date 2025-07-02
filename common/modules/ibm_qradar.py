@@ -19,6 +19,7 @@ from tenant.models import (
     IBMQradarLogSourceTypes,
     IBMQradarOffense,
     ReconEventLog,
+    SuspiciousEventLog,
     TotalEvents,
     WeeklyCorrelatedEventLog,
 )
@@ -1519,3 +1520,41 @@ class IBMQradar:
                 exc_info=True,
             )
             return False
+
+
+    
+    def _transform_suspicious_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        for entry in data_list:
+            count = entry.get("total_suspicious_events")
+            if count is None:
+                logger.warning(f"Skipping invalid suspicious data: {entry}")
+                continue
+
+            return [
+                {
+                    "total_suspicious_events": count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            ]
+
+        return []
+
+    def _insert_suspicious_event_data(self, data):
+        logger.info(f"Inserting {len(data)} SuspiciousEventLog records")
+        records = [SuspiciousEventLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                SuspiciousEventLog.objects.bulk_create(records)
+                logger.success(f"Inserted SuspiciousEventLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting SuspiciousEventLog records: {str(e)}")
+            transaction.rollback()
