@@ -39,7 +39,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.ibm_qradar_tasks import sync_recon_event_counts
+from tenant.ibm_qradar_tasks import sync_correlated_event_counts, sync_recon_event_counts
 from tenant.models import (
     Alert,
     CywareAlertDetails,
@@ -216,7 +216,7 @@ class TestView(APIView):
 
     def get(self, request):
         # sync_ibm.delay()
-        sync_correlated_for_admin.delay()
+        sync_correlated_event_counts.delay()
         # sync_recon_event_counts.delay()
         # sync_ibm_event_counts.delay()
         # sync_threat_intel.delay()
