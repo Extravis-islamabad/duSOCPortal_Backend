@@ -21,11 +21,14 @@ from tenant.models import (
     IBMQradarEventCollector,
     IBMQradarLogSourceTypes,
     IBMQradarOffense,
+    LastMonthAvgEpsLog,
+    MonthlyAvgEpsLog,
     ReconEventLog,
     SuspiciousEventLog,
     TopAlertEventLog,
     TopDosEventLog,
     TotalEvents,
+    WeeklyAvgEpsLog,
     WeeklyCorrelatedEventLog,
 )
 
@@ -1765,4 +1768,122 @@ class IBMQradar:
                 logger.success(f"Inserted DailyClosureReasonLog records: {len(records)}")
         except Exception as e:
             logger.error(f"Error inserting DailyClosureReasonLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+    
+    def _transform_monthly_avg_eps_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        for entry in data_list:
+            monthly_avg_eps = entry.get("monthly_avg_eps")
+            if monthly_avg_eps is None:
+                logger.warning(f"Skipping invalid monthly avg EPS data: {entry}")
+                continue
+
+            return [
+                {
+                    "monthly_avg_eps": monthly_avg_eps,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            ]
+
+        return []
+
+    def _insert_monthly_avg_eps_data(self, data):
+        logger.info(f"Inserting {len(data)} MonthlyAvgEpsLog records")
+        records = [MonthlyAvgEpsLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                MonthlyAvgEpsLog.objects.bulk_create(records)
+                logger.success(f"Inserted MonthlyAvgEpsLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting MonthlyAvgEpsLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+            
+    def _transform_last_month_avg_eps_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        for entry in data_list:
+            last_month_avg_eps = entry.get("last_month_avg_eps")
+            if last_month_avg_eps is None:
+                logger.warning(f"Skipping invalid last month avg EPS data: {entry}")
+                continue
+
+            return [
+                {
+                    "last_month_avg_eps": last_month_avg_eps,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            ]
+
+        return []
+
+    def _insert_last_month_avg_eps_data(self, data):
+        logger.info(f"Inserting {len(data)} LastMonthAvgEpsLog records")
+        records = [LastMonthAvgEpsLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                LastMonthAvgEpsLog.objects.bulk_create(records)
+                logger.success(f"Inserted LastMonthAvgEpsLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting LastMonthAvgEpsLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+    def _transform_weekly_avg_eps_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        transformed = []
+        for entry in data_list:
+            week = entry.get("week")
+            week_start = entry.get("week_start")
+            weekly_avg_eps = entry.get("weekly_avg_eps")
+            if week is None or week_start is None or weekly_avg_eps is None:
+                logger.warning(f"Skipping invalid weekly avg EPS data: {entry}")
+                continue
+
+            transformed.append(
+                {
+                    "week": week,
+                    "week_start": week_start,
+                    "weekly_avg_eps": weekly_avg_eps,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            )
+
+        return transformed
+
+    def _insert_weekly_avg_eps_data(self, data):
+        logger.info(f"Inserting {len(data)} WeeklyAvgEpsLog records")
+        records = [WeeklyAvgEpsLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                WeeklyAvgEpsLog.objects.bulk_create(records)
+                logger.success(f"Inserted WeeklyAvgEpsLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting WeeklyAvgEpsLog records: {str(e)}")
             transaction.rollback()

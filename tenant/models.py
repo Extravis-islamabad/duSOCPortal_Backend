@@ -1010,3 +1010,48 @@ class DailyClosureReasonLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - {self.date} - {self.closure_reason}: {self.reason_count}"
+    
+
+class MonthlyAvgEpsLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    monthly_avg_eps = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "monthly_avg_eps_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - Monthly Avg EPS: {self.monthly_avg_eps}"
+    
+    
+
+
+
+class LastMonthAvgEpsLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    last_month_avg_eps = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "last_month_avg_eps_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - Last Month Avg EPS: {self.last_month_avg_eps}"
+    
+    
+
+class WeeklyAvgEpsLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    week = models.CharField(max_length=7)  # Format: yyyy-ww
+    week_start = models.CharField(max_length=6)  # Format: dd-MMM
+    weekly_avg_eps = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "weekly_avg_eps_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - Week {self.week} ({self.week_start}): {self.weekly_avg_eps}"

@@ -42,10 +42,14 @@ from integration.models import (
 from tenant.ibm_qradar_tasks import sync_daily_closure_reason_counts, sync_dos_event_counts, sync_suspicious_event_counts, sync_weekly_correlated_event_counts
 from tenant.models import (
     Alert,
+    CorrelatedEventLog,
     CywareAlertDetails,
     CywareTenantAlertDetails,
+    DailyClosureReasonLog,
+    DailyEventLog,
     DefaultSoarSlaMetric,
     DUCortexSOARIncidentFinalModel,
+    DosEventLog,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMFinalTickets,
@@ -58,12 +62,15 @@ from tenant.models import (
     ReconEventLog,
     SlaLevelChoices,
     SoarTenantSlaMetric,
+    SuspiciousEventLog,
     Tenant,
     TenantPermissionChoices,
     TenantQradarMapping,
     TenantRole,
     ThreatIntelligenceTenant,
     ThreatIntelligenceTenantAlerts,
+    TopAlertEventLog,
+    TopDosEventLog,
     TotalEvents,
 )
 from tenant.serializers import (
@@ -4883,11 +4890,45 @@ class IncidentReportView(APIView):
                 :10
             ].values("event_name", "event_count")
             recon_event_count = (
-                ReconEventLog.objects.aggregate(total=Sum("total_recon_events"))[
-                    "total"
-                ]
-                or 0
+                ReconEventLog.objects.filter(
+                    
+                    created_at__gte=date_threshold
+                ).aggregate(total=Sum("total_recon_events"))["total"] or 0
             )
+            suspicious_event_count = (
+                SuspiciousEventLog.objects.filter(
+                  
+                    created_at__gte=date_threshold
+                ).aggregate(total=Sum("total_suspicious_events"))["total"] or 0
+            )
+            dos_event_count = (
+                DosEventLog.objects.filter(
+                   
+                    created_at__gte=date_threshold
+                ).aggregate(total=Sum("total_dos_events"))["total"] or 0
+            )
+            top_dos_events = TopDosEventLog.objects.filter(
+                # qradar_tenant__company=tenant.company,
+                created_at__gte=date_threshold
+            ).order_by("-event_count")[:10].values("event_name", "event_count")
+            correlated_event_count = (
+                CorrelatedEventLog.objects.filter(
+                 
+                    created_at__gte=date_threshold
+                ).aggregate(total=Sum("correlated_events_count"))["total"] or 0
+            )
+            daily_event_counts = DailyEventLog.objects.filter(
+              
+                created_at__gte=date_threshold
+            ).order_by("date").values("date", "daily_count")
+            top_alert_events = TopAlertEventLog.objects.filter(
+               
+                created_at__gte=date_threshold
+            ).order_by("-event_count")[:10].values("alert_name", "event_count")
+            daily_closure_reasons = DailyClosureReasonLog.objects.filter(
+               
+                created_at__gte=date_threshold
+            ).order_by("date", "closure_reason").values("date", "closure_reason", "reason_count")
 
             # Add to your response
             return Response(
@@ -4901,6 +4942,13 @@ class IncidentReportView(APIView):
                     "threat_trending_events": {
                         "suspicious_activities": list(suspicious_activities),
                         "recon_event_count": recon_event_count,
+                        "suspicious_event_count": suspicious_event_count,
+                        "dos_event_count": dos_event_count,
+                        "top_dos_events": list(top_dos_events),
+                        "correlated_event_count": correlated_event_count,
+                        "daily_event_counts": list(daily_event_counts),
+                        "top_alert_events": list(top_alert_events),
+                        "daily_closure_reasons": list(daily_closure_reasons),
                     },
                 },
                 status=200,

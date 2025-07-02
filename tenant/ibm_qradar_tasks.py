@@ -19,10 +19,12 @@ from tenant.models import (
     DosEventLog,
     DuIbmQradarTenants,
     EventCountLog,
+    LastMonthAvgEpsLog,
     ReconEventLog,
     SuspiciousEventLog,
     TopAlertEventLog,
     TopDosEventLog,
+    WeeklyAvgEpsLog,
     WeeklyCorrelatedEventLog,
 )
 
@@ -1256,3 +1258,198 @@ def sync_daily_closure_reason_for_admin(username, password, ip_address, port, in
 
             if transformed:
                 ibm_qradar._insert_daily_closure_reason_data(transformed)
+                
+                
+                
+
+@shared_task
+def sync_monthly_avg_eps():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    MonthlyAvgEpsLog.objects.all().delete()
+
+    for result in results:
+        sync_monthly_avg_eps_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_monthly_avg_eps_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=30)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_monthly_avg_eps_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_MONTHLY_AVG_EPS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing MONTHLY AVG EPS AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No monthly avg EPS data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_monthly_avg_eps_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_monthly_avg_eps_data(transformed)
+                
+                
+                
+    
+@shared_task
+def sync_last_month_avg_eps():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    LastMonthAvgEpsLog.objects.all().delete()
+
+    for result in results:
+        sync_last_month_avg_eps_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_last_month_avg_eps_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(day=1, hour=23, minute=59, second=59, microsecond=0) - timedelta(days=1)
+    start_time = end_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_last_month_avg_eps_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_LAST_MONTH_AVG_EPS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing LAST MONTH AVG EPS AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No last month avg EPS data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_last_month_avg_eps_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_last_month_avg_eps_data(transformed)
+                
+                
+    
+@shared_task
+def sync_weekly_avg_eps():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    WeeklyAvgEpsLog.objects.all().delete()
+
+    for result in results:
+        sync_weekly_avg_eps_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=60)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_weekly_avg_eps_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_WEEKLY_AVG_EPS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing WEEKLY AVG EPS AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No weekly avg EPS data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_weekly_avg_eps_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_weekly_avg_eps_data(transformed)

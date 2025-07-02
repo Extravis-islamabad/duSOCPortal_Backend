@@ -210,6 +210,34 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
+    AQL_QUERY_FOR_MONTHLY_AVG_EPS = """
+    SELECT 
+        SUM(eventcount) / (30 * 24 * 60 * 60) AS monthly_avg_eps
+    FROM events
+    WHERE domainid = {domain_id}
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+    AQL_QUERY_FOR_LAST_MONTH_AVG_EPS = """
+    SELECT 
+        SUM(eventcount) / (31 * 24 * 60 * 60) AS last_month_avg_eps
+    FROM events
+    WHERE domainid = {domain_id}
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+    AQL_QUERY_FOR_WEEKLY_AVG_EPS = """
+    SELECT 
+        DATEFORMAT(starttime,'yyyy-ww') AS week,
+        DATEFORMAT(MIN(starttime),'dd-MMM') AS week_start,
+        SUM(eventcount) / (7 * 24 * 60 * 60) AS weekly_avg_eps
+    FROM events
+    WHERE domainid = {domain_id}
+    GROUP BY DATEFORMAT(starttime,'yyyy-ww')
+    ORDER BY week
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
             
 
 
