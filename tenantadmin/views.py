@@ -315,6 +315,7 @@ class DistinctCompaniesAPIView(APIView):
                 )
             )
             .filter(active_tenant_count__gt=0)
+            .order_by("id")
         )
         paginator = PageNumberPagination()
         paginator.page_size = PaginationConstants.PAGE_SIZE  # your global constant

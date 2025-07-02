@@ -1,5 +1,6 @@
 # tenant/serializers.py
 from django.db import transaction
+from django.db.models import Count
 from loguru import logger
 from rest_framework import serializers
 
@@ -1304,9 +1305,16 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
     #         ]
 
     def get_asset_count(self, obj):
-        return IBMQradarAssests.objects.filter(
-            event_collector__in=obj.event_collectors.all()
-        ).count()
+        try:
+            collector_ids = TenantQradarMapping.objects.filter(company=obj).values_list(
+                "event_collectors__id", flat=True
+            )
+            asset_count = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).aggregate(totalAssets=Count("id"))
+            return asset_count["totalAssets"] or 0
+        except Exception:
+            return 0
 
     def get_active_integrations(self, obj):
         return obj.integrations.count()
