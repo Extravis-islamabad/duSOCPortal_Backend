@@ -16,7 +16,7 @@ from django.db.models import (
     Sum,
     When,
 )
-from django.db.models.functions import ExtractSecond
+from django.db.models.functions import ExtractSecond, TruncDate, TruncDay, TruncHour
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.timezone import make_aware
@@ -2745,6 +2745,70 @@ class EPSCountValuesByDomainAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class EPSGraphAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        filter_type = request.query_params.get(
+            "filter", "day"
+        )  # 'day', 'week', or 'month'
+
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        now = timezone.now()
+        if filter_type == "day":
+            start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            time_trunc = TruncHour("created_at")
+        elif filter_type == "week":
+            start_time = now - timedelta(days=6)
+            time_trunc = TruncDay("created_at")
+        elif filter_type == "month":
+            start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            time_trunc = TruncDate("created_at")
+        else:
+            return Response(
+                {"error": "Invalid filter. Use 'day', 'week', or 'month'."}, status=400
+            )
+
+        # Get relevant qradar domains
+        qradar_tenant_ids = tenant.company.qradar_mappings.values_list(
+            "qradar_tenant__id", flat=True
+        )
+
+        # EPS data
+        eps_data = (
+            IBMQradarEPS.objects.filter(
+                domain_id__in=qradar_tenant_ids, created_at__gte=start_time
+            )
+            .annotate(interval=time_trunc)
+            .values("interval")
+            .annotate(total_eps=Sum("eps"))
+            .order_by("interval")
+        )
+
+        # Get contracted volume info (we assume only one mapping per company)
+        mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
+        contracted_volume = mapping.contracted_volume if mapping else None
+        contracted_volume_type = mapping.contracted_volume_type if mapping else None
+        contracted_volume_type_display = (
+            mapping.get_contracted_volume_type_display() if mapping else None
+        )
+
+        return Response(
+            {
+                "contracted_volume": contracted_volume,
+                "contracted_volume_type": contracted_volume_type,
+                "contracted_volume_type_display": contracted_volume_type_display,
+                "eps_graph": eps_data,
+            },
+            status=200,
+        )
 
 
 class AlertListView(APIView):

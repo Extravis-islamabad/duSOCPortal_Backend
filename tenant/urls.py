@@ -9,6 +9,7 @@ from tenant.views import (
     DuIbmQradarTenantsListView,
     DuITSMTenantsListView,
     EPSCountValuesByDomainAPIView,
+    EPSGraphAPIView,
     EventCollectorsListAPIView,
     GetTenantAssetsList,
     IncidentDetailView,
@@ -131,6 +132,7 @@ urlpatterns = [
         name="total-tickets-by-tenant",
     ),
     path("api/eps/", EPSCountValuesByDomainAPIView.as_view(), name="tenant"),
+    path("api/eps-graph/", EPSGraphAPIView.as_view(), name="eps-graph"),
     path(
         "get_threat_intelligence/",
         AlertListView.as_view(),
