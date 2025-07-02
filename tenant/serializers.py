@@ -1282,7 +1282,7 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
             DUCortexSOARIncidentFinalModel.objects.filter(
                 cortex_soar_tenant__in=obj.soar_tenants.all()
             )
-            .exclude(status__in=["Closed", "Resolved"])
+            .exclude(incident_phase__in=["Closed", "Resolved"])
             .count()
         )
 
