@@ -9,6 +9,7 @@ from requests.auth import HTTPBasicAuth
 from common.constants import IBMQradarConstants, SSLConstants
 from common.utils import DBMappings
 from tenant.models import (
+    CorrelatedEventLog,
     CustomerEPS,
     DuIbmQradarTenants,
     EventCountLog,
@@ -1165,4 +1166,46 @@ class IBMQradar:
                 logger.success(f"Inserted ReconEventLog records: {len(records)}")
         except Exception as e:
             logger.error(f"Error inserting ReconEventLog records: {str(e)}")
+            transaction.rollback()
+
+    
+    
+    
+    def _transform_correlated_data(self, data_list, integration_id, domain_id):
+        """Transform correlated events data for database insertion"""
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        for entry in data_list:
+            count = entry.get("correlated_events_count")
+            if count is None:
+                logger.warning(f"Skipping invalid correlated data: {entry}")
+                continue
+
+            return [
+                {
+                    "correlated_events_count": count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            ]
+
+        return []
+
+
+    def _insert_correlated_event_data(self, data):
+        """Insert correlated event data into database"""
+        logger.info(f"Inserting {len(data)} CorrelatedEventLog records")
+        records = [CorrelatedEventLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                CorrelatedEventLog.objects.bulk_create(records)
+                logger.success(f"Inserted CorrelatedEventLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting CorrelatedEventLog records: {str(e)}")
             transaction.rollback()

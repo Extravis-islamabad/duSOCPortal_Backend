@@ -117,7 +117,15 @@ class IBMQradarConstants:
     AQL_QUERY_FOR_ADMIN_DASHBOARD = "SELECT DOMAINNAME(domainid)   AS Customer, SUM(eventcount) / ( (MAX(endtime) - MIN(starttime)) / 1000 ) AS EPS FROM events GROUP BY domainid ORDER BY EPS DESC LAST 1 HOURS"
     AQL_QUERY_FOR_SUSPICIOUS_EVENTS = "SELECT qidname(qid) as event_name, COUNT(*) as event_count FROM events WHERE domainid = {domain_id} AND (LOWER(categoryname(category)) LIKE '%suspicious%' OR LOWER(qidname(qid)) LIKE '%suspicious%' OR LOWER(qidname(qid)) LIKE '%leakage%' OR LOWER(qidname(qid)) LIKE '%unauthorized%') GROUP BY qid ORDER BY event_count DESC LIMIT 10 START PARSEDATETIME('{start_time}') STOP PARSEDATETIME('{end_time}')"
     AQL_QUERY_FOR_RECON_EVENTS = "SELECT COUNT(*) as total_recon_events FROM events WHERE domainid = {domain_id} AND (LOWER(categoryname(category)) LIKE '%reconnaissance%' OR LOWER(qidname(qid)) LIKE '%reconnaissance%' OR LOWER(qidname(qid)) LIKE '%recon%' OR LOWER(qidname(qid)) LIKE '%scan%') START PARSEDATETIME('{start_time}') STOP PARSEDATETIME('{end_time}')"
-
+    AQL_QUERY_FOR_CORRELATED_EVENTS = """
+    SELECT 
+        COUNT(*) AS correlated_events_count
+    FROM events
+    WHERE domainid = {domain_id}
+        AND creeventlist IS NOT NULL
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
 
 class ITSMConstants:
     ITSM_START_INDEX = 1

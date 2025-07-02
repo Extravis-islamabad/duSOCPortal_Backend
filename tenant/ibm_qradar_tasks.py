@@ -12,7 +12,7 @@ from integration.models import (
     IntegrationTypes,
     SiemSubTypes,
 )
-from tenant.models import DuIbmQradarTenants, EventCountLog, ReconEventLog
+from tenant.models import CorrelatedEventLog, DuIbmQradarTenants, EventCountLog, ReconEventLog
 
 
 @shared_task
@@ -530,3 +530,72 @@ def sync_recon_event_counts():
             port=result.port,
             integration_id=result.integration.id,
         )
+
+
+
+
+@shared_task
+def sync_correlated_event_counts():
+    """Sync correlated event counts for all IBM QRadar integrations"""
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+    
+    # Clear existing correlated event logs
+    CorrelatedEventLog.objects.all().delete()
+
+    for result in results:
+        sync_correlated_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+
+@shared_task
+def sync_correlated_for_admin(username, password, ip_address, port, integration_id):
+    """Sync correlated events for a specific admin/integration"""
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=7)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_correlated_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_CORRELATED_EVENTS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+            logger.info(
+                f"Executing CORRELATED AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No correlated data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_correlated_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_correlated_event_data(transformed)

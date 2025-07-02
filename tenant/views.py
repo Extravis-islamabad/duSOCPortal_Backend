@@ -216,7 +216,8 @@ class TestView(APIView):
 
     def get(self, request):
         # sync_ibm.delay()
-        sync_recon_event_counts.delay()
+        sync_correlated_for_admin.delay()
+        # sync_recon_event_counts.delay()
         # sync_ibm_event_counts.delay()
         # sync_threat_intel.delay()
         # sync_threat_intel_for_tenants.delay()
