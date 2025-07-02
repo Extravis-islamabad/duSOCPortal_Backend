@@ -892,17 +892,16 @@ class ReconEventLog(models.Model):
         return f"{self.qradar_tenant} - Recon Events: {self.total_recon_events}"
 
 
-
-
 class CorrelatedEventLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
     correlated_events_count = models.FloatField()
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         db_table = "correlated_event_log"
-    
-    def __str__(self):
-        return f"{self.qradar_tenant} - Correlated Events: {self.correlated_events_count}"
 
+    def __str__(self):
+        return (
+            f"{self.qradar_tenant} - Correlated Events: {self.correlated_events_count}"
+        )

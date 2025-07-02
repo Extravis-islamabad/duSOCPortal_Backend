@@ -1168,21 +1168,17 @@ class IBMQradar:
             logger.error(f"Error inserting ReconEventLog records: {str(e)}")
             transaction.rollback()
 
-    
-    
-    
-   
     def _transform_correlated_data(self, data_list, integration_id, domain_id):
         """Transform correlated events data for database insertion"""
         try:
             logger.info(f"Starting transformation for domain {domain_id}")
             logger.info(f"Input data: {data_list}")
             logger.info(f"Integration ID: {integration_id}")
-            
+
             # Get tenant mapping
             name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
             logger.info(f"Available tenant mappings: {name_to_id_map}")
-            
+
             tenant_id = name_to_id_map.get(domain_id)
             logger.info(f"Tenant ID for domain {domain_id}: {tenant_id}")
 
@@ -1199,7 +1195,7 @@ class IBMQradar:
             transformed_data = []
             for i, entry in enumerate(data_list):
                 logger.info(f"Processing entry {i+1}/{len(data_list)}: {entry}")
-                
+
                 # Handle different possible response formats
                 count = None
                 if isinstance(entry, dict):
@@ -1212,12 +1208,14 @@ class IBMQradar:
                             for key, value in entry.items():
                                 if isinstance(value, (int, float)):
                                     count = value
-                                    logger.info(f"Using value {count} from field '{key}'")
+                                    logger.info(
+                                        f"Using value {count} from field '{key}'"
+                                    )
                                     break
                 elif isinstance(entry, (int, float)):
                     count = entry
                     logger.info(f"Direct numeric value: {count}")
-                
+
                 if count is None:
                     logger.warning(f"Could not extract count from entry: {entry}")
                     continue
@@ -1237,34 +1235,43 @@ class IBMQradar:
                     "integration_id": integration_id,
                     "qradar_tenant_id": tenant_id,
                 }
-                
+
                 transformed_data.append(transformed_entry)
                 logger.info(f"Successfully transformed entry: {transformed_entry}")
 
-            logger.info(f"Transformation complete: {len(transformed_data)} records created")
+            logger.info(
+                f"Transformation complete: {len(transformed_data)} records created"
+            )
             return transformed_data
-            
-        except Exception as e:
-            logger.error(f"Error in _transform_correlated_data: {str(e)}", exc_info=True)
-            return []
 
+        except Exception as e:
+            logger.error(
+                f"Error in _transform_correlated_data: {str(e)}", exc_info=True
+            )
+            return []
 
     def _insert_correlated_event_data(self, data):
         """Insert correlated event data into database"""
         try:
             logger.info(f"Starting insertion of {len(data)} CorrelatedEventLog records")
             logger.info(f"Data to insert: {data}")
-            
+
             if not data:
                 logger.warning("No data to insert")
                 return False
 
             # Validate data structure
             for i, item in enumerate(data):
-                required_fields = ['correlated_events_count', 'integration_id', 'qradar_tenant_id']
+                required_fields = [
+                    "correlated_events_count",
+                    "integration_id",
+                    "qradar_tenant_id",
+                ]
                 for field in required_fields:
                     if field not in item:
-                        logger.error(f"Missing required field '{field}' in item {i}: {item}")
+                        logger.error(
+                            f"Missing required field '{field}' in item {i}: {item}"
+                        )
                         return False
 
             # Create records
@@ -1272,9 +1279,9 @@ class IBMQradar:
             for item in data:
                 try:
                     record = CorrelatedEventLog(
-                        correlated_events_count=item['correlated_events_count'],
-                        integration_id=item['integration_id'],
-                        qradar_tenant_id=item['qradar_tenant_id']
+                        correlated_events_count=item["correlated_events_count"],
+                        integration_id=item["integration_id"],
+                        qradar_tenant_id=item["qradar_tenant_id"],
                     )
                     records.append(record)
                     logger.debug(f"Created record: {record}")
@@ -1286,18 +1293,26 @@ class IBMQradar:
             try:
                 with transaction.atomic():
                     created_records = CorrelatedEventLog.objects.bulk_create(records)
-                    logger.info(f"Successfully inserted {len(created_records)} CorrelatedEventLog records")
-                    
+                    logger.info(
+                        f"Successfully inserted {len(created_records)} CorrelatedEventLog records"
+                    )
+
                     # Verify insertion
                     total_count = CorrelatedEventLog.objects.count()
-                    logger.info(f"Total CorrelatedEventLog records in database: {total_count}")
-                    
+                    logger.info(
+                        f"Total CorrelatedEventLog records in database: {total_count}"
+                    )
+
                     return True
-                    
+
             except Exception as e:
-                logger.error(f"Database error during bulk_create: {str(e)}", exc_info=True)
+                logger.error(
+                    f"Database error during bulk_create: {str(e)}", exc_info=True
+                )
                 return False
-                
+
         except Exception as e:
-            logger.error(f"Error in _insert_correlated_event_data: {str(e)}", exc_info=True)
+            logger.error(
+                f"Error in _insert_correlated_event_data: {str(e)}", exc_info=True
+            )
             return False
