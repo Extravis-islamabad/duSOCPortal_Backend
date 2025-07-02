@@ -14,10 +14,15 @@ from integration.models import (
 )
 from tenant.models import (
     CorrelatedEventLog,
+    DailyClosureReasonLog,
+    DailyEventLog,
+    DosEventLog,
     DuIbmQradarTenants,
     EventCountLog,
     ReconEventLog,
     SuspiciousEventLog,
+    TopAlertEventLog,
+    TopDosEventLog,
     WeeklyCorrelatedEventLog,
 )
 
@@ -920,3 +925,334 @@ def sync_suspicious_for_admin(username, password, ip_address, port, integration_
 
             if transformed:
                 ibm_qradar._insert_suspicious_event_data(transformed)
+
+
+
+
+
+@shared_task
+def sync_dos_event_counts():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    DosEventLog.objects.all().delete()
+
+    for result in results:
+        sync_dos_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_dos_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=7)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_dos_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_DOS_EVENTS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing DOS AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No DoS data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_dos_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_dos_event_data(transformed)
+                
+                
+                
+
+
+@shared_task
+def sync_top_dos_event_counts():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    TopDosEventLog.objects.all().delete()
+
+    for result in results:
+        sync_top_dos_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_top_dos_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=7)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_top_dos_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_TOP_DOS_EVENTS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing TOP DOS AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No top DoS data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_top_dos_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_top_dos_event_data(transformed)
+                
+                
+                
+
+@shared_task
+def sync_daily_event_counts():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    DailyEventLog.objects.all().delete()
+
+    for result in results:
+        sync_daily_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_daily_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=7)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_daily_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_DAILY_EVENTS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing DAILY AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No daily event data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_daily_event_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_daily_event_data(transformed)
+                
+                
+
+
+@shared_task
+def sync_top_alert_event_counts():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    TopAlertEventLog.objects.all().delete()
+
+    for result in results:
+        sync_top_alert_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_top_alert_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=7)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_top_alert_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_TOP_ALERT_EVENTS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing TOP ALERT AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No top alert data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_top_alert_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_top_alert_event_data(transformed)
+                
+                
+    
+@shared_task
+def sync_daily_closure_reason_counts():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    DailyClosureReasonLog.objects.all().delete()
+
+    for result in results:
+        sync_daily_closure_reason_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_daily_closure_reason_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=7)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_daily_closure_reason_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_DAILY_CLOSURE_REASONS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing DAILY CLOSURE REASON AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No daily closure reason data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_daily_closure_reason_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_daily_closure_reason_data(transformed)

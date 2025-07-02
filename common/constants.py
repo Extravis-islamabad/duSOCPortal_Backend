@@ -139,7 +139,78 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
-        
+    AQL_QUERY_FOR_DOS_EVENTS = """
+    SELECT COUNT(*) AS total_dos_events
+    FROM events
+    WHERE domainid = {domain_id}
+    AND highLevelCategory = 2000
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+    AQL_QUERY_FOR_TOP_DOS_EVENTS = """
+    SELECT 
+        qidname(qid) AS event_name,
+        COUNT(*) AS event_count
+    FROM events
+    WHERE domainid = {domain_id}
+        AND highLevelCategory = 2000
+    GROUP BY qid
+    ORDER BY event_count DESC
+    LIMIT 10
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+    
+    AQL_QUERY_FOR_DAILY_EVENTS = """
+    SELECT 
+        DATEFORMAT(starttime,'yyyy-MM-dd') AS date,
+        COUNT(*) AS daily_count
+    FROM events
+    WHERE domainid = {domain_id}
+        AND creeventlist IS NOT NULL
+    GROUP BY DATEFORMAT(starttime,'yyyy-MM-dd')
+    ORDER BY date
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+    AQL_QUERY_FOR_TOP_ALERT_EVENTS = """
+    SELECT 
+        rulename(creeventlist) AS alert_name,
+        COUNT(*) AS event_count
+    FROM events
+    WHERE domainid = {domain_id}
+        AND creeventlist IS NOT NULL
+    GROUP BY creeventlist
+    ORDER BY event_count DESC
+    LIMIT 10
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+    AQL_QUERY_FOR_DAILY_CLOSURE_REASONS = """
+    SELECT
+        DATEFORMAT(starttime,'yyyy-MM-dd') AS date,
+        CASE
+            WHEN magnitude <= 3 THEN 'False Positive - Tuned'
+            WHEN magnitude BETWEEN 4 AND 6 THEN 'True Positive - Existing Incident Updated'
+            WHEN magnitude >= 7 THEN 'False Positive - Fine tuning not required'
+            ELSE 'True Positive - Incident Raised'
+        END AS closure_reason,
+        COUNT(*) AS reason_count
+    FROM events
+    WHERE domainid = {domain_id}
+        AND creeventlist IS NOT NULL
+    GROUP BY DATEFORMAT(starttime,'yyyy-MM-dd'),
+        CASE
+            WHEN magnitude <= 3 THEN 'False Positive - Tuned'
+            WHEN magnitude BETWEEN 4 AND 6 THEN 'True Positive - Existing Incident Updated'
+            WHEN magnitude >= 7 THEN 'False Positive - Fine tuning not required'
+            ELSE 'True Positive - Incident Raised'
+        END
+    ORDER BY date, closure_reason
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+            
 
 
 class ITSMConstants:

@@ -11,6 +11,9 @@ from common.utils import DBMappings
 from tenant.models import (
     CorrelatedEventLog,
     CustomerEPS,
+    DailyClosureReasonLog,
+    DailyEventLog,
+    DosEventLog,
     DuIbmQradarTenants,
     EventCountLog,
     IBMQradarAssests,
@@ -20,6 +23,8 @@ from tenant.models import (
     IBMQradarOffense,
     ReconEventLog,
     SuspiciousEventLog,
+    TopAlertEventLog,
+    TopDosEventLog,
     TotalEvents,
     WeeklyCorrelatedEventLog,
 )
@@ -1557,4 +1562,207 @@ class IBMQradar:
                 logger.success(f"Inserted SuspiciousEventLog records: {len(records)}")
         except Exception as e:
             logger.error(f"Error inserting SuspiciousEventLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+            
+    def _transform_dos_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        for entry in data_list:
+            count = entry.get("total_dos_events")
+            if count is None:
+                logger.warning(f"Skipping invalid DoS data: {entry}")
+                continue
+
+            return [
+                {
+                    "total_dos_events": count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            ]
+
+        return []
+
+    def _insert_dos_event_data(self, data):
+        logger.info(f"Inserting {len(data)} DosEventLog records")
+        records = [DosEventLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                DosEventLog.objects.bulk_create(records)
+                logger.success(f"Inserted DosEventLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting DosEventLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+    def _transform_top_dos_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        transformed = []
+        for entry in data_list:
+            event_name = entry.get("event_name")
+            event_count = entry.get("event_count")
+            if event_name is None or event_count is None:
+                logger.warning(f"Skipping invalid top DoS data: {entry}")
+                continue
+
+            transformed.append(
+                {
+                    "event_name": event_name,
+                    "event_count": event_count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            )
+
+        return transformed
+
+    def _insert_top_dos_event_data(self, data):
+        logger.info(f"Inserting {len(data)} TopDosEventLog records")
+        records = [TopDosEventLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                TopDosEventLog.objects.bulk_create(records)
+                logger.success(f"Inserted TopDosEventLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting TopDosEventLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+    
+    def _transform_daily_event_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        transformed = []
+        for entry in data_list:
+            date = entry.get("date")
+            daily_count = entry.get("daily_count")
+            if date is None or daily_count is None:
+                logger.warning(f"Skipping invalid daily event data: {entry}")
+                continue
+
+            transformed.append(
+                {
+                    "date": date,
+                    "daily_count": daily_count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            )
+
+        return transformed
+
+    def _insert_daily_event_data(self, data):
+        logger.info(f"Inserting {len(data)} DailyEventLog records")
+        records = [DailyEventLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                DailyEventLog.objects.bulk_create(records)
+                logger.success(f"Inserted DailyEventLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting DailyEventLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+            
+    def _transform_top_alert_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        transformed = []
+        for entry in data_list:
+            alert_name = entry.get("alert_name")
+            event_count = entry.get("event_count")
+            if alert_name is None or event_count is None:
+                logger.warning(f"Skipping invalid top alert data: {entry}")
+                continue
+
+            transformed.append(
+                {
+                    "alert_name": alert_name,
+                    "event_count": event_count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            )
+
+        return transformed
+
+    def _insert_top_alert_event_data(self, data):
+        logger.info(f"Inserting {len(data)} TopAlertEventLog records")
+        records = [TopAlertEventLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                TopAlertEventLog.objects.bulk_create(records)
+                logger.success(f"Inserted TopAlertEventLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting TopAlertEventLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+            
+    def _transform_daily_closure_reason_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        transformed = []
+        for entry in data_list:
+            date = entry.get("date")
+            closure_reason = entry.get("closure_reason")
+            reason_count = entry.get("reason_count")
+            if date is None or closure_reason is None or reason_count is None:
+                logger.warning(f"Skipping invalid daily closure reason data: {entry}")
+                continue
+
+            transformed.append(
+                {
+                    "date": date,
+                    "closure_reason": closure_reason,
+                    "reason_count": reason_count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            )
+
+        return transformed
+
+    def _insert_daily_closure_reason_data(self, data):
+        logger.info(f"Inserting {len(data)} DailyClosureReasonLog records")
+        records = [DailyClosureReasonLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                DailyClosureReasonLog.objects.bulk_create(records)
+                logger.success(f"Inserted DailyClosureReasonLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting DailyClosureReasonLog records: {str(e)}")
             transaction.rollback()

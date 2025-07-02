@@ -932,3 +932,81 @@ class SuspiciousEventLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - Suspicious Events: {self.total_suspicious_events}"
+    
+    
+
+class DosEventLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    total_dos_events = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "dos_event_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - DoS Events: {self.total_dos_events}"
+    
+    
+    
+
+class TopDosEventLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    event_name = models.CharField(max_length=255)
+    event_count = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "top_dos_event_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - {self.event_name}: {self.event_count}"
+    
+    
+
+
+class DailyEventLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    date = models.DateField()
+    daily_count = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "daily_event_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - {self.date}: {self.daily_count}"
+    
+    
+
+
+class TopAlertEventLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    alert_name = models.CharField(max_length=255)
+    event_count = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "top_alert_event_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - {self.alert_name}: {self.event_count}"
+    
+    
+
+class DailyClosureReasonLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    date = models.DateField()
+    closure_reason = models.CharField(max_length=255)
+    reason_count = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "daily_closure_reason_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - {self.date} - {self.closure_reason}: {self.reason_count}"
