@@ -1233,3 +1233,80 @@ class SlaMetricSerializer(serializers.ModelSerializer):
     class Meta:
         model = DefaultSoarSlaMetric
         fields = ["sla_level", "tta_minutes", "ttn_minutes", "ttdn_minutes"]
+
+
+class DistinctCompanySerializer(serializers.ModelSerializer):
+    users_count = serializers.IntegerField(source="active_tenant_count")
+    profile_picture = serializers.SerializerMethodField()
+    name = serializers.CharField(source="company_name")
+    total_incidents = serializers.SerializerMethodField()
+    active_incidents = serializers.SerializerMethodField()
+    tickets_count = serializers.SerializerMethodField()
+    # sla = serializers.SerializerMethodField()
+    asset_count = serializers.SerializerMethodField()
+    active_integrations = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Company
+        fields = [
+            "id",
+            "name",
+            "phone_number",
+            "industry",
+            "country",
+            "users_count",
+            "profile_picture",
+            "total_incidents",
+            "active_incidents",
+            "tickets_count",
+            # "sla",
+            "asset_count",
+            "active_integrations",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_profile_picture(self, obj):
+        request = self.context.get("request")
+        if obj.profile_picture:
+            return request.build_absolute_uri(obj.profile_picture.url)
+        return None
+
+    def get_total_incidents(self, obj):
+        return DUCortexSOARIncidentFinalModel.objects.filter(
+            cortex_soar_tenant__in=obj.soar_tenants.all()
+        ).count()
+
+    def get_active_incidents(self, obj):
+        return (
+            DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_soar_tenant__in=obj.soar_tenants.all()
+            )
+            .exclude(status__in=["Closed", "Resolved"])
+            .count()
+        )
+
+    def get_tickets_count(self, obj):
+        return DuITSMFinalTickets.objects.filter(
+            itsm_tenant__in=obj.itsm_tenants.all()
+        ).count()
+
+    # def get_sla(self, obj):
+    #     if obj.is_default_sla:
+    #         return [
+    #             {
+    #                 "sla_level": sla.get_sla_level_display(),
+    #                 "tta": sla.tta_minutes,
+    #                 "ttn": sla.ttn_minutes,
+    #                 "ttdn": sla.ttdn_minutes,
+    #             }
+    #             for sla in obj.soar_sla_metrics.all()
+    #         ]
+
+    def get_asset_count(self, obj):
+        return IBMQradarAssests.objects.filter(
+            event_collector__in=obj.event_collectors.all()
+        ).count()
+
+    def get_active_integrations(self, obj):
+        return obj.integrations.count()

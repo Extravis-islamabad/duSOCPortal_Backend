@@ -1,4 +1,5 @@
 # authentication/views.py
+from django.db.models import Count, Q
 from loguru import logger
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
@@ -23,6 +24,7 @@ from tenant.serializers import (  # TenantUpdateSerializer,
     AllTenantDetailSerializer,
     CompanyTenantUpdateSerializer,
     CustomerEPSSerializer,
+    DistinctCompanySerializer,
     TenantCreateSerializer,
     TenantDetailSerializer,
 )
@@ -257,43 +259,71 @@ class TenantsByCompanyAPIView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
+# class DistinctCompaniesAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsAdminUser]
+
+#     def get(self, request):
+#         companies = Company.objects.filter(
+#             created_by=request.user,
+#         ).distinct()
+
+#         result = []
+#         for company in companies:
+#             tenant_count = company.tenants.filter(
+#                 tenant__is_active=True,
+#                 tenant__is_deleted=False,
+#             ).count()
+#             if tenant_count == 0:
+#                 continue
+#             result.append(
+#                 {
+#                     "id": company.id,
+#                     "name": company.company_name,
+#                     "phone_number": company.phone_number,
+#                     "industry": company.industry,
+#                     "country": company.country,
+#                     "tenant_count": tenant_count,
+#                     "profile_picture": request.build_absolute_uri(
+#                         company.profile_picture.url
+#                     )
+#                     if company.profile_picture
+#                     else None,
+#                     "created_at": company.created_at,
+#                     "updated_at": company.updated_at,
+#                 }
+#             )
+
+#         return Response({"companies": result}, status=200)
+
+
 class DistinctCompaniesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        # Filter companies created by this user and having active, non-deleted tenants
-        companies = Company.objects.filter(
-            created_by=request.user,
-        ).distinct()
-
-        result = []
-        for company in companies:
-            tenant_count = company.tenants.filter(
-                tenant__is_active=True,
-                tenant__is_deleted=False,
-            ).count()
-            if tenant_count == 0:
-                continue
-            result.append(
-                {
-                    "id": company.id,
-                    "name": company.company_name,
-                    "phone_number": company.phone_number,
-                    "industry": company.industry,
-                    "country": company.country,
-                    "tenant_count": tenant_count,
-                    "profile_picture": request.build_absolute_uri(
-                        company.profile_picture.url
-                    )
-                    if company.profile_picture
-                    else None,
-                    "created_at": company.created_at,
-                    "updated_at": company.updated_at,
-                }
+        companies = (
+            Company.objects.filter(created_by=request.user)
+            .annotate(
+                active_tenant_count=Count(
+                    "tenants",
+                    filter=Q(
+                        tenants__tenant__is_active=True,
+                        tenants__tenant__is_deleted=False,
+                    ),
+                    distinct=True,
+                )
             )
+            .filter(active_tenant_count__gt=0)
+        )
+        paginator = PageNumberPagination()
+        paginator.page_size = PaginationConstants.PAGE_SIZE  # your global constant
+        result_page = paginator.paginate_queryset(companies, request)
 
-        return Response({"companies": result}, status=200)
+        serializer = DistinctCompanySerializer(
+            result_page, many=True, context={"request": request}
+        )
+        return paginator.get_paginated_response(serializer.data)
 
 
 class NonActiveTenantsAPIView(APIView):
