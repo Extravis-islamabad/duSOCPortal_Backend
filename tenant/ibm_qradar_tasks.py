@@ -12,13 +12,7 @@ from integration.models import (
     IntegrationTypes,
     SiemSubTypes,
 )
-from tenant.models import (
-    CustomerEPS,
-    DuIbmQradarTenants,
-    EventCountLog,
-    IBMQradarEPS,
-    ReconEventLog,
-)
+from tenant.models import DuIbmQradarTenants, EventCountLog, ReconEventLog
 
 
 @shared_task
@@ -362,7 +356,6 @@ def sync_ibm_qradar_data():
         )
         sync_event_log_sources_types.delay()
         sync_offenses.delay()
-        IBMQradarEPS.objects.all().delete()
         sync_eps_for_domain.delay(
             username=result.username,
             password=result.password,
@@ -379,15 +372,14 @@ def sync_ibm():
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
-    IBMQradarEPS.objects.all().delete()
     for result in results:
-        sync_eps_for_domain(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
+        # sync_eps_for_domain(
+        #     username=result.username,
+        #     password=result.password,
+        #     ip_address=result.ip_address,
+        #     port=result.port,
+        #     integration_id=result.integration.id,
+        # )
         sync_total_events_for_domain(
             username=result.username,
             password=result.password,
@@ -404,7 +396,6 @@ def sync_ibm_admin_eps():
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
-    CustomerEPS.objects.all().delete()
     for result in results:
         sync_eps_for_domain_for_admin(
             username=result.username,
