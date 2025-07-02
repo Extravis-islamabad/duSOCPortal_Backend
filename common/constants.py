@@ -119,7 +119,7 @@ class IBMQradarConstants:
     AQL_QUERY_FOR_RECON_EVENTS = "SELECT COUNT(*) as total_recon_events FROM events WHERE domainid = {domain_id} AND (LOWER(categoryname(category)) LIKE '%reconnaissance%' OR LOWER(qidname(qid)) LIKE '%reconnaissance%' OR LOWER(qidname(qid)) LIKE '%recon%' OR LOWER(qidname(qid)) LIKE '%scan%') START PARSEDATETIME('{start_time}') STOP PARSEDATETIME('{end_time}')"
     AQL_QUERY_FOR_CORRELATED_EVENTS = "SELECT COUNT(*) AS correlated_events_count FROM events WHERE domainid = {domain_id} AND creeventlist IS NOT NULL START PARSEDATETIME('{start_time}') STOP PARSEDATETIME('{end_time}')"
     AQL_QUERY_FOR_WEEKLY_CORRELATED_EVENTS = """
-    SELECT 
+    SELECT
         DATEFORMAT(starttime,'yyyy-ww') AS week,
         COUNT(*) AS weekly_count
     FROM events

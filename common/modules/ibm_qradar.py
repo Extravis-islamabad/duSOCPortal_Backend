@@ -1317,21 +1317,18 @@ class IBMQradar:
                 f"Error in _insert_correlated_event_data: {str(e)}", exc_info=True
             )
             return False
-        
-        
-        
-    
+
     def _transform_weekly_correlated_data(self, data_list, integration_id, domain_id):
         """Transform weekly correlated events data for database insertion"""
         try:
             logger.info(f"Starting weekly transformation for domain {domain_id}")
             logger.info(f"Input weekly data: {data_list}")
             logger.info(f"Integration ID: {integration_id}")
-            
+
             # Get tenant mapping
             name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
             logger.info(f"Available tenant mappings: {name_to_id_map}")
-            
+
             tenant_id = name_to_id_map.get(domain_id)
             logger.info(f"Tenant ID for domain {domain_id}: {tenant_id}")
 
@@ -1348,37 +1345,41 @@ class IBMQradar:
             transformed_data = []
             for i, entry in enumerate(data_list):
                 logger.info(f"Processing weekly entry {i+1}/{len(data_list)}: {entry}")
-                
+
                 if not isinstance(entry, dict):
                     logger.warning(f"Expected dict but got {type(entry)}: {entry}")
                     continue
-                
+
                 # Extract week and count
                 week = entry.get("week")
                 weekly_count = entry.get("weekly_count")
-                
+
                 # Validate week format
                 if not week:
                     logger.warning(f"Missing week in entry: {entry}")
                     continue
-                    
+
                 # Validate week format (should be yyyy-ww)
-                if not isinstance(week, str) or len(week) != 7 or '-' not in week:
+                if not isinstance(week, str) or len(week) != 7 or "-" not in week:
                     logger.warning(f"Invalid week format: {week}")
                     continue
-                
+
                 # Validate and convert count
                 if weekly_count is None:
                     logger.warning(f"Missing weekly_count in entry: {entry}")
                     continue
-                    
+
                 try:
                     weekly_count = float(weekly_count)
                     if weekly_count < 0:
-                        logger.warning(f"Negative weekly count: {weekly_count}, setting to 0")
+                        logger.warning(
+                            f"Negative weekly count: {weekly_count}, setting to 0"
+                        )
                         weekly_count = 0
                 except (ValueError, TypeError):
-                    logger.warning(f"Invalid weekly_count value: {weekly_count}, skipping entry")
+                    logger.warning(
+                        f"Invalid weekly_count value: {weekly_count}, skipping entry"
+                    )
                     continue
 
                 transformed_entry = {
@@ -1387,34 +1388,48 @@ class IBMQradar:
                     "integration_id": integration_id,
                     "qradar_tenant_id": tenant_id,
                 }
-                
+
                 transformed_data.append(transformed_entry)
-                logger.info(f"Successfully transformed weekly entry: {transformed_entry}")
+                logger.info(
+                    f"Successfully transformed weekly entry: {transformed_entry}"
+                )
 
-            logger.info(f"Weekly transformation complete: {len(transformed_data)} records created")
+            logger.info(
+                f"Weekly transformation complete: {len(transformed_data)} records created"
+            )
             return transformed_data
-            
-        except Exception as e:
-            logger.error(f"Error in _transform_weekly_correlated_data: {str(e)}", exc_info=True)
-            return []
 
+        except Exception as e:
+            logger.error(
+                f"Error in _transform_weekly_correlated_data: {str(e)}", exc_info=True
+            )
+            return []
 
     def _insert_weekly_correlated_event_data(self, data):
         """Insert weekly correlated event data into database"""
         try:
-            logger.info(f"Starting insertion of {len(data)} WeeklyCorrelatedEventLog records")
+            logger.info(
+                f"Starting insertion of {len(data)} WeeklyCorrelatedEventLog records"
+            )
             logger.info(f"Weekly data to insert: {data}")
-            
+
             if not data:
                 logger.warning("No weekly data to insert")
                 return False
 
             # Validate data structure
             for i, item in enumerate(data):
-                required_fields = ['week', 'weekly_count', 'integration_id', 'qradar_tenant_id']
+                required_fields = [
+                    "week",
+                    "weekly_count",
+                    "integration_id",
+                    "qradar_tenant_id",
+                ]
                 for field in required_fields:
                     if field not in item:
-                        logger.error(f"Missing required field '{field}' in weekly item {i}: {item}")
+                        logger.error(
+                            f"Missing required field '{field}' in weekly item {i}: {item}"
+                        )
                         return False
 
             # Create records
@@ -1422,15 +1437,17 @@ class IBMQradar:
             for item in data:
                 try:
                     record = WeeklyCorrelatedEventLog(
-                        week=item['week'],
-                        weekly_count=item['weekly_count'],
-                        integration_id=item['integration_id'],
-                        qradar_tenant_id=item['qradar_tenant_id']
+                        week=item["week"],
+                        weekly_count=item["weekly_count"],
+                        integration_id=item["integration_id"],
+                        qradar_tenant_id=item["qradar_tenant_id"],
                     )
                     records.append(record)
                     logger.debug(f"Created weekly record: {record}")
                 except Exception as e:
-                    logger.error(f"Error creating weekly record from item {item}: {str(e)}")
+                    logger.error(
+                        f"Error creating weekly record from item {item}: {str(e)}"
+                    )
                     return False
 
             # Bulk insert with transaction
@@ -1440,45 +1457,65 @@ class IBMQradar:
                     created_records = WeeklyCorrelatedEventLog.objects.bulk_create(
                         records,
                         update_conflicts=True,
-                        update_fields=['weekly_count', 'created_at'],
-                        unique_fields=['integration', 'qradar_tenant', 'week']
+                        update_fields=["weekly_count", "created_at"],
+                        unique_fields=["integration", "qradar_tenant", "week"],
                     )
-                    logger.info(f"Successfully inserted/updated {len(created_records)} WeeklyCorrelatedEventLog records")
-                    
+                    logger.info(
+                        f"Successfully inserted/updated {len(created_records)} WeeklyCorrelatedEventLog records"
+                    )
+
                     # Verify insertion
                     total_count = WeeklyCorrelatedEventLog.objects.count()
-                    logger.info(f"Total WeeklyCorrelatedEventLog records in database: {total_count}")
-                    
+                    logger.info(
+                        f"Total WeeklyCorrelatedEventLog records in database: {total_count}"
+                    )
+
                     return True
-                    
+
             except Exception as e:
-                logger.error(f"Database error during weekly bulk_create: {str(e)}", exc_info=True)
-                
+                logger.error(
+                    f"Database error during weekly bulk_create: {str(e)}", exc_info=True
+                )
+
                 # Fallback: Insert one by one with get_or_create
                 logger.info("Attempting fallback insertion method...")
                 success_count = 0
                 for item in data:
                     try:
-                        record, created = WeeklyCorrelatedEventLog.objects.get_or_create(
-                            integration_id=item['integration_id'],
-                            qradar_tenant_id=item['qradar_tenant_id'],
-                            week=item['week'],
-                            defaults={'weekly_count': item['weekly_count']}
+                        (
+                            record,
+                            created,
+                        ) = WeeklyCorrelatedEventLog.objects.get_or_create(
+                            integration_id=item["integration_id"],
+                            qradar_tenant_id=item["qradar_tenant_id"],
+                            week=item["week"],
+                            defaults={"weekly_count": item["weekly_count"]},
                         )
                         if not created:
                             # Update existing record
-                            record.weekly_count = item['weekly_count']
+                            record.weekly_count = item["weekly_count"]
                             record.save()
-                            logger.info(f"Updated existing weekly record for week {item['week']}")
+                            logger.info(
+                                f"Updated existing weekly record for week {item['week']}"
+                            )
                         else:
-                            logger.info(f"Created new weekly record for week {item['week']}")
+                            logger.info(
+                                f"Created new weekly record for week {item['week']}"
+                            )
                         success_count += 1
                     except Exception as e:
-                        logger.error(f"Error in fallback insertion for item {item}: {str(e)}")
-                        
-                logger.info(f"Fallback insertion completed: {success_count}/{len(data)} records processed")
+                        logger.error(
+                            f"Error in fallback insertion for item {item}: {str(e)}"
+                        )
+
+                logger.info(
+                    f"Fallback insertion completed: {success_count}/{len(data)} records processed"
+                )
                 return success_count > 0
-                
+
         except Exception as e:
-            logger.error(f"Error in _insert_weekly_correlated_event_data: {str(e)}", exc_info=True)
+            logger.error(
+                f"Error in _insert_weekly_correlated_event_data: {str(e)}",
+                exc_info=True,
+            )
             return False
