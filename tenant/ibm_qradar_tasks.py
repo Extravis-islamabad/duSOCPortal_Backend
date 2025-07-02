@@ -12,7 +12,7 @@ from integration.models import (
     IntegrationTypes,
     SiemSubTypes,
 )
-from tenant.models import CorrelatedEventLog, DuIbmQradarTenants, EventCountLog, ReconEventLog
+from tenant.models import  CorrelatedEventLog, DuIbmQradarTenants, EventCountLog, ReconEventLog
 
 
 @shared_task
@@ -534,68 +534,138 @@ def sync_recon_event_counts():
 
 
 
+
+
+
 @shared_task
 def sync_correlated_event_counts():
     """Sync correlated event counts for all IBM QRadar integrations"""
-    results = IntegrationCredentials.objects.filter(
-        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
-        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
-        credential_type=CredentialTypes.USERNAME_PASSWORD,
-    )
-    
-    # Clear existing correlated event logs
-    CorrelatedEventLog.objects.all().delete()
-
-    for result in results:
-        sync_correlated_for_admin.delay(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
+    try:
+        logger.info("Starting sync_correlated_event_counts task")
+        
+        results = IntegrationCredentials.objects.filter(
+            integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+            integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+            credential_type=CredentialTypes.USERNAME_PASSWORD,
         )
+        
+        logger.info(f"Found {results.count()} QRadar integrations")
+        
+        # Clear existing correlated event logs
+        deleted_count = CorrelatedEventLog.objects.all().delete()[0]
+        logger.info(f"Deleted {deleted_count} existing CorrelatedEventLog records")
+
+        for result in results:
+            logger.info(f"Triggering sync for integration {result.integration.id}")
+            sync_correlated_for_admin.delay(
+                username=result.username,
+                password=result.password,
+                ip_address=result.ip_address,
+                port=result.port,
+                integration_id=result.integration.id,
+            )
+            
+        logger.info("Successfully triggered all correlated event sync tasks")
+        
+    except Exception as e:
+        logger.error(f"Error in sync_correlated_event_counts: {str(e)}", exc_info=True)
+        raise
 
 
 @shared_task
 def sync_correlated_for_admin(username, password, ip_address, port, integration_id):
     """Sync correlated events for a specific admin/integration"""
-    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+    try:
+        logger.info(f"Starting sync_correlated_for_admin for integration {integration_id}")
+        
+        db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+        db_ids_list = list(db_ids)
+        logger.info(f"Processing {len(db_ids_list)} QRadar tenants: {db_ids_list}")
 
-    now = datetime.now()
-    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
-    start_time = (now - timedelta(days=7)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+        if not db_ids_list:
+            logger.warning("No QRadar tenants found")
+            return
 
-    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now()
+        end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+        start_time = (now - timedelta(days=7)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
 
-    with IBMQradar(
-        username=username, password=password, ip_address=ip_address, port=port
-    ) as ibm_qradar:
-        logger.info("Running QRadarTasks.sync_correlated_for_admin() task")
+        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        
+        logger.info(f"Date range: {start_str} to {end_str}")
 
-        for domain_id in db_ids:
-            query = IBMQradarConstants.AQL_QUERY_FOR_CORRELATED_EVENTS.format(
-                domain_id=domain_id,
-                start_time=start_str,
-                end_time=end_str,
-            )
-            logger.info(
-                f"Executing CORRELATED AQL for domain {domain_id} ({start_str} → {end_str})"
-            )
+        with IBMQradar(
+            username=username, password=password, ip_address=ip_address, port=port
+        ) as ibm_qradar:
+            logger.info("Successfully connected to IBM QRadar")
+            logger.info("Running QRadarTasks.sync_correlated_for_admin() task")
 
-            search_id = ibm_qradar._get_do_aql_query(query=query)
-            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+            total_processed = 0
+            total_inserted = 0
 
-            if not data_ready:
-                logger.warning(f"No correlated data returned for domain {domain_id}")
-                continue
+            for domain_id in db_ids_list:
+                try:
+                    logger.info(f"Processing domain {domain_id}")
+                    
+                    query = IBMQradarConstants.AQL_QUERY_FOR_CORRELATED_EVENTS.format(
+                        domain_id=domain_id,
+                        start_time=start_str,
+                        end_time=end_str,
+                    )
+                    logger.info(f"Executing CORRELATED AQL for domain {domain_id}")
+                    logger.debug(f"AQL Query: {query}")
 
-            results = ibm_qradar._get_eps_results_by_search_id(search_id)
-            transformed = ibm_qradar._transform_correlated_data(
-                results, integration_id, domain_id
-            )
+                    # Execute the query
+                    search_id = ibm_qradar._get_do_aql_query(query=query)
+                    logger.info(f"Search ID: {search_id}")
+                    
+                    if not search_id:
+                        logger.error(f"Failed to get search ID for domain {domain_id}")
+                        continue
+                    
+                    # Check if results are ready
+                    data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+                    logger.info(f"Data ready status: {data_ready}")
 
-            if transformed:
-                ibm_qradar._insert_correlated_event_data(transformed)
+                    if not data_ready:
+                        logger.warning(f"No correlated data returned for domain {domain_id}")
+                        continue
+
+                    # Get the results
+                    results = ibm_qradar._get_eps_results_by_search_id(search_id)
+                    logger.info(f"Raw results from QRadar for domain {domain_id}: {results}")
+                    
+                    if not results:
+                        logger.warning(f"Empty results for domain {domain_id}")
+                        continue
+                    
+                    # Transform the data
+                    transformed = ibm_qradar._transform_correlated_data(
+                        results, integration_id, domain_id
+                    )
+                    logger.info(f"Transformed data for domain {domain_id}: {transformed}")
+
+                    if transformed:
+                        success = ibm_qradar._insert_correlated_event_data(transformed)
+                        if success:
+                            total_inserted += len(transformed)
+                            logger.info(f"Successfully processed domain {domain_id}")
+                        else:
+                            logger.error(f"Failed to insert data for domain {domain_id}")
+                    else:
+                        logger.warning(f"No transformed data for domain {domain_id}")
+                    
+                    total_processed += 1
+                        
+                except Exception as e:
+                    logger.error(f"Error processing domain {domain_id}: {str(e)}", exc_info=True)
+                    continue
+
+            logger.info(f"Completed sync_correlated_for_admin: {total_processed} domains processed, {total_inserted} records inserted")
+            
+    except Exception as e:
+        logger.error(f"Error in sync_correlated_for_admin: {str(e)}", exc_info=True)
+        raise

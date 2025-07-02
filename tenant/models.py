@@ -905,3 +905,4 @@ class CorrelatedEventLog(models.Model):
     
     def __str__(self):
         return f"{self.qradar_tenant} - Correlated Events: {self.correlated_events_count}"
+
