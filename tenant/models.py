@@ -878,7 +878,6 @@ class EventCountLog(models.Model):
         return f"{self.event_name} - Count: {self.event_count}"
 
 
-
 class ReconEventLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)

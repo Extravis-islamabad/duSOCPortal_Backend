@@ -119,7 +119,6 @@ class IBMQradarConstants:
     AQL_QUERY_FOR_RECON_EVENTS = "SELECT COUNT(*) as total_recon_events FROM events WHERE domainid = {domain_id} AND (LOWER(categoryname(category)) LIKE '%reconnaissance%' OR LOWER(qidname(qid)) LIKE '%reconnaissance%' OR LOWER(qidname(qid)) LIKE '%recon%' OR LOWER(qidname(qid)) LIKE '%scan%') START PARSEDATETIME('{start_time}') STOP PARSEDATETIME('{end_time}')"
 
 
-
 class ITSMConstants:
     ITSM_START_INDEX = 1
     ITSM_ROW_COUNT = 1000

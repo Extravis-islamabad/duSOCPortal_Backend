@@ -1131,7 +1131,6 @@ class IBMQradar:
             logger.error(f"Error inserting EventCountLog records: {str(e)}")
             transaction.rollback()
 
-
     def _transform_recon_data(self, data_list, integration_id, domain_id):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -1146,15 +1145,16 @@ class IBMQradar:
                 logger.warning(f"Skipping invalid recon data: {entry}")
                 continue
 
-            return [{
-                "total_recon_events": count,
-                "integration_id": integration_id,
-                "qradar_tenant_id": tenant_id,
-            }]
+            return [
+                {
+                    "total_recon_events": count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            ]
 
         return []
-    
-    
+
     def _insert_recon_event_data(self, data):
         logger.info(f"Inserting {len(data)} ReconEventLog records")
         records = [ReconEventLog(**item) for item in data]
@@ -1166,4 +1166,3 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error inserting ReconEventLog records: {str(e)}")
             transaction.rollback()
-
