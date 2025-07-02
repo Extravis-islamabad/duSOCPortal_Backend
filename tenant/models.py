@@ -1055,3 +1055,62 @@ class WeeklyAvgEpsLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - Week {self.week} ({self.week_start}): {self.weekly_avg_eps}"
+    
+    
+
+
+class TotalTrafficLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    total_traffic = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "total_traffic_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - Total Traffic: {self.total_traffic}"
+    
+    
+class DestinationAddressLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    destination_address = models.CharField(max_length=45)  # IPv4/IPv6 address length
+    address_count = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "destination_address_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - {self.destination_address}: {self.address_count}"
+    
+    
+
+class TopDestinationConnectionLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    destination_address = models.CharField(max_length=45)  # IPv4/IPv6 address length
+    connection_count = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "top_destination_connection_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - {self.destination_address}: {self.connection_count}"
+    
+    
+
+class DailyEventCountLog(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    full_date = models.DateField()
+    daily_count = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "daily_event_count_log"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - {self.full_date}: {self.daily_count}"

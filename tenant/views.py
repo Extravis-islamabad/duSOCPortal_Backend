@@ -59,6 +59,8 @@ from tenant.models import (
     IBMQradarEPS,
     IBMQradarEventCollector,
     IBMQradarOffense,
+    LastMonthAvgEpsLog,
+    MonthlyAvgEpsLog,
     ReconEventLog,
     SlaLevelChoices,
     SoarTenantSlaMetric,
@@ -72,6 +74,7 @@ from tenant.models import (
     TopAlertEventLog,
     TopDosEventLog,
     TotalEvents,
+    WeeklyAvgEpsLog,
 )
 from tenant.serializers import (
     AlertSerializer,
@@ -4929,6 +4932,22 @@ class IncidentReportView(APIView):
                
                 created_at__gte=date_threshold
             ).order_by("date", "closure_reason").values("date", "closure_reason", "reason_count")
+            monthly_avg_eps = (
+                MonthlyAvgEpsLog.objects.filter(
+                   
+                    created_at__gte=date_threshold
+                ).aggregate(total=Sum("monthly_avg_eps"))["total"] or 0
+            )
+            last_month_avg_eps = (
+                LastMonthAvgEpsLog.objects.filter(
+                 
+                    created_at__gte=date_threshold
+                ).aggregate(total=Sum("last_month_avg_eps"))["total"] or 0
+            )
+            weekly_avg_eps = WeeklyAvgEpsLog.objects.filter(
+         
+                created_at__gte=date_threshold
+            ).order_by("week").values("week", "week_start", "weekly_avg_eps")
 
             # Add to your response
             return Response(
@@ -4949,6 +4968,9 @@ class IncidentReportView(APIView):
                         "daily_event_counts": list(daily_event_counts),
                         "top_alert_events": list(top_alert_events),
                         "daily_closure_reasons": list(daily_closure_reasons),
+                        "monthly_avg_eps": monthly_avg_eps,
+                        "last_month_avg_eps": last_month_avg_eps,
+                        "weekly_avg_eps": list(weekly_avg_eps),
                     },
                 },
                 status=200,

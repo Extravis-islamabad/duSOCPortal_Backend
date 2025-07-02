@@ -12,7 +12,9 @@ from tenant.models import (
     CorrelatedEventLog,
     CustomerEPS,
     DailyClosureReasonLog,
+    DailyEventCountLog,
     DailyEventLog,
+    DestinationAddressLog,
     DosEventLog,
     DuIbmQradarTenants,
     EventCountLog,
@@ -26,8 +28,10 @@ from tenant.models import (
     ReconEventLog,
     SuspiciousEventLog,
     TopAlertEventLog,
+    TopDestinationConnectionLog,
     TopDosEventLog,
     TotalEvents,
+    TotalTrafficLog,
     WeeklyAvgEpsLog,
     WeeklyCorrelatedEventLog,
 )
@@ -1886,4 +1890,160 @@ class IBMQradar:
                 logger.success(f"Inserted WeeklyAvgEpsLog records: {len(records)}")
         except Exception as e:
             logger.error(f"Error inserting WeeklyAvgEpsLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+    def _transform_total_traffic_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        for entry in data_list:
+            total_traffic = entry.get("total_traffic")
+            if total_traffic is None:
+                logger.warning(f"Skipping invalid total traffic data: {entry}")
+                continue
+
+            return [
+                {
+                    "total_traffic": total_traffic,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            ]
+
+        return []
+
+    def _insert_total_traffic_data(self, data):
+        logger.info(f"Inserting {len(data)} TotalTrafficLog records")
+        records = [TotalTrafficLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                TotalTrafficLog.objects.bulk_create(records)
+                logger.success(f"Inserted TotalTrafficLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting TotalTrafficLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+    def _transform_destination_address_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        transformed = []
+        for entry in data_list:
+            destination_address = entry.get("destinationaddress")
+            address_count = entry.get("address_count")
+            if destination_address is None or address_count is None:
+                logger.warning(f"Skipping invalid destination address data: {entry}")
+                continue
+
+            transformed.append(
+                {
+                    "destination_address": destination_address,
+                    "address_count": address_count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            )
+
+        return transformed
+
+    def _insert_destination_address_data(self, data):
+        logger.info(f"Inserting {len(data)} DestinationAddressLog records")
+        records = [DestinationAddressLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                DestinationAddressLog.objects.bulk_create(records)
+                logger.success(f"Inserted DestinationAddressLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting DestinationAddressLog records: {str(e)}")
+            transaction.rollback()
+            
+    def _transform_top_destination_connection_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        transformed = []
+        for entry in data_list:
+            destination_address = entry.get("destinationaddress")
+            connection_count = entry.get("connection_count")
+            if destination_address is None or connection_count is None:
+                logger.warning(f"Skipping invalid top destination connection data: {entry}")
+                continue
+
+            transformed.append(
+                {
+                    "destination_address": destination_address,
+                    "connection_count": connection_count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            )
+
+        return transformed
+
+    def _insert_top_destination_connection_data(self, data):
+        logger.info(f"Inserting {len(data)} TopDestinationConnectionLog records")
+        records = [TopDestinationConnectionLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                TopDestinationConnectionLog.objects.bulk_create(records)
+                logger.success(f"Inserted TopDestinationConnectionLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting TopDestinationConnectionLog records: {str(e)}")
+            transaction.rollback()
+            
+            
+    def _transform_daily_event_count_data(self, data_list, integration_id, domain_id):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        transformed = []
+        for entry in data_list:
+            full_date = entry.get("full_date")
+            daily_count = entry.get("daily_count")
+            if full_date is None or daily_count is None:
+                logger.warning(f"Skipping invalid daily event count data: {entry}")
+                continue
+
+            transformed.append(
+                {
+                    "full_date": full_date,
+                    "daily_count": daily_count,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                }
+            )
+
+        return transformed
+
+    def _insert_daily_event_count_data(self, data):
+        logger.info(f"Inserting {len(data)} DailyEventCountLog records")
+        records = [DailyEventCountLog(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                DailyEventCountLog.objects.bulk_create(records)
+                logger.success(f"Inserted DailyEventCountLog records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting DailyEventCountLog records: {str(e)}")
             transaction.rollback()

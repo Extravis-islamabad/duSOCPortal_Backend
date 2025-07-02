@@ -15,7 +15,9 @@ from integration.models import (
 from tenant.models import (
     CorrelatedEventLog,
     DailyClosureReasonLog,
+    DailyEventCountLog,
     DailyEventLog,
+    DestinationAddressLog,
     DosEventLog,
     DuIbmQradarTenants,
     EventCountLog,
@@ -23,7 +25,9 @@ from tenant.models import (
     ReconEventLog,
     SuspiciousEventLog,
     TopAlertEventLog,
+    TopDestinationConnectionLog,
     TopDosEventLog,
+    TotalTrafficLog,
     WeeklyAvgEpsLog,
     WeeklyCorrelatedEventLog,
 )
@@ -1453,3 +1457,264 @@ def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integrat
 
             if transformed:
                 ibm_qradar._insert_weekly_avg_eps_data(transformed)
+                
+
+
+@shared_task
+def sync_total_traffic():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    TotalTrafficLog.objects.all().delete()
+
+    for result in results:
+        sync_total_traffic_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_total_traffic_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=7)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_total_traffic_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_TOTAL_TRAFFIC.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing TOTAL TRAFFIC AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No total traffic data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_total_traffic_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_total_traffic_data(transformed)
+                
+                
+
+
+@shared_task
+def sync_destination_address_counts():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    DestinationAddressLog.objects.all().delete()
+
+    for result in results:
+        sync_destination_address_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_destination_address_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=7)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_destination_address_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_DESTINATION_ADDRESS_COUNTS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing DESTINATION ADDRESS AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No destination address data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_destination_address_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_destination_address_data(transformed)
+                
+                
+
+@shared_task
+def sync_top_destination_connection_counts():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    TopDestinationConnectionLog.objects.all().delete()
+
+    for result in results:
+        sync_top_destination_connection_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_top_destination_connection_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=7)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_top_destination_connection_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_TOP_DESTINATION_CONNECTION_COUNTS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing TOP DESTINATION CONNECTION AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No top destination connection data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_top_destination_connection_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_top_destination_connection_data(transformed)
+                
+                
+
+@shared_task
+def sync_daily_event_counts():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    DailyEventCountLog.objects.all().delete()
+
+    for result in results:
+        sync_daily_event_counts_for_admin.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+@shared_task
+def sync_daily_event_counts_for_admin(username, password, ip_address, port, integration_id):
+    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+    now = datetime.now()
+    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    start_time = (now - timedelta(days=7)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_daily_event_counts_for_admin() task")
+
+        for domain_id in db_ids:
+            query = IBMQradarConstants.AQL_QUERY_FOR_DAILY_EVENT_COUNTS.format(
+                domain_id=domain_id,
+                start_time=start_str,
+                end_time=end_str,
+            )
+
+            logger.info(
+                f"Executing DAILY EVENT COUNTS AQL for domain {domain_id} ({start_str} → {end_str})"
+            )
+
+            search_id = ibm_qradar._get_do_aql_query(query=query)
+            data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+            if not data_ready:
+                logger.warning(f"No daily event count data returned for domain {domain_id}")
+                continue
+
+            results = ibm_qradar._get_eps_results_by_search_id(search_id)
+            transformed = ibm_qradar._transform_daily_event_count_data(
+                results, integration_id, domain_id
+            )
+
+            if transformed:
+                ibm_qradar._insert_daily_event_count_data(transformed)

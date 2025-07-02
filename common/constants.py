@@ -238,6 +238,48 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
+    AQL_QUERY_FOR_TOTAL_TRAFFIC = """
+    SELECT 
+        SUM(eventcount) AS total_traffic
+    FROM events
+    WHERE domainid = {domain_id}
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+    AQL_QUERY_FOR_DESTINATION_ADDRESS_COUNTS = """
+    SELECT 
+        destinationaddress,
+        COUNT(*) AS address_count
+    FROM events
+    WHERE domainid = {domain_id}
+    GROUP BY destinationaddress
+    ORDER BY address_count DESC
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+    AQL_QUERY_FOR_TOP_DESTINATION_CONNECTION_COUNTS = """
+    SELECT 
+        destinationaddress,
+        SUM(eventcount) AS connection_count
+    FROM events
+    WHERE domainid = {domain_id}
+    GROUP BY destinationaddress
+    ORDER BY connection_count DESC
+    LIMIT 5
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
+    AQL_QUERY_FOR_DAILY_EVENT_COUNTS = """
+    SELECT 
+        DATEFORMAT(starttime,'yyyy-MM-dd') AS full_date,
+        SUM(eventcount) AS daily_count
+    FROM events
+    WHERE domainid = {domain_id}
+    GROUP BY DATEFORMAT(starttime,'yyyy-MM-dd')
+    ORDER BY full_date
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
             
 
 
