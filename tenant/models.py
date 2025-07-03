@@ -931,9 +931,10 @@ class SuspiciousEventLog(models.Model):
         db_table = "suspicious_event_log"
 
     def __str__(self):
-        return f"{self.qradar_tenant} - Suspicious Events: {self.total_suspicious_events}"
-    
-    
+        return (
+            f"{self.qradar_tenant} - Suspicious Events: {self.total_suspicious_events}"
+        )
+
 
 class DosEventLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
@@ -946,9 +947,7 @@ class DosEventLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - DoS Events: {self.total_dos_events}"
-    
-    
-    
+
 
 class TopDosEventLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
@@ -962,8 +961,6 @@ class TopDosEventLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - {self.event_name}: {self.event_count}"
-    
-    
 
 
 class DailyEventLog(models.Model):
@@ -978,8 +975,6 @@ class DailyEventLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - {self.date}: {self.daily_count}"
-    
-    
 
 
 class TopAlertEventLog(models.Model):
@@ -994,8 +989,7 @@ class TopAlertEventLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - {self.alert_name}: {self.event_count}"
-    
-    
+
 
 class DailyClosureReasonLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
@@ -1010,7 +1004,7 @@ class DailyClosureReasonLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - {self.date} - {self.closure_reason}: {self.reason_count}"
-    
+
 
 class MonthlyAvgEpsLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
@@ -1023,9 +1017,6 @@ class MonthlyAvgEpsLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - Monthly Avg EPS: {self.monthly_avg_eps}"
-    
-    
-
 
 
 class LastMonthAvgEpsLog(models.Model):
@@ -1039,8 +1030,7 @@ class LastMonthAvgEpsLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - Last Month Avg EPS: {self.last_month_avg_eps}"
-    
-    
+
 
 class WeeklyAvgEpsLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
@@ -1055,8 +1045,6 @@ class WeeklyAvgEpsLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - Week {self.week} ({self.week_start}): {self.weekly_avg_eps}"
-    
-    
 
 
 class TotalTrafficLog(models.Model):
@@ -1070,8 +1058,8 @@ class TotalTrafficLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - Total Traffic: {self.total_traffic}"
-    
-    
+
+
 class DestinationAddressLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
@@ -1083,9 +1071,10 @@ class DestinationAddressLog(models.Model):
         db_table = "destination_address_log"
 
     def __str__(self):
-        return f"{self.qradar_tenant} - {self.destination_address}: {self.address_count}"
-    
-    
+        return (
+            f"{self.qradar_tenant} - {self.destination_address}: {self.address_count}"
+        )
+
 
 class TopDestinationConnectionLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
@@ -1099,8 +1088,7 @@ class TopDestinationConnectionLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - {self.destination_address}: {self.connection_count}"
-    
-    
+
 
 class DailyEventCountLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
