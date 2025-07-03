@@ -148,7 +148,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_TOP_DOS_EVENTS = """
-    SELECT 
+    SELECT
         qidname(qid) AS event_name,
         COUNT(*) AS event_count
     FROM events
@@ -160,9 +160,9 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
-    
+
     AQL_QUERY_FOR_DAILY_EVENTS = """
-    SELECT 
+    SELECT
         DATEFORMAT(starttime,'yyyy-MM-dd') AS date,
         COUNT(*) AS daily_count
     FROM events
@@ -174,7 +174,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_TOP_ALERT_EVENTS = """
-    SELECT 
+    SELECT
         rulename(creeventlist) AS alert_name,
         COUNT(*) AS event_count
     FROM events
@@ -211,7 +211,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_MONTHLY_AVG_EPS = """
-    SELECT 
+    SELECT
         SUM(eventcount) / (30 * 24 * 60 * 60) AS monthly_avg_eps
     FROM events
     WHERE domainid = {domain_id}
@@ -219,7 +219,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_LAST_MONTH_AVG_EPS = """
-    SELECT 
+    SELECT
         SUM(eventcount) / (31 * 24 * 60 * 60) AS last_month_avg_eps
     FROM events
     WHERE domainid = {domain_id}
@@ -227,7 +227,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_WEEKLY_AVG_EPS = """
-    SELECT 
+    SELECT
         DATEFORMAT(starttime,'yyyy-ww') AS week,
         DATEFORMAT(MIN(starttime),'dd-MMM') AS week_start,
         SUM(eventcount) / (7 * 24 * 60 * 60) AS weekly_avg_eps
@@ -239,7 +239,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_TOTAL_TRAFFIC = """
-    SELECT 
+    SELECT
         SUM(eventcount) AS total_traffic
     FROM events
     WHERE domainid = {domain_id}
@@ -247,7 +247,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_DESTINATION_ADDRESS_COUNTS = """
-    SELECT 
+    SELECT
         destinationaddress,
         COUNT(*) AS address_count
     FROM events
@@ -258,7 +258,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_TOP_DESTINATION_CONNECTION_COUNTS = """
-    SELECT 
+    SELECT
         destinationaddress,
         SUM(eventcount) AS connection_count
     FROM events
@@ -270,7 +270,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_DAILY_EVENT_COUNTS = """
-    SELECT 
+    SELECT
         DATEFORMAT(starttime,'yyyy-MM-dd') AS full_date,
         SUM(eventcount) AS daily_count
     FROM events
@@ -280,7 +280,6 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
-            
 
 
 class ITSMConstants:

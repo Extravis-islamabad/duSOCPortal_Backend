@@ -22,6 +22,7 @@ from tenant.models import (
     DuIbmQradarTenants,
     EventCountLog,
     LastMonthAvgEpsLog,
+    MonthlyAvgEpsLog,
     ReconEventLog,
     SuspiciousEventLog,
     TopAlertEventLog,
@@ -864,9 +865,6 @@ def sync_weekly_correlated_for_admin(
             f"Error in sync_weekly_correlated_for_admin: {str(e)}", exc_info=True
         )
         raise
-    
-    
-    
 
 
 @shared_task
@@ -887,6 +885,7 @@ def sync_suspicious_event_counts():
             port=result.port,
             integration_id=result.integration.id,
         )
+
 
 @shared_task
 def sync_suspicious_for_admin(username, password, ip_address, port, integration_id):
@@ -933,9 +932,6 @@ def sync_suspicious_for_admin(username, password, ip_address, port, integration_
                 ibm_qradar._insert_suspicious_event_data(transformed)
 
 
-
-
-
 @shared_task
 def sync_dos_event_counts():
     results = IntegrationCredentials.objects.filter(
@@ -954,6 +950,7 @@ def sync_dos_event_counts():
             port=result.port,
             integration_id=result.integration.id,
         )
+
 
 @shared_task
 def sync_dos_for_admin(username, password, ip_address, port, integration_id):
@@ -998,9 +995,6 @@ def sync_dos_for_admin(username, password, ip_address, port, integration_id):
 
             if transformed:
                 ibm_qradar._insert_dos_event_data(transformed)
-                
-                
-                
 
 
 @shared_task
@@ -1021,6 +1015,7 @@ def sync_top_dos_event_counts():
             port=result.port,
             integration_id=result.integration.id,
         )
+
 
 @shared_task
 def sync_top_dos_for_admin(username, password, ip_address, port, integration_id):
@@ -1065,9 +1060,7 @@ def sync_top_dos_for_admin(username, password, ip_address, port, integration_id)
 
             if transformed:
                 ibm_qradar._insert_top_dos_event_data(transformed)
-                
-                
-                
+
 
 @shared_task
 def sync_daily_event_counts():
@@ -1087,6 +1080,7 @@ def sync_daily_event_counts():
             port=result.port,
             integration_id=result.integration.id,
         )
+
 
 @shared_task
 def sync_daily_for_admin(username, password, ip_address, port, integration_id):
@@ -1131,8 +1125,6 @@ def sync_daily_for_admin(username, password, ip_address, port, integration_id):
 
             if transformed:
                 ibm_qradar._insert_daily_event_data(transformed)
-                
-                
 
 
 @shared_task
@@ -1153,6 +1145,7 @@ def sync_top_alert_event_counts():
             port=result.port,
             integration_id=result.integration.id,
         )
+
 
 @shared_task
 def sync_top_alert_for_admin(username, password, ip_address, port, integration_id):
@@ -1197,9 +1190,8 @@ def sync_top_alert_for_admin(username, password, ip_address, port, integration_i
 
             if transformed:
                 ibm_qradar._insert_top_alert_event_data(transformed)
-                
-                
-    
+
+
 @shared_task
 def sync_daily_closure_reason_counts():
     results = IntegrationCredentials.objects.filter(
@@ -1219,8 +1211,11 @@ def sync_daily_closure_reason_counts():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
-def sync_daily_closure_reason_for_admin(username, password, ip_address, port, integration_id):
+def sync_daily_closure_reason_for_admin(
+    username, password, ip_address, port, integration_id
+):
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     now = datetime.now()
@@ -1252,7 +1247,9 @@ def sync_daily_closure_reason_for_admin(username, password, ip_address, port, in
             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
 
             if not data_ready:
-                logger.warning(f"No daily closure reason data returned for domain {domain_id}")
+                logger.warning(
+                    f"No daily closure reason data returned for domain {domain_id}"
+                )
                 continue
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)
@@ -1262,9 +1259,7 @@ def sync_daily_closure_reason_for_admin(username, password, ip_address, port, in
 
             if transformed:
                 ibm_qradar._insert_daily_closure_reason_data(transformed)
-                
-                
-                
+
 
 @shared_task
 def sync_monthly_avg_eps():
@@ -1285,8 +1280,11 @@ def sync_monthly_avg_eps():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
-def sync_monthly_avg_eps_for_admin(username, password, ip_address, port, integration_id):
+def sync_monthly_avg_eps_for_admin(
+    username, password, ip_address, port, integration_id
+):
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     now = datetime.now()
@@ -1318,7 +1316,9 @@ def sync_monthly_avg_eps_for_admin(username, password, ip_address, port, integra
             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
 
             if not data_ready:
-                logger.warning(f"No monthly avg EPS data returned for domain {domain_id}")
+                logger.warning(
+                    f"No monthly avg EPS data returned for domain {domain_id}"
+                )
                 continue
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)
@@ -1328,10 +1328,8 @@ def sync_monthly_avg_eps_for_admin(username, password, ip_address, port, integra
 
             if transformed:
                 ibm_qradar._insert_monthly_avg_eps_data(transformed)
-                
-                
-                
-    
+
+
 @shared_task
 def sync_last_month_avg_eps():
     results = IntegrationCredentials.objects.filter(
@@ -1351,12 +1349,17 @@ def sync_last_month_avg_eps():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
-def sync_last_month_avg_eps_for_admin(username, password, ip_address, port, integration_id):
+def sync_last_month_avg_eps_for_admin(
+    username, password, ip_address, port, integration_id
+):
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     now = datetime.now()
-    end_time = now.replace(day=1, hour=23, minute=59, second=59, microsecond=0) - timedelta(days=1)
+    end_time = now.replace(
+        day=1, hour=23, minute=59, second=59, microsecond=0
+    ) - timedelta(days=1)
     start_time = end_time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
@@ -1382,7 +1385,9 @@ def sync_last_month_avg_eps_for_admin(username, password, ip_address, port, inte
             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
 
             if not data_ready:
-                logger.warning(f"No last month avg EPS data returned for domain {domain_id}")
+                logger.warning(
+                    f"No last month avg EPS data returned for domain {domain_id}"
+                )
                 continue
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)
@@ -1392,9 +1397,8 @@ def sync_last_month_avg_eps_for_admin(username, password, ip_address, port, inte
 
             if transformed:
                 ibm_qradar._insert_last_month_avg_eps_data(transformed)
-                
-                
-    
+
+
 @shared_task
 def sync_weekly_avg_eps():
     results = IntegrationCredentials.objects.filter(
@@ -1413,6 +1417,7 @@ def sync_weekly_avg_eps():
             port=result.port,
             integration_id=result.integration.id,
         )
+
 
 @shared_task
 def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integration_id):
@@ -1447,7 +1452,9 @@ def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integrat
             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
 
             if not data_ready:
-                logger.warning(f"No weekly avg EPS data returned for domain {domain_id}")
+                logger.warning(
+                    f"No weekly avg EPS data returned for domain {domain_id}"
+                )
                 continue
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)
@@ -1457,7 +1464,6 @@ def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integrat
 
             if transformed:
                 ibm_qradar._insert_weekly_avg_eps_data(transformed)
-                
 
 
 @shared_task
@@ -1478,6 +1484,7 @@ def sync_total_traffic():
             port=result.port,
             integration_id=result.integration.id,
         )
+
 
 @shared_task
 def sync_total_traffic_for_admin(username, password, ip_address, port, integration_id):
@@ -1522,8 +1529,6 @@ def sync_total_traffic_for_admin(username, password, ip_address, port, integrati
 
             if transformed:
                 ibm_qradar._insert_total_traffic_data(transformed)
-                
-                
 
 
 @shared_task
@@ -1545,8 +1550,11 @@ def sync_destination_address_counts():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
-def sync_destination_address_for_admin(username, password, ip_address, port, integration_id):
+def sync_destination_address_for_admin(
+    username, password, ip_address, port, integration_id
+):
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     now = datetime.now()
@@ -1578,7 +1586,9 @@ def sync_destination_address_for_admin(username, password, ip_address, port, int
             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
 
             if not data_ready:
-                logger.warning(f"No destination address data returned for domain {domain_id}")
+                logger.warning(
+                    f"No destination address data returned for domain {domain_id}"
+                )
                 continue
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)
@@ -1588,8 +1598,7 @@ def sync_destination_address_for_admin(username, password, ip_address, port, int
 
             if transformed:
                 ibm_qradar._insert_destination_address_data(transformed)
-                
-                
+
 
 @shared_task
 def sync_top_destination_connection_counts():
@@ -1610,8 +1619,11 @@ def sync_top_destination_connection_counts():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
-def sync_top_destination_connection_for_admin(username, password, ip_address, port, integration_id):
+def sync_top_destination_connection_for_admin(
+    username, password, ip_address, port, integration_id
+):
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     now = datetime.now()
@@ -1626,7 +1638,9 @@ def sync_top_destination_connection_for_admin(username, password, ip_address, po
     with IBMQradar(
         username=username, password=password, ip_address=ip_address, port=port
     ) as ibm_qradar:
-        logger.info("Running QRadarTasks.sync_top_destination_connection_for_admin() task")
+        logger.info(
+            "Running QRadarTasks.sync_top_destination_connection_for_admin() task"
+        )
 
         for domain_id in db_ids:
             query = IBMQradarConstants.AQL_QUERY_FOR_TOP_DESTINATION_CONNECTION_COUNTS.format(
@@ -1643,7 +1657,9 @@ def sync_top_destination_connection_for_admin(username, password, ip_address, po
             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
 
             if not data_ready:
-                logger.warning(f"No top destination connection data returned for domain {domain_id}")
+                logger.warning(
+                    f"No top destination connection data returned for domain {domain_id}"
+                )
                 continue
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)
@@ -1653,11 +1669,10 @@ def sync_top_destination_connection_for_admin(username, password, ip_address, po
 
             if transformed:
                 ibm_qradar._insert_top_destination_connection_data(transformed)
-                
-                
+
 
 @shared_task
-def sync_daily_event_counts():
+def sync_daily_event_counts_logs():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
@@ -1675,8 +1690,11 @@ def sync_daily_event_counts():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
-def sync_daily_event_counts_for_admin(username, password, ip_address, port, integration_id):
+def sync_daily_event_counts_for_admin(
+    username, password, ip_address, port, integration_id
+):
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     now = datetime.now()
@@ -1708,7 +1726,9 @@ def sync_daily_event_counts_for_admin(username, password, ip_address, port, inte
             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
 
             if not data_ready:
-                logger.warning(f"No daily event count data returned for domain {domain_id}")
+                logger.warning(
+                    f"No daily event count data returned for domain {domain_id}"
+                )
                 continue
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)

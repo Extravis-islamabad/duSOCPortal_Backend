@@ -39,7 +39,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.ibm_qradar_tasks import sync_daily_closure_reason_counts, sync_dos_event_counts, sync_suspicious_event_counts, sync_weekly_correlated_event_counts
+from tenant.ibm_qradar_tasks import sync_daily_closure_reason_counts
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -49,9 +49,9 @@ from tenant.models import (
     DailyEventCountLog,
     DailyEventLog,
     DefaultSoarSlaMetric,
-    DUCortexSOARIncidentFinalModel,
     DestinationAddressLog,
     DosEventLog,
+    DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
     DuITSMFinalTickets,
@@ -4897,78 +4897,92 @@ class IncidentReportView(APIView):
                 :10
             ].values("event_name", "event_count")
             recon_event_count = (
-                ReconEventLog.objects.filter(
-                    
-                    created_at__gte=date_threshold
-                ).aggregate(total=Sum("total_recon_events"))["total"] or 0
+                ReconEventLog.objects.filter(created_at__gte=date_threshold).aggregate(
+                    total=Sum("total_recon_events")
+                )["total"]
+                or 0
             )
             suspicious_event_count = (
                 SuspiciousEventLog.objects.filter(
-                  
                     created_at__gte=date_threshold
-                ).aggregate(total=Sum("total_suspicious_events"))["total"] or 0
+                ).aggregate(total=Sum("total_suspicious_events"))["total"]
+                or 0
             )
             dos_event_count = (
-                DosEventLog.objects.filter(
-                   
-                    created_at__gte=date_threshold
-                ).aggregate(total=Sum("total_dos_events"))["total"] or 0
+                DosEventLog.objects.filter(created_at__gte=date_threshold).aggregate(
+                    total=Sum("total_dos_events")
+                )["total"]
+                or 0
             )
-            top_dos_events = TopDosEventLog.objects.filter(
-                # qradar_tenant__company=tenant.company,
-                created_at__gte=date_threshold
-            ).order_by("-event_count")[:10].values("event_name", "event_count")
+            top_dos_events = (
+                TopDosEventLog.objects.filter(
+                    # qradar_tenant__company=tenant.company,
+                    created_at__gte=date_threshold
+                )
+                .order_by("-event_count")[:10]
+                .values("event_name", "event_count")
+            )
             correlated_event_count = (
                 CorrelatedEventLog.objects.filter(
-                 
                     created_at__gte=date_threshold
-                ).aggregate(total=Sum("correlated_events_count"))["total"] or 0
+                ).aggregate(total=Sum("correlated_events_count"))["total"]
+                or 0
             )
-            daily_event_counts = DailyEventLog.objects.filter(
-              
-                created_at__gte=date_threshold
-            ).order_by("date").values("date", "daily_count")
-            top_alert_events = TopAlertEventLog.objects.filter(
-               
-                created_at__gte=date_threshold
-            ).order_by("-event_count")[:10].values("alert_name", "event_count")
-            daily_closure_reasons = DailyClosureReasonLog.objects.filter(
-               
-                created_at__gte=date_threshold
-            ).order_by("date", "closure_reason").values("date", "closure_reason", "reason_count")
+            daily_event_counts = (
+                DailyEventLog.objects.filter(created_at__gte=date_threshold)
+                .order_by("date")
+                .values("date", "daily_count")
+            )
+            top_alert_events = (
+                TopAlertEventLog.objects.filter(created_at__gte=date_threshold)
+                .order_by("-event_count")[:10]
+                .values("alert_name", "event_count")
+            )
+            daily_closure_reasons = (
+                DailyClosureReasonLog.objects.filter(created_at__gte=date_threshold)
+                .order_by("date", "closure_reason")
+                .values("date", "closure_reason", "reason_count")
+            )
             monthly_avg_eps = (
                 MonthlyAvgEpsLog.objects.filter(
-                   
                     created_at__gte=date_threshold
-                ).aggregate(total=Sum("monthly_avg_eps"))["total"] or 0
+                ).aggregate(total=Sum("monthly_avg_eps"))["total"]
+                or 0
             )
             last_month_avg_eps = (
                 LastMonthAvgEpsLog.objects.filter(
-                 
                     created_at__gte=date_threshold
-                ).aggregate(total=Sum("last_month_avg_eps"))["total"] or 0
+                ).aggregate(total=Sum("last_month_avg_eps"))["total"]
+                or 0
             )
-            weekly_avg_eps = WeeklyAvgEpsLog.objects.filter(
-         
-                created_at__gte=date_threshold
-            ).order_by("week").values("week", "week_start", "weekly_avg_eps")
+            weekly_avg_eps = (
+                WeeklyAvgEpsLog.objects.filter(created_at__gte=date_threshold)
+                .order_by("week")
+                .values("week", "week_start", "weekly_avg_eps")
+            )
             total_traffic = (
                 TotalTrafficLog.objects.filter(
-                                       created_at__gte=date_threshold
-                ).aggregate(total=Sum("total_traffic"))["total"] or 0
+                    created_at__gte=date_threshold
+                ).aggregate(total=Sum("total_traffic"))["total"]
+                or 0
             )
-            destination_addresses = DestinationAddressLog.objects.filter(
-               
-                created_at__gte=date_threshold
-            ).order_by("-address_count")[:10].values("destination_address", "address_count")
-            top_destination_connections = TopDestinationConnectionLog.objects.filter(
-               
-                created_at__gte=date_threshold
-            ).order_by("-connection_count")[:5].values("destination_address", "connection_count")
-            daily_event_count = DailyEventCountLog.objects.filter(
-               
-                created_at__gte=date_threshold
-            ).order_by("full_date").values("full_date", "daily_count")
+            destination_addresses = (
+                DestinationAddressLog.objects.filter(created_at__gte=date_threshold)
+                .order_by("-address_count")[:10]
+                .values("destination_address", "address_count")
+            )
+            top_destination_connections = (
+                TopDestinationConnectionLog.objects.filter(
+                    created_at__gte=date_threshold
+                )
+                .order_by("-connection_count")[:5]
+                .values("destination_address", "connection_count")
+            )
+            daily_event_count = (
+                DailyEventCountLog.objects.filter(created_at__gte=date_threshold)
+                .order_by("full_date")
+                .values("full_date", "daily_count")
+            )
 
             # Add to your response
             return Response(
@@ -4994,7 +5008,9 @@ class IncidentReportView(APIView):
                         "weekly_avg_eps": list(weekly_avg_eps),
                         "total_traffic": total_traffic,
                         "destination_addresses": list(destination_addresses),
-                        "top_destination_connections": list(top_destination_connections),
+                        "top_destination_connections": list(
+                            top_destination_connections
+                        ),
                         "daily_event_count": list(daily_event_count),
                     },
                 },
