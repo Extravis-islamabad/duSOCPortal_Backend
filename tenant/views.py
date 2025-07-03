@@ -46,9 +46,11 @@ from tenant.models import (
     CywareAlertDetails,
     CywareTenantAlertDetails,
     DailyClosureReasonLog,
+    DailyEventCountLog,
     DailyEventLog,
     DefaultSoarSlaMetric,
     DUCortexSOARIncidentFinalModel,
+    DestinationAddressLog,
     DosEventLog,
     DuCortexSOARTenants,
     DuIbmQradarTenants,
@@ -72,8 +74,10 @@ from tenant.models import (
     ThreatIntelligenceTenant,
     ThreatIntelligenceTenantAlerts,
     TopAlertEventLog,
+    TopDestinationConnectionLog,
     TopDosEventLog,
     TotalEvents,
+    TotalTrafficLog,
     WeeklyAvgEpsLog,
 )
 from tenant.serializers import (
@@ -4948,6 +4952,23 @@ class IncidentReportView(APIView):
          
                 created_at__gte=date_threshold
             ).order_by("week").values("week", "week_start", "weekly_avg_eps")
+            total_traffic = (
+                TotalTrafficLog.objects.filter(
+                                       created_at__gte=date_threshold
+                ).aggregate(total=Sum("total_traffic"))["total"] or 0
+            )
+            destination_addresses = DestinationAddressLog.objects.filter(
+               
+                created_at__gte=date_threshold
+            ).order_by("-address_count")[:10].values("destination_address", "address_count")
+            top_destination_connections = TopDestinationConnectionLog.objects.filter(
+               
+                created_at__gte=date_threshold
+            ).order_by("-connection_count")[:5].values("destination_address", "connection_count")
+            daily_event_count = DailyEventCountLog.objects.filter(
+               
+                created_at__gte=date_threshold
+            ).order_by("full_date").values("full_date", "daily_count")
 
             # Add to your response
             return Response(
@@ -4971,6 +4992,10 @@ class IncidentReportView(APIView):
                         "monthly_avg_eps": monthly_avg_eps,
                         "last_month_avg_eps": last_month_avg_eps,
                         "weekly_avg_eps": list(weekly_avg_eps),
+                        "total_traffic": total_traffic,
+                        "destination_addresses": list(destination_addresses),
+                        "top_destination_connections": list(top_destination_connections),
+                        "daily_event_count": list(daily_event_count),
                     },
                 },
                 status=200,
