@@ -25,6 +25,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
     profile_picture = serializers.SerializerMethodField()
     company_name = serializers.SerializerMethodField()
+    created_by_id = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -41,6 +42,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
             "updated_at",
             "company_name",
             "permissions",
+            "created_by_id",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
@@ -85,6 +87,16 @@ class UserDetailSerializer(serializers.ModelSerializer):
         if obj.is_tenant:
             tenant = Tenant.objects.filter(tenant=obj).first()
             return tenant.company.company_name if tenant else None
+        return None
+
+    def get_created_by_id(self, obj):
+        """
+        Returns the ID of the admin who created the tenant, or None for admins.
+        """
+        if obj.is_tenant:
+            tenant = Tenant.objects.filter(tenant=obj).first()
+            if tenant and tenant.created_by:
+                return tenant.created_by.id
         return None
 
 
