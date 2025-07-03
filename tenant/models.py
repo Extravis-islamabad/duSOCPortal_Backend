@@ -1102,3 +1102,18 @@ class DailyEventCountLog(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - {self.full_date}: {self.daily_count}"
+
+
+class ChatMessage(models.Model):
+    sender = models.ForeignKey(User, on_delete=models.CASCADE)
+    admin = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="admin_chats"
+    )
+    tenant = models.ForeignKey(
+        Tenant, on_delete=models.CASCADE, related_name="tenant_chats"
+    )
+    message = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "chat_service"
