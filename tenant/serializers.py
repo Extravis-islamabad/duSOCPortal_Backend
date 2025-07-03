@@ -1318,3 +1318,73 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
 
     def get_active_integrations(self, obj):
         return obj.integrations.count()
+
+
+class NonActiveCompanySerializer(serializers.ModelSerializer):
+    users_count = serializers.IntegerField(source="inactive_tenant_count")
+    profile_picture = serializers.SerializerMethodField()
+    name = serializers.CharField(source="company_name")
+    total_incidents = serializers.SerializerMethodField()
+    active_incidents = serializers.SerializerMethodField()
+    tickets_count = serializers.SerializerMethodField()
+    asset_count = serializers.SerializerMethodField()
+    active_integrations = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Company
+        fields = [
+            "id",
+            "name",
+            "phone_number",
+            "industry",
+            "country",
+            "users_count",
+            "profile_picture",
+            "total_incidents",
+            "active_incidents",
+            "tickets_count",
+            "asset_count",
+            "active_integrations",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_profile_picture(self, obj):
+        request = self.context.get("request")
+        if obj.profile_picture:
+            return request.build_absolute_uri(obj.profile_picture.url)
+        return None
+
+    def get_total_incidents(self, obj):
+        return DUCortexSOARIncidentFinalModel.objects.filter(
+            cortex_soar_tenant__in=obj.soar_tenants.all()
+        ).count()
+
+    def get_active_incidents(self, obj):
+        return (
+            DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_soar_tenant__in=obj.soar_tenants.all()
+            )
+            .exclude(incident_phase__in=["Closed", "Resolved"])
+            .count()
+        )
+
+    def get_tickets_count(self, obj):
+        return DuITSMFinalTickets.objects.filter(
+            itsm_tenant__in=obj.itsm_tenants.all()
+        ).count()
+
+    def get_asset_count(self, obj):
+        try:
+            collector_ids = TenantQradarMapping.objects.filter(company=obj).values_list(
+                "event_collectors__id", flat=True
+            )
+            asset_count = IBMQradarAssests.objects.filter(
+                event_collector__id__in=collector_ids
+            ).aggregate(totalAssets=Count("id"))
+            return asset_count["totalAssets"] or 0
+        except Exception:
+            return 0
+
+    def get_active_integrations(self, obj):
+        return obj.integrations.count()

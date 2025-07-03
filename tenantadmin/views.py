@@ -25,6 +25,7 @@ from tenant.serializers import (  # TenantUpdateSerializer,
     CompanyTenantUpdateSerializer,
     CustomerEPSSerializer,
     DistinctCompanySerializer,
+    NonActiveCompanySerializer,
     TenantCreateSerializer,
     TenantDetailSerializer,
 )
@@ -336,45 +337,39 @@ class NonActiveTenantsAPIView(APIView):
             f"Non-active tenant companies requested by: {request.user.username}"
         )
 
-        companies = Company.objects.filter(created_by=request.user)
-        result = []
-
-        for company in companies:
-            inactive_tenants = Tenant.objects.filter(
-                company=company, tenant__is_active=False
+        # Step 1: Annotate companies with count of inactive tenants
+        companies = (
+            Company.objects.filter(created_by=request.user)
+            .annotate(
+                inactive_tenant_count=Count(
+                    "tenants",
+                    filter=Q(tenants__tenant__is_active=False),
+                    distinct=True,
+                )
             )
+            .filter(inactive_tenant_count__gt=0)
+            .order_by("id")
+        )
 
-            tenant_count = inactive_tenants.count()
-            if tenant_count == 0:
-                continue
-
-            result.append(
-                {
-                    "id": company.id,
-                    "name": company.company_name,
-                    "phone_number": company.phone_number,
-                    "industry": company.industry,
-                    "country": company.country,
-                    "tenant_count": tenant_count,
-                    "profile_picture": request.build_absolute_uri(
-                        company.profile_picture.url
-                    )
-                    if company.profile_picture
-                    else None,
-                    "created_at": company.created_at,
-                    "updated_at": company.updated_at,
-                }
-            )
-
-        if not result:
+        if not companies.exists():
             return Response(
                 {"message": "No companies found with inactive tenants."},
                 status=200,
             )
 
-        logger.success(f"Found {len(result)} companies with inactive tenants.")
+        # Step 2: Paginate the result
+        paginator = PageNumberPagination()
+        paginator.page_size = PaginationConstants.PAGE_SIZE  # or hardcode if needed
+        paginated_companies = paginator.paginate_queryset(companies, request)
 
-        return Response({"companies": result}, status=200)
+        # Step 3: Serialize the result
+        serializer = NonActiveCompanySerializer(
+            paginated_companies, many=True, context={"request": request}
+        )
+
+        logger.success(f"Found {companies.count()} companies with inactive tenants.")
+
+        return paginator.get_paginated_response(serializer.data)
 
 
 class SyncIBMQradarDataAPIView(APIView):
