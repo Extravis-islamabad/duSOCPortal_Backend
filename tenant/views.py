@@ -1749,9 +1749,14 @@ class IncidentDetailView(APIView):
             # )
 
             # Format source IPs and log source types
+            offense_db_id = None
+            offense_id = None
             offense_db_id = incident["name"].split()[0]
             offenses = IBMQradarOffense.objects.filter(db_id=offense_db_id).first()
-            offense_id = offenses.id
+            if offenses is None:
+                offense_db_id = None
+            else:
+                offense_id = offenses.id
             source_ips_str = ", ".join(source_ips) if source_ips else "Unknown"
             log_source_type_str = (
                 ", ".join(log_source_types) if log_source_types else "Unknown"
