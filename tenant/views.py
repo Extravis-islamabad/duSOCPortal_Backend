@@ -2777,9 +2777,18 @@ class EPSGraphAPIView(APIView):
     permission_classes = [IsTenant]
 
     def get(self, request):
-        filter_type = request.query_params.get(
-            "filter", "day"
-        )  # 'day', 'week', or 'month'
+        try:
+            filter_value = int(
+                request.query_params.get("filter_type", FilterType.TODAY.value)
+            )
+            filter_enum = FilterType(filter_value)
+        except (ValueError, KeyError):
+            return Response(
+                {
+                    "error": "Invalid filter value. Use 1 (TODAY), 2 (WEEK), or 3 (MONTH)."
+                },
+                status=400,
+            )
 
         try:
             tenant = Tenant.objects.get(tenant=request.user)
@@ -2787,13 +2796,13 @@ class EPSGraphAPIView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         now = timezone.now()
-        if filter_type == "day":
+        if filter_enum == FilterType.TODAY:
             start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
             time_trunc = TruncHour("created_at")
-        elif filter_type == "week":
+        elif filter_enum == FilterType.WEEK:
             start_time = now - timedelta(days=6)
             time_trunc = TruncDay("created_at")
-        elif filter_type == "month":
+        elif filter_enum == FilterType.MONTH:
             start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             time_trunc = TruncDate("created_at")
         else:
