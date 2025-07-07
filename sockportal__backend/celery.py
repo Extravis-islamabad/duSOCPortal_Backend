@@ -20,10 +20,10 @@ app.conf.task_routes = {
 }
 
 app.conf.beat_schedule = {
-    # "qradar-sync-tasks": {
-    #     "task": "tenant.ibm_qradar_tasks.sync_ibm_qradar_data",
-    #     "schedule": crontab(minute="*/5"),
-    # },
+    "qradar-sync-tasks": {
+        "task": "tenant.ibm_qradar_tasks.sync_ibm_qradar_data",
+        "schedule": crontab(minute="*/5"),
+    },
     "qradar-admin-sync-tasks": {
         "task": "tenant.ibm_qradar_tasks.sync_ibm_admin_eps",
         "schedule": crontab(
