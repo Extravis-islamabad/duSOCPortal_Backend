@@ -2,6 +2,7 @@ import json
 import time
 from collections import Counter
 from datetime import datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db.models import (
     Avg,
@@ -2816,7 +2817,7 @@ class EPSGraphAPIView(APIView):
         )
 
         # EPS data
-        eps_data = (
+        eps_data_raw = (
             IBMQradarEPS.objects.filter(
                 domain_id__in=qradar_tenant_ids, created_at__gte=start_time
             )
@@ -2826,6 +2827,17 @@ class EPSGraphAPIView(APIView):
             .order_by("interval")
         )
 
+        eps_data = [
+            {
+                "interval": entry["interval"],
+                "total_eps": float(
+                    Decimal(entry["total_eps"]).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                ),
+            }
+            for entry in eps_data_raw
+        ]
         # Get contracted volume info (we assume only one mapping per company)
         mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
         contracted_volume = mapping.contracted_volume if mapping else None
@@ -4378,7 +4390,7 @@ class IncidentReportView(APIView):
                 (SlaLevelChoices.P2, "High"),
                 (SlaLevelChoices.P3, "Medium"),
                 (SlaLevelChoices.P4, "Low"),
-                (0, "Unknown"),
+                # (0, "Unknown"),
             ]
 
             # Add priority cards
