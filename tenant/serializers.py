@@ -962,6 +962,7 @@ class CustomerEPSSerializer(serializers.ModelSerializer):
     qradar_tenant_db_id = serializers.IntegerField(
         source="qradar_tenant.db_id", read_only=True
     )
+    eps = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomerEPS
@@ -971,6 +972,9 @@ class CustomerEPSSerializer(serializers.ModelSerializer):
             "qradar_tenant_db_id",
             "qradar_tenant_name",
         ]
+
+    def get_eps(self, obj):
+        return round(obj.eps, 2) if obj.eps is not None else None
 
 
 class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
