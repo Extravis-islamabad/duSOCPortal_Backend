@@ -30,10 +30,10 @@ app.conf.beat_schedule = {
     #         minute="0"
     #     ),  # Run at the whenever the minute will 0 of any hour means running it every hour
     # },
-    # "itsm-sync-tasks": {
-    #     "task": "tenant.itsm_tasks.sync_itsm",
-    #     "schedule": crontab(minute="*/5"),
-    # },
+    "itsm-sync-tasks": {
+        "task": "tenant.itsm_tasks.sync_itsm",
+        "schedule": crontab(minute="*/5"),
+    },
     "cortex-sync-tasks": {
         "task": "tenant.cortex_soar_tasks.sync_soar_data",
         "schedule": crontab(minute="*/5"),
