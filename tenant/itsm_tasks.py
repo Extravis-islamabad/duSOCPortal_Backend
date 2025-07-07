@@ -1,3 +1,4 @@
+import re
 import time
 
 from celery import shared_task
@@ -34,7 +35,12 @@ def sync_itsm_tenants(auth_token: str, ip_address: str, port: int, integration_i
             if accounts is None:
                 logger.error("No data returned from ITSM accounts endpoint")
                 return
-
+            cdc_entries = [
+                item
+                for item in accounts
+                if "name" in item and re.search(r"cdc", item["name"], re.IGNORECASE)
+            ]
+            accounts = cdc_entries
             transformed_data = itsm._transform_accounts(
                 accounts=accounts, integration_id=integration_id
             )
@@ -65,6 +71,12 @@ def sync_itsm_tenants_cron():
             ip_address=result.ip_address, port=result.port, token=result.api_key
         ) as itsm:
             data = itsm._get_accounts()
+            cdc_entries = [
+                item
+                for item in data
+                if "name" in item and re.search(r"cdc", item["name"], re.IGNORECASE)
+            ]
+            data = cdc_entries
             if not data:
                 logger.warning(
                     f"No data returned from ITSM accounts endpoint for integration {result.integration.id}"
