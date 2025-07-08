@@ -256,6 +256,61 @@ class ITSM:
         logger.info(f"ITSM._get_requests() took: {time.time() - start} seconds")
         return all_requests
 
+    def _get_soar_ids(self, account_id: int):
+        start = time.time()
+        logger.info(f"ITSM._get_requests() started : {start}")
+        logger.info(f"Fetching requests for account id: {account_id}")
+
+        endpoint = f"{self.base_url}/{ITSMConstants.ITSM_REQUESTS_ENDPOINT}?ACCOUNTID={account_id}"
+        row_count = 1000
+        start_index = 1
+        all_requests = []
+        has_more_rows = True
+
+        while has_more_rows:
+            input_data = {
+                "list_info": {
+                    "row_count": str(row_count),
+                    "start_index": str(start_index),
+                    "sort_order": "asc",
+                    "fields_required": ["udf_fields.udf_sline_4506"],
+                }
+            }
+
+            params = {"input_data": json.dumps(input_data)}
+
+            try:
+                response = requests.get(
+                    endpoint,
+                    headers=self.headers,
+                    params=params,
+                    verify=SSLConstants.VERIFY,  # self-signed cert assumed
+                    timeout=SSLConstants.TIMEOUT,
+                )
+            except Exception as e:
+                logger.error(f"ITSM._get_requests() failed with exception: {str(e)}")
+                return
+
+            if response.status_code != 200:
+                logger.warning(
+                    f"ITSM._get_requests() return the status code {response.status_code}"
+                )
+                break
+
+            data = response.json()
+
+            # Append current batch of requests
+            requests_batch = data.get("requests", [])
+            all_requests.extend(requests_batch)
+
+            # Pagination control
+            list_info = data.get("list_info", {})
+            has_more_rows = list_info.get("has_more_rows", False)
+            start_index = list_info.get("start_index", start_index) + row_count
+
+        logger.info(f"ITSM._get_requests() took: {time.time() - start} seconds")
+        return all_requests
+
     def transform_tickets(self, data: list, integration_id: int, tenant_id: int):
         """
         Transforms raw ticket data into DuITSMFinalTickets instances.
@@ -339,3 +394,60 @@ class ITSM:
 
         except Exception as e:
             logger.error(f"Failed to insert tickets: {str(e)}")
+
+    def update_soar_ids(self, account_id: int):
+        """
+        Maps SOAR IDs to DuITSMFinalTickets based on db_id and updates the database.
+        """
+        start = time.time()
+        logger.info(
+            f"ITSM.update_soar_ids() started : {start} for account id: {account_id}"
+        )
+        # Fetch the raw data
+        soar_mappings = self._get_soar_ids(account_id)
+
+        if not soar_mappings:
+            logger.warning("No SOAR mappings found.")
+            return
+
+        logger.info(f"Fetched {len(soar_mappings)} SOAR mappings")
+
+        # Build mapping: db_id -> soar_id
+        mapping_dict = {
+            int(item["id"]): int(item["udf_fields"]["udf_sline_4506"])
+            for item in soar_mappings
+            if (
+                "udf_fields" in item
+                and "udf_sline_4506" in item["udf_fields"]
+                and item["udf_fields"]["udf_sline_4506"] is not None
+            )
+        }
+
+        if not mapping_dict:
+            logger.warning("No valid mappings found with 'udf_sline_4506'.")
+            return
+
+        logger.info(f"Prepared {len(mapping_dict)} mappings for update")
+
+        # Fetch relevant ticket entries from DB
+        tickets_to_update = DuITSMFinalTickets.objects.filter(
+            db_id__in=mapping_dict.keys()
+        )
+
+        updated_count = 0
+        for ticket in tickets_to_update:
+            new_soar_id = mapping_dict.get(ticket.db_id)
+            if new_soar_id and ticket.soar_id != new_soar_id:
+                ticket.soar_id = new_soar_id
+                updated_count += 1
+
+        # Bulk update
+        if updated_count:
+            DuITSMFinalTickets.objects.bulk_update(
+                tickets_to_update, ["soar_id", "updated_at"]
+            )
+            logger.info(
+                f"Updated {updated_count} tickets for account {account_id} with SOAR IDs in {time.time() - start:.2f}s"
+            )
+        else:
+            logger.info("No tickets needed updating.")
