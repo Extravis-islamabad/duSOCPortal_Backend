@@ -326,7 +326,9 @@ class ITSM:
         """
 
         start = time.time()
-        logger.info(f"ITSM.get_soar_id() started : {start}")
+        logger.info(
+            f"ITSM.get_soar_id() started : {start} for the request id: {request_id}"
+        )
 
         endpoint = (
             f"{self.base_url}/{ITSMConstants.ITSM_REQUESTS_ENDPOINT}/{request_id}"
