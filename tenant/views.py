@@ -40,7 +40,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.ibm_qradar_tasks import sync_daily_closure_reason_counts
+from tenant.itsm_tasks import sync_itsm
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -231,7 +231,8 @@ class TestView(APIView):
 
     def get(self, request):
         # sync_ibm.delay()
-        sync_daily_closure_reason_counts.delay()
+        sync_itsm.delay()
+        # sync_daily_closure_reason_counts.delay()
         # sync_dos_event_counts.delay()
         # sync_suspicious_event_counts.delay()
         # sync_weekly_correlated_event_counts.delay()
