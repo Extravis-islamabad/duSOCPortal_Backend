@@ -1018,9 +1018,33 @@ class IBMQradarAssestsSerializer(serializers.ModelSerializer):
 
 
 class DuITSMTicketsSerializer(serializers.ModelSerializer):
+    itsm_tenant = serializers.SerializerMethodField()
+    integration = serializers.SerializerMethodField()
+
     class Meta:
         model = DuITSMFinalTickets
-        fields = "__all__"
+        fields = [
+            "id",
+            "db_id",
+            "short_description",
+            "subject",
+            "is_overdue",
+            "creation_date",
+            "created_by_name",
+            "account_name",
+            "soar_id",
+            "status",
+            "created_at",
+            "updated_at",
+            "itsm_tenant",
+            "integration",
+        ]
+
+    def get_itsm_tenant(self, obj):
+        return obj.itsm_tenant.name if obj.itsm_tenant else None
+
+    def get_integration(self, obj):
+        return obj.integration.instance_name if obj.integration else None
 
 
 class DUCortexSOARIncidentSerializer(serializers.ModelSerializer):
