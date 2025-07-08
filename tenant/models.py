@@ -115,9 +115,11 @@ class IBMQradarAssests(models.Model):
         # Helper to convert timestamp string to date
         def parse_timestamp(ts_str):
             try:
+                if not ts_str or str(ts_str).strip() in ("0", "", "null"):
+                    return None
                 ts = int(ts_str)
                 return datetime.utcfromtimestamp(ts / 1000).date()
-            except Exception:
+            except (ValueError, TypeError):
                 return None
 
         self.creation_date_converted = parse_timestamp(self.creation_date)
