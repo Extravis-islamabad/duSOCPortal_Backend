@@ -351,8 +351,15 @@ class ITSM:
             return
 
         data = response.json()
-        soar_id = data["request"]["udf_fields"]["udf_sline_4506"]
-        logger.info(f"ITSM.get_soar_id() took: {time.time() - start} seconds")
+        udf_fields = data.get("request", {}).get("udf_fields", {})
+
+        soar_id = udf_fields.get("udf_sline_4506")
+        if soar_id is None:
+            logger.warning(f"No 'udf_sline_4506' found for request ID: {request_id}")
+        else:
+            logger.info(f"Retrieved soar_id: {soar_id}")
+
+        logger.info(f"ITSM.get_soar_id() took: {time.time() - start:.2f} seconds")
         return soar_id
 
     def transform_tickets(self, data: list, integration_id: int, tenant_id: int):
