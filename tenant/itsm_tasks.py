@@ -113,6 +113,7 @@ def sync_itsm_tenants_tickets():
                     data=data, integration_id=result.integration.id, tenant_id=tenant.id
                 )
                 itsm.insert_tickets(tickets=transformed_data)
+                itsm.update_soar_ids(account_id=tenant.db_id)
 
 
 @shared_task
