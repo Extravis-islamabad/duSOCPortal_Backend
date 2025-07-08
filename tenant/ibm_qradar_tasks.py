@@ -375,13 +375,13 @@ def sync_ibm_qradar_data():
         )
         sync_event_log_sources_types.delay()
         sync_offenses.delay()
-        # sync_eps_for_domain.delay(
-        #     username=result.username,
-        #     password=result.password,
-        #     ip_address=result.ip_address,
-        #     port=result.port,
-        #     integration_id=result.integration.id,
-        # )
+        sync_eps_for_domain.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
 
 
 @shared_task
@@ -425,38 +425,60 @@ def sync_ibm_admin_eps():
         )
 
 
-@shared_task
-def sync_ibm_tenant_eps():
-    results = IntegrationCredentials.objects.filter(
-        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
-        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
-        credential_type=CredentialTypes.USERNAME_PASSWORD,
-    )
-    for result in results:
-        sync_eps_for_domain.delay(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
+# @shared_task
+# def sync_event_count_for_admin(username, password, ip_address, port, integration_id):
+#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
+#     now = datetime.now()
+#     end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
 
+#     # Set start_time to 7 days ago at 00:00:00
+#     start_time = (now - timedelta(days=7)).replace(
+#         hour=0, minute=0, second=0, microsecond=0
+#     )
+
+#     # Format for QRadar AQL: 'YYYY-MM-DD HH:MM:SS'
+#     start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
+#     end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+
+#     with IBMQradar(
+#         username=username, password=password, ip_address=ip_address, port=port
+#     ) as ibm_qradar:
+#         logger.info("Running QRadarTasks.sync_event_count_for_admin() task")
+
+#         for domain_id in db_ids:
+#             query = IBMQradarConstants.AQL_QUERY_FOR_SUSPICIOUS_EVENTS.format(
+#                 domain_id=domain_id, start_time=start_str, end_time=end_str
+#             )
+#             logger.info(
+#                 f"Executing AQL for domain {domain_id} (From {start_str} To {end_str})"
+#             )
+
+#             search_id = ibm_qradar._get_do_aql_query(query=query)
+#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+#             if not data_ready:
+#                 logger.warning(f"No data returned for domain {domain_id}")
+#                 continue
+
+#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
+#             transformed = ibm_qradar._transform_event_count_data(
+#                 results, integration_id, domain_id
+#             )
+#             if transformed:
+#                 ibm_qradar._insert_event_count_data(transformed)
 @shared_task
 def sync_event_count_for_admin(username, password, ip_address, port, integration_id):
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
-    now = datetime.now()
-    end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
-
-    # Set start_time to 7 days ago at 00:00:00
-    start_time = (now - timedelta(days=7)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-
-    # Format for QRadar AQL: 'YYYY-MM-DD HH:MM:SS'
-    start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-    end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+    # Get today's date with min and max time
+    today = datetime.today().date()
+    min_dt = datetime.combine(today, time.min)  # 00:00:00
+    max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
+    
+    # Format as "YYYY-MM-DD HH:MM:SS" for QRadar AQL
+    start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
+    end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
 
     with IBMQradar(
         username=username, password=password, ip_address=ip_address, port=port
@@ -484,7 +506,6 @@ def sync_event_count_for_admin(username, password, ip_address, port, integration
             )
             if transformed:
                 ibm_qradar._insert_event_count_data(transformed)
-
 
 @shared_task
 def sync_recon_for_admin(username, password, ip_address, port, integration_id):

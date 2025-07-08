@@ -40,6 +40,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
+from tenant.ibm_qradar_tasks import sync_event_count_for_admin
 from tenant.itsm_tasks import sync_itsm_tickets_soar_ids
 from tenant.models import (
     Alert,
@@ -231,7 +232,8 @@ class TestView(APIView):
 
     def get(self, request):
         # sync_ibm.delay()
-        sync_itsm_tickets_soar_ids.delay()
+        sync_event_count_for_admin.delay()
+        # sync_itsm_tickets_soar_ids.delay()
         # sync_daily_closure_reason_counts.delay()
         # sync_dos_event_counts.delay()
         # sync_suspicious_event_counts.delay()
