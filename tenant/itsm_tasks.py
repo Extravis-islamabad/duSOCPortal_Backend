@@ -113,7 +113,22 @@ def sync_itsm_tenants_tickets():
                     data=data, integration_id=result.integration.id, tenant_id=tenant.id
                 )
                 itsm.insert_tickets(tickets=transformed_data)
-                itsm.update_soar_ids(account_id=tenant.db_id)
+                # itsm.update_soar_ids(account_id=tenant.db_id)
+
+
+@shared_task
+def sync_itsm_tickets_soar_ids():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.ITSM_INTEGRATION,
+        integration__itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
+        credential_type=CredentialTypes.API_KEY,
+    )
+
+    for result in results:
+        with ITSM(
+            ip_address=result.ip_address, port=result.port, token=result.api_key
+        ) as itsm:
+            itsm.update_soar_ids_for_tickets()
 
 
 @shared_task
@@ -123,3 +138,5 @@ def sync_itsm():
     sync_itsm_tenants_cron.delay()
     logger.info("Running sync_itsm_tenants_tickets() task")
     sync_itsm_tenants_tickets.delay()
+    logger.info("Running sync_itsm_tickets_soar_ids() task")
+    sync_itsm_tickets_soar_ids.delay()

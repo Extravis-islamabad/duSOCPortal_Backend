@@ -311,6 +311,48 @@ class ITSM:
         logger.info(f"ITSM._get_requests() took: {time.time() - start} seconds")
         return all_requests
 
+    def get_soar_id(self, request_id: int):
+        """
+        Retrieves the SOAR ID for a specific request from the ITSM system.
+
+        This method sends an HTTP GET request to the ITSM API to fetch the SOAR ID
+        associated with the given request ID. It logs the start and completion time
+        of the request. If the request is successful, it returns the SOAR ID. If
+        the request fails or an exception occurs, it logs an error and returns None.
+
+        :param request_id: The unique identifier for the request.
+        :return: The SOAR ID if the request is successful, otherwise None.
+        :raises: Logs any exceptions that occur during the request.
+        """
+
+        start = time.time()
+        logger.info(f"ITSM.get_soar_id() started : {start}")
+
+        endpoint = (
+            f"{self.base_url}/{ITSMConstants.ITSM_REQUESTS_ENDPOINT}/{request_id}"
+        )
+        try:
+            response = requests.get(
+                endpoint,
+                headers=self.headers,
+                verify=SSLConstants.VERIFY,  # self-signed cert assumed
+                timeout=SSLConstants.TIMEOUT,
+            )
+        except Exception as e:
+            logger.error(f"ITSM.get_soar_id() failed with exception: {str(e)}")
+            return
+
+        if response.status_code != 200:
+            logger.warning(
+                f"ITSM.get_soar_id() return the status code {response.status_code}"
+            )
+            return
+
+        data = response.json()
+        soar_id = data["request"]["udf_fields"]["udf_sline_4506"]
+        logger.info(f"ITSM.get_soar_id() took: {time.time() - start} seconds")
+        return soar_id
+
     def transform_tickets(self, data: list, integration_id: int, tenant_id: int):
         """
         Transforms raw ticket data into DuITSMFinalTickets instances.
@@ -451,3 +493,42 @@ class ITSM:
             )
         else:
             logger.info("No tickets needed updating.")
+
+    def update_soar_ids_for_tickets(self):
+        """
+        Updates SOAR IDs for all DuITSMFinalTickets where soar_id is NULL.
+        """
+        start = time.time()
+        logger.info(f"ITSM.update_soar_ids() started at: {start}")
+
+        # Step 1: Get all db_ids where soar_id is null
+        ticket_ids = DuITSMFinalTickets.objects.filter(
+            soar_id__isnull=True
+        ).values_list("db_id", flat=True)
+        logger.info(f"Found {len(ticket_ids)} tickets with null SOAR ID")
+
+        if not ticket_ids:
+            logger.info("No tickets to update.")
+            return
+
+        update_count = 0
+
+        # Step 2: Loop through and update soar_id
+        for request_id in ticket_ids:
+            soar_id = self.get_soar_id(request_id)
+            if soar_id is None:
+                logger.warning(f"Skipping db_id={request_id}, no SOAR ID fetched")
+                continue
+
+            try:
+                # Direct DB update, avoid fetching object
+                DuITSMFinalTickets.objects.filter(db_id=request_id).update(
+                    soar_id=soar_id
+                )
+                update_count += 1
+                logger.info(f"Updated SOAR ID for db_id={request_id}")
+            except Exception as e:
+                logger.error(f"Error updating db_id={request_id}: {str(e)}")
+
+        logger.info(f"Successfully updated {update_count} SOAR IDs")
+        logger.info(f"ITSM.update_soar_ids() took: {time.time() - start} seconds")
