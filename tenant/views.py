@@ -215,7 +215,7 @@ class DuITSMTenantsListView(APIView):
         serializer = DuITSMTenantsSerializer(tenants, many=True)
         return Response(serializer.data)
 
-
+# test
 class DuCortexSOARTenantsListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
@@ -238,7 +238,6 @@ class TestView(APIView):
         # sync_suspicious_event_counts.delay()
         sync_destination_address_counts.delay()
         # sync_weekly_correlated_event_counts.delay()
-
         # sync_correlated_event_counts.delay()
         # sync_recon_event_counts.delay()
         # sync_ibm_event_counts.delay()
