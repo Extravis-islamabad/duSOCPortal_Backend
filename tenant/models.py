@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from django.db import models
+from loguru import logger
 
 from authentication.models import User
 from integration.models import Integration, ThreatIntelligenceSubTypes
@@ -236,16 +237,20 @@ class IBMQradarOffense(models.Model):
         db_table = "du_ibm_qradar_offenses"
 
     def save(self, *args, **kwargs):
-        self.start_date = datetime.utcfromtimestamp(self.start_time / 1000).date()
-        self.last_updated_date = datetime.utcfromtimestamp(
-            self.last_updated_time / 1000
-        ).date()
-        self.last_persisted_date = datetime.utcfromtimestamp(
-            self.last_persisted_time / 1000
-        ).date()
-        self.first_persisted_date = datetime.utcfromtimestamp(
-            self.first_persisted_time / 1000
-        ).date()
+        def parse_ts(ts):
+            try:
+                if ts in (None, 0, "0"):
+                    return None
+                return datetime.utcfromtimestamp(int(ts) / 1000).date()
+            except Exception as e:
+                logger.warning(f"Failed to convert timestamp {ts}: {e}")
+                return None
+
+        self.start_date = parse_ts(self.start_time)
+        self.last_updated_date = parse_ts(self.last_updated_time)
+        self.last_persisted_date = parse_ts(self.last_persisted_time)
+        self.first_persisted_date = parse_ts(self.first_persisted_time)
+
         super().save(*args, **kwargs)
 
     def __str__(self):
