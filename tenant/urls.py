@@ -32,6 +32,7 @@ from tenant.views import (
     SLAStatusView,
     TenantAPIView,
     TenantCortexSOARIncidentsAPIView,
+    TenantITSMTicketDetailView,
     TenantITSMTicketsView,
     TestView,
     TopLogSourcesAPIView,
@@ -65,6 +66,7 @@ urlpatterns = [
     ),
     path("get_tenant_assets/", GetTenantAssetsList.as_view(), name="get-tenant-assets"),
     path("get_itsm_tickets/", TenantITSMTicketsView.as_view(), name="get-itsm-tickets"),
+    path("itsm/tickets/<int:db_id>/", TenantITSMTicketDetailView.as_view()),
     path(
         "get_cortex_soar_incidents/",
         TenantCortexSOARIncidentsAPIView.as_view(),

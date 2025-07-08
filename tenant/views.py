@@ -626,6 +626,38 @@ class TenantITSMTicketsView(APIView):
             )
 
 
+class TenantITSMTicketDetailView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request, db_id):
+        """
+        Get a single ITSM ticket by db_id for the authenticated tenant.
+        """
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get the ITSM tenant IDs linked to this company
+        itsm_tenant_ids = tenant.company.itsm_tenants.values_list("id", flat=True)
+
+        try:
+            ticket = DuITSMFinalTickets.objects.get(
+                db_id=db_id, itsm_tenant_id__in=itsm_tenant_ids
+            )
+        except DuITSMFinalTickets.DoesNotExist:
+            return Response(
+                {"error": f"No ticket found with db_id={db_id} for your tenant."},
+                status=404,
+            )
+
+        serializer = DuITSMTicketsSerializer(ticket)
+        return Response(serializer.data, status=200)
+
+
 class TenantCortexSOARIncidentsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
