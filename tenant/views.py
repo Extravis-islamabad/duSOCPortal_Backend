@@ -1749,7 +1749,16 @@ class IncidentDetailView(APIView):
             # priority = incident["incident_priority"] or (
             #     {1: "P1", 2: "P2", 3: "P3", 4: "P4"}.get(incident["severity"], "P4")
             # )
-
+            ticket_id = None
+            ticket_db_id = None
+            ticket = DuITSMFinalTickets.objects.filter(
+                soar_id=incident["db_id"], account_name=incident["account"]
+            ).first()
+            if ticket is None:
+                ticket_db_id = None
+            else:
+                ticket_id = ticket.id
+                ticket_db_id = ticket.db_id
             # Format source IPs and log source types
             offense_db_id = None
             offense_id = None
@@ -1807,6 +1816,8 @@ class IncidentDetailView(APIView):
                     ),
                     "offense_id": offense_id,
                     "offense_db_id": offense_db_id,
+                    "ticket_id": ticket_id,
+                    "ticket_db_id": ticket_db_id,
                 }
             }
 
