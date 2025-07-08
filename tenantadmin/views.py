@@ -117,7 +117,7 @@ class TenantInactiveView(APIView):
 
         return Response(
             {
-                "message": f"{tenant_users.count()} user(s) under company '{company.company_name}' have been deactivated."
+                "message": f"users under company '{company.company_name}' have been deactivated."
             },
             status=200,
         )
@@ -174,11 +174,11 @@ class ReactivateTenantUsersAPIView(APIView):
         tenants = Tenant.objects.filter(company=company)
         user_ids = tenants.values_list("tenant__id", flat=True)
 
-        updated_count = User.objects.filter(id__in=user_ids).update(is_active=True)
+        _ = User.objects.filter(id__in=user_ids).update(is_active=True)
 
         return Response(
             {
-                "message": f"{updated_count} tenant users under company '{company.company_name}' have been reactivated."
+                "message": f"users under company '{company.company_name}' have been reactivated."
             },
             status=status.HTTP_200_OK,
         )
