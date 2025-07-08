@@ -278,6 +278,7 @@ class DuITSMFinalTickets(models.Model):
     creation_date = models.CharField(max_length=255, blank=True, default=None)
     created_by_name = models.CharField(max_length=255, blank=True, default=None)
     account_name = models.CharField(max_length=255, blank=True, default=None)
+    soar_id = models.IntegerField(null=True, blank=True)
     itsm_tenant = models.ForeignKey(
         DuITSMTenants,
         on_delete=models.CASCADE,
