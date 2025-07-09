@@ -1037,9 +1037,6 @@ class IBMQradar:
             with transaction.atomic():
                 CustomerEPS.objects.bulk_create(
                     records,
-                    update_conflicts=True,
-                    update_fields=["eps", "qradar_tenant", "integration"],
-                    unique_fields=["customer"],
                 )
                 logger.success(f"Inserted CustomerEPS records: {len(records)}")
                 logger.success(
