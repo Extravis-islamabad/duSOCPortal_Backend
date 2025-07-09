@@ -1005,7 +1005,11 @@ class IBMQradar:
                     f"No matching QRadar tenant found for customer: {customer}"
                 )
                 continue
-
+            try:
+                eps = float(eps)
+            except ValueError:
+                logger.warning(f"Invalid EPS value: {eps}")
+                continue
             transformed.append(
                 {
                     "customer": customer.strip(),
