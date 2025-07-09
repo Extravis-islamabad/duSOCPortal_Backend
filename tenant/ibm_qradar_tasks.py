@@ -1809,3 +1809,51 @@ def sync_daily_event_counts_for_admin(
 
             if transformed:
                 ibm_qradar._insert_daily_event_count_data(transformed)
+
+
+
+
+
+
+
+
+
+@shared_task
+def sync_ibm_qradar_daily_sync():
+    logger.info("Running sync_recon_event_counts() task")
+    sync_recon_event_counts.delay()
+    logger.info("Running sync_correlated_event_counts() task")
+    sync_correlated_event_counts.delay()
+    logger.info("Running sync_weekly_correlated_event_counts() task")
+    sync_weekly_correlated_event_counts.delay()
+    logger.info("Running sync_suspicious_event_counts() task")
+    sync_suspicious_event_counts.delay()
+    logger.info("Running sync_dos_event_counts() task")
+    sync_dos_event_counts.delay()
+    logger.info("Running sync_top_dos_event_counts() task")
+    sync_top_dos_event_counts.delay()
+    logger.info("Running sync_daily_event_counts() task")
+    sync_daily_event_counts.delay()
+    logger.info("Running sync_top_alert_event_counts() task")
+    sync_top_alert_event_counts.delay()
+    logger.info("Running sync_daily_closure_reason_counts() task")
+    sync_daily_closure_reason_counts.delay()
+    logger.info("Running sync_monthly_avg_eps() task")
+    sync_monthly_avg_eps.delay()
+    logger.info("Running sync_last_month_avg_eps() task")
+    sync_last_month_avg_eps.delay()
+    logger.info("Running sync_weekly_avg_eps() task")
+    sync_weekly_avg_eps.delay()
+    logger.info("Running sync_total_traffic() task")
+    sync_total_traffic.delay()
+    logger.info("Running sync_destination_address_counts() task")
+    sync_destination_address_counts.delay()
+    logger.info("Running sync_top_destination_connection_counts() task")
+    sync_top_destination_connection_counts.delay()
+    logger.info("Running sync_daily_event_counts_logs() task")
+    sync_daily_event_counts_logs.delay()
+    
+    
+    
+    
+
