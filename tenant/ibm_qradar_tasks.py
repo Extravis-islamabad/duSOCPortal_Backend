@@ -230,6 +230,23 @@ def sync_eps_for_domain(
 
 
 @shared_task
+def sync_ibm_tenant_eps():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+    for result in results:
+        sync_eps_for_domain.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+
+@shared_task
 def sync_eps_for_domain_for_admin(
     username: str, password: str, ip_address: str, port: int, integration_id: int
 ):
