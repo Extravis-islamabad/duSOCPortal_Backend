@@ -1,5 +1,4 @@
 import time
-from datetime import datetime, timedelta
 
 from celery import shared_task
 from loguru import logger
@@ -14,22 +13,8 @@ from integration.models import (
 )
 from tenant.models import (
     CorrelatedEventLog,
-    DailyClosureReasonLog,
-    DailyEventCountLog,
-    DailyEventLog,
-    DestinationAddressLog,
-    DosEventLog,
+    CustomerEPS,
     DuIbmQradarTenants,
-    EventCountLog,
-    LastMonthAvgEpsLog,
-    MonthlyAvgEpsLog,
-    ReconEventLog,
-    SuspiciousEventLog,
-    TopAlertEventLog,
-    TopDestinationConnectionLog,
-    TopDosEventLog,
-    TotalTrafficLog,
-    WeeklyAvgEpsLog,
     WeeklyCorrelatedEventLog,
 )
 
@@ -415,6 +400,7 @@ def sync_ibm_admin_eps():
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
+    CustomerEPS.objects.all().delete()
     for result in results:
         sync_eps_for_domain_for_admin(
             username=result.username,
@@ -425,18 +411,17 @@ def sync_ibm_admin_eps():
         )
 
 
-
 @shared_task
 def sync_event_count_for_admin(username, password, ip_address, port, integration_id):
-    from datetime import datetime, time, timedelta  # Import inside function
-   
+    from datetime import datetime, time  # Import inside function
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date with min and max time
     today = datetime.today().date()
     min_dt = datetime.combine(today, time.min)  # 00:00:00
     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-    
+
     # Format as "YYYY-MM-DD HH:MM:SS" for QRadar AQL
     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -468,10 +453,11 @@ def sync_event_count_for_admin(username, password, ip_address, port, integration
             if transformed:
                 ibm_qradar._insert_event_count_data(transformed)
 
+
 @shared_task
 def sync_recon_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -512,7 +498,8 @@ def sync_recon_for_admin(username, password, ip_address, port, integration_id):
 
             if transformed:
                 ibm_qradar._insert_recon_event_data(transformed)
-                
+
+
 @shared_task
 def sync_ibm_event_counts():
     results = IntegrationCredentials.objects.filter(
@@ -520,7 +507,7 @@ def sync_ibm_event_counts():
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
-    
+
     for result in results:
         sync_event_count_for_admin.delay(
             username=result.username,
@@ -538,7 +525,7 @@ def sync_recon_event_counts():
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
-  
+
     for result in results:
         sync_recon_for_admin.delay(
             username=result.username,
@@ -588,7 +575,7 @@ def sync_correlated_event_counts():
 def sync_correlated_for_admin(username, password, ip_address, port, integration_id):
     """Sync correlated events for a specific admin/integration"""
     from datetime import datetime, time  # Import inside function
-    
+
     try:
         logger.info(
             f"Starting sync_correlated_for_admin for integration {integration_id}"
@@ -697,6 +684,7 @@ def sync_correlated_for_admin(username, password, ip_address, port, integration_
         logger.error(f"Error in sync_correlated_for_admin: {str(e)}", exc_info=True)
         raise
 
+
 @shared_task
 def sync_weekly_correlated_event_counts():
     """Sync weekly correlated event counts for all IBM QRadar integrations"""
@@ -738,14 +726,14 @@ def sync_weekly_correlated_event_counts():
         raise
 
 
-
+# TODO : Talha look onto this
 @shared_task
 def sync_weekly_correlated_for_admin(
     username, password, ip_address, port, integration_id
 ):
     """Sync weekly correlated events for a specific admin/integration"""
     from datetime import datetime, timedelta  # Import inside function
-    
+
     try:
         logger.info(
             f"Starting sync_weekly_correlated_for_admin for integration {integration_id}"
@@ -867,6 +855,7 @@ def sync_weekly_correlated_for_admin(
         )
         raise
 
+
 @shared_task
 def sync_suspicious_event_counts():
     results = IntegrationCredentials.objects.filter(
@@ -885,11 +874,10 @@ def sync_suspicious_event_counts():
         )
 
 
-
 @shared_task
 def sync_suspicious_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -930,7 +918,8 @@ def sync_suspicious_for_admin(username, password, ip_address, port, integration_
 
             if transformed:
                 ibm_qradar._insert_suspicious_event_data(transformed)
-                
+
+
 @shared_task
 def sync_dos_event_counts():
     results = IntegrationCredentials.objects.filter(
@@ -939,7 +928,6 @@ def sync_dos_event_counts():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
 
-  
     for result in results:
         sync_dos_for_admin.delay(
             username=result.username,
@@ -950,11 +938,10 @@ def sync_dos_event_counts():
         )
 
 
-
 @shared_task
 def sync_dos_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -996,6 +983,7 @@ def sync_dos_for_admin(username, password, ip_address, port, integration_id):
             if transformed:
                 ibm_qradar._insert_dos_event_data(transformed)
 
+
 @shared_task
 def sync_top_dos_event_counts():
     results = IntegrationCredentials.objects.filter(
@@ -1004,7 +992,6 @@ def sync_top_dos_event_counts():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
 
-  
     for result in results:
         sync_top_dos_for_admin.delay(
             username=result.username,
@@ -1015,11 +1002,10 @@ def sync_top_dos_event_counts():
         )
 
 
-
 @shared_task
 def sync_top_dos_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -1061,6 +1047,7 @@ def sync_top_dos_for_admin(username, password, ip_address, port, integration_id)
             if transformed:
                 ibm_qradar._insert_top_dos_event_data(transformed)
 
+
 @shared_task
 def sync_daily_event_counts():
     results = IntegrationCredentials.objects.filter(
@@ -1068,7 +1055,6 @@ def sync_daily_event_counts():
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
-
 
     for result in results:
         sync_daily_for_admin.delay(
@@ -1083,7 +1069,7 @@ def sync_daily_event_counts():
 @shared_task
 def sync_daily_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -1125,6 +1111,7 @@ def sync_daily_for_admin(username, password, ip_address, port, integration_id):
             if transformed:
                 ibm_qradar._insert_daily_event_data(transformed)
 
+
 @shared_task
 def sync_top_alert_event_counts():
     results = IntegrationCredentials.objects.filter(
@@ -1133,7 +1120,6 @@ def sync_top_alert_event_counts():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
 
- 
     for result in results:
         sync_top_alert_for_admin.delay(
             username=result.username,
@@ -1144,11 +1130,10 @@ def sync_top_alert_event_counts():
         )
 
 
-
 @shared_task
 def sync_top_alert_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -1189,7 +1174,8 @@ def sync_top_alert_for_admin(username, password, ip_address, port, integration_i
 
             if transformed:
                 ibm_qradar._insert_top_alert_event_data(transformed)
-                
+
+
 @shared_task
 def sync_daily_closure_reason_counts():
     results = IntegrationCredentials.objects.filter(
@@ -1198,7 +1184,6 @@ def sync_daily_closure_reason_counts():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
 
-  
     for result in results:
         sync_daily_closure_reason_for_admin.delay(
             username=result.username,
@@ -1209,13 +1194,12 @@ def sync_daily_closure_reason_counts():
         )
 
 
-
 @shared_task
 def sync_daily_closure_reason_for_admin(
     username, password, ip_address, port, integration_id
 ):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -1259,6 +1243,7 @@ def sync_daily_closure_reason_for_admin(
             if transformed:
                 ibm_qradar._insert_daily_closure_reason_data(transformed)
 
+
 @shared_task
 def sync_monthly_avg_eps():
     results = IntegrationCredentials.objects.filter(
@@ -1266,7 +1251,6 @@ def sync_monthly_avg_eps():
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
-
 
     for result in results:
         sync_monthly_avg_eps_for_admin.delay(
@@ -1278,13 +1262,12 @@ def sync_monthly_avg_eps():
         )
 
 
-
 @shared_task
 def sync_monthly_avg_eps_for_admin(
     username, password, ip_address, port, integration_id
 ):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -1328,6 +1311,7 @@ def sync_monthly_avg_eps_for_admin(
             if transformed:
                 ibm_qradar._insert_monthly_avg_eps_data(transformed)
 
+
 @shared_task
 def sync_last_month_avg_eps():
     results = IntegrationCredentials.objects.filter(
@@ -1336,7 +1320,6 @@ def sync_last_month_avg_eps():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
 
-  
     for result in results:
         sync_last_month_avg_eps_for_admin.delay(
             username=result.username,
@@ -1347,14 +1330,12 @@ def sync_last_month_avg_eps():
         )
 
 
-
-
 @shared_task
 def sync_last_month_avg_eps_for_admin(
     username, password, ip_address, port, integration_id
 ):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -1397,8 +1378,8 @@ def sync_last_month_avg_eps_for_admin(
 
             if transformed:
                 ibm_qradar._insert_last_month_avg_eps_data(transformed)
-                
-                
+
+
 @shared_task
 def sync_weekly_avg_eps():
     results = IntegrationCredentials.objects.filter(
@@ -1407,7 +1388,6 @@ def sync_weekly_avg_eps():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
 
-   
     for result in results:
         sync_weekly_avg_eps_for_admin.delay(
             username=result.username,
@@ -1421,7 +1401,7 @@ def sync_weekly_avg_eps():
 @shared_task
 def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -1465,6 +1445,7 @@ def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integrat
             if transformed:
                 ibm_qradar._insert_weekly_avg_eps_data(transformed)
 
+
 @shared_task
 def sync_total_traffic():
     results = IntegrationCredentials.objects.filter(
@@ -1483,11 +1464,10 @@ def sync_total_traffic():
         )
 
 
-
 @shared_task
 def sync_total_traffic_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -1529,6 +1509,7 @@ def sync_total_traffic_for_admin(username, password, ip_address, port, integrati
             if transformed:
                 ibm_qradar._insert_total_traffic_data(transformed)
 
+
 @shared_task
 def sync_destination_address_counts():
     results = IntegrationCredentials.objects.filter(
@@ -1536,7 +1517,6 @@ def sync_destination_address_counts():
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
-
 
     for result in results:
         sync_destination_address_for_admin.delay(
@@ -1553,7 +1533,7 @@ def sync_destination_address_for_admin(
     username, password, ip_address, port, integration_id
 ):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -1597,6 +1577,7 @@ def sync_destination_address_for_admin(
             if transformed:
                 ibm_qradar._insert_destination_address_data(transformed)
 
+
 @shared_task
 def sync_top_destination_connection_counts():
     results = IntegrationCredentials.objects.filter(
@@ -1605,7 +1586,6 @@ def sync_top_destination_connection_counts():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
 
-    
     for result in results:
         sync_top_destination_connection_for_admin.delay(
             username=result.username,
@@ -1663,6 +1643,7 @@ def sync_top_destination_connection_counts():
 #                 results, integration_id, domain_id
 #             )
 
+
 #             if transformed:
 #                 ibm_qradar._insert_top_destination_connection_data(transformed)
 @shared_task
@@ -1670,7 +1651,7 @@ def sync_top_destination_connection_for_admin(
     username, password, ip_address, port, integration_id
 ):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
@@ -1716,6 +1697,7 @@ def sync_top_destination_connection_for_admin(
             if transformed:
                 ibm_qradar._insert_top_destination_connection_data(transformed)
 
+
 @shared_task
 def sync_daily_event_counts_logs():
     results = IntegrationCredentials.objects.filter(
@@ -1724,7 +1706,6 @@ def sync_daily_event_counts_logs():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
 
-  
     for result in results:
         sync_daily_event_counts_for_admin.delay(
             username=result.username,
@@ -1780,6 +1761,7 @@ def sync_daily_event_counts_logs():
 #                 results, integration_id, domain_id
 #             )
 
+
 #             if transformed:
 #                 ibm_qradar._insert_daily_event_count_data(transformed)
 @shared_task
@@ -1787,7 +1769,7 @@ def sync_daily_event_counts_for_admin(
     username, password, ip_address, port, integration_id
 ):
     from datetime import datetime, time  # Import inside function
-    
+
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
     # Get today's date range
