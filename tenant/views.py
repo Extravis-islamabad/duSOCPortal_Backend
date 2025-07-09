@@ -40,8 +40,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.ibm_qradar_tasks import sync_correlated_event_counts, sync_destination_address_counts, sync_ibm_event_counts, sync_recon_event_counts, sync_suspicious_event_counts, sync_total_traffic
-from tenant.itsm_tasks import sync_itsm_tickets_soar_ids
+from tenant.ibm_qradar_tasks import sync_ibm_admin_eps
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -215,6 +214,7 @@ class DuITSMTenantsListView(APIView):
         serializer = DuITSMTenantsSerializer(tenants, many=True)
         return Response(serializer.data)
 
+
 # test
 class DuCortexSOARTenantsListView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -231,13 +231,14 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
+        sync_ibm_admin_eps.delay()
         # sync_ibm.delay()
         # sync_itsm_tickets_soar_ids.delay()
         # sync_daily_closure_reason_counts.delay()
         # sync_dos_event_counts.delay()
         # sync_suspicious_event_counts.delay()
         # sync_destination_address_counts.delay()
-        sync_total_traffic.delay()
+        # sync_total_traffic.delay()
         # sync_weekly_correlated_event_counts.delay()
         # sync_correlated_event_counts.delay()
         # sync_recon_event_counts.delay()
