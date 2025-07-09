@@ -40,7 +40,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.ibm_qradar_tasks import sync_ibm_admin_eps, sync_ibm_qradar_daily_sync
+from tenant.ibm_qradar_tasks import sync_ibm_qradar_daily_sync
 from tenant.models import (
     Alert,
     CorrelatedEventLog,

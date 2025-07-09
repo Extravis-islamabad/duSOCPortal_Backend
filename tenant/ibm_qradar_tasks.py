@@ -1811,13 +1811,6 @@ def sync_daily_event_counts_for_admin(
                 ibm_qradar._insert_daily_event_count_data(transformed)
 
 
-
-
-
-
-
-
-
 @shared_task
 def sync_ibm_qradar_daily_sync():
     logger.info("Running sync_recon_event_counts() task")
@@ -1852,8 +1845,3 @@ def sync_ibm_qradar_daily_sync():
     sync_top_destination_connection_counts.delay()
     logger.info("Running sync_daily_event_counts_logs() task")
     sync_daily_event_counts_logs.delay()
-    
-    
-    
-    
-
