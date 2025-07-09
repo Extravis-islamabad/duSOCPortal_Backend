@@ -40,7 +40,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.ibm_qradar_tasks import sync_ibm_admin_eps
+from tenant.ibm_qradar_tasks import sync_ibm_admin_eps, sync_ibm_qradar_daily_sync
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -231,7 +231,8 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_ibm_admin_eps.delay()
+        # sync_ibm_admin_eps.delay()
+        sync_ibm_qradar_daily_sync.delay()
         # sync_ibm.delay()
         # sync_itsm_tickets_soar_ids.delay()
         # sync_daily_closure_reason_counts.delay()
