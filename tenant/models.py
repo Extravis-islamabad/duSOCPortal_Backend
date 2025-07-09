@@ -159,7 +159,7 @@ class IBMQradarEPS(models.Model):
 class CustomerEPS(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
-    customer = models.CharField(max_length=255, unique=True)
+    customer = models.CharField(max_length=255)
     eps = models.FloatField()
 
     created_at = models.DateTimeField(auto_now_add=True)
