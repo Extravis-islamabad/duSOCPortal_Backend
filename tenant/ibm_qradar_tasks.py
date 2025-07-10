@@ -1,4 +1,5 @@
 import time
+from datetime import timedelta
 
 from celery import shared_task
 from loguru import logger
@@ -958,8 +959,11 @@ def sync_dos_for_admin(username, password, ip_address, port, integration_id):
 
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
+    today = datetime.today().date() - timedelta(days=1)
     # Get today's date range
-    today = datetime.today().date()
+    # TODO : Commenting this
+    # today = datetime.today().date()
+
     min_dt = datetime.combine(today, time.min)  # 00:00:00
     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
 
