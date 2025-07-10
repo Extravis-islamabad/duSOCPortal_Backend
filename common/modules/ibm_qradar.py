@@ -26,6 +26,7 @@ from tenant.models import (
     LastMonthAvgEpsLog,
     MonthlyAvgEpsLog,
     ReconEventLog,
+    SuccessfulLogonEvent,
     SuspiciousEventLog,
     TopAlertEventLog,
     TopDestinationConnectionLog,
@@ -2043,3 +2044,45 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error inserting DailyEventCountLog records: {str(e)}")
             transaction.rollback()
+
+
+    # ibm_qradar.py
+    def _transform_successful_logon_data(self, data_list, integration_id, domain_id, full_date):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        transformed = []
+        for entry in data_list:
+            try:
+                transformed.append({
+                    "username": entry.get("username"),
+                    "logon_type": entry.get("logon_type"),
+                    "source_ip": entry.get("sourceip"),
+                    "log_source": entry.get("log_source"),
+                    "event_count": float(entry.get("event_count", 0)),
+                    "full_date": full_date,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                })
+            except Exception as e:
+                logger.error(f"Error transforming logon data {entry}: {str(e)}")
+                continue
+
+        return transformed
+
+    def _insert_successful_logon_data(self, data):
+        logger.info(f"Inserting {len(data)} SuccessfulLogonEvent records")
+        records = [SuccessfulLogonEvent(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                SuccessfulLogonEvent.objects.bulk_create(records)
+                logger.success(f"Inserted SuccessfulLogonEvent records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting SuccessfulLogonEvent records: {str(e)}")
+            transaction.rollback()
+
