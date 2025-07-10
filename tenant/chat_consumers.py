@@ -36,18 +36,19 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
 
         await self.accept()
         history = await self.get_chat_history()
-        if history:
-            await self.send(text_data=json.dumps({"type": "history", "messages": []}))
-        for msg in history:
-            await self.send(
-                text_data=json.dumps(
-                    {
-                        "message": msg["message"],
-                        "sender": msg["sender"],
-                        "timestamp": msg["timestamp"],
-                    }
+        if not history:
+            await self.send(text_data=json.dumps({"no_history": True}))
+        else:
+            for msg in history:
+                await self.send(
+                    text_data=json.dumps(
+                        {
+                            "message": msg["message"],
+                            "sender": msg["sender"],
+                            "timestamp": msg["timestamp"],
+                        }
+                    )
                 )
-            )
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
