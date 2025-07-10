@@ -934,7 +934,7 @@ class SuspiciousEventLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
     total_suspicious_events = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
 
     class Meta:
         db_table = "suspicious_event_log"

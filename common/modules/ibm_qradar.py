@@ -1569,7 +1569,30 @@ class IBMQradar:
             )
             return False
 
-    def _transform_suspicious_data(self, data_list, integration_id, domain_id):
+    # def _transform_suspicious_data(self, data_list, integration_id, domain_id):
+    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+    #     tenant_id = name_to_id_map.get(domain_id)
+
+    #     if not tenant_id:
+    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+    #         return []
+
+    #     for entry in data_list:
+    #         count = entry.get("total_suspicious_events")
+    #         if count is None:
+    #             logger.warning(f"Skipping invalid suspicious data: {entry}")
+    #             continue
+
+    #         return [
+    #             {
+    #                 "total_suspicious_events": count,
+    #                 "integration_id": integration_id,
+    #                 "qradar_tenant_id": tenant_id,
+    #             }
+    #         ]
+
+    #     return []
+    def _transform_suspicious_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -1583,13 +1606,23 @@ class IBMQradar:
                 logger.warning(f"Skipping invalid suspicious data: {entry}")
                 continue
 
-            return [
-                {
-                    "total_suspicious_events": count,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                }
-            ]
+            if date is None:
+                return [
+                    {
+                        "total_suspicious_events": count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                ]
+            else:
+                return [
+                    {
+                        "total_suspicious_events": count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                        "created_at": date,
+                    }
+                ]
 
         return []
 
