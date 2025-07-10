@@ -1743,7 +1743,7 @@ def sync_last_month_avg_eps_for_admin(
 
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
-    today = datetime.today().date() - timedelta(days=5)
+    today = datetime.today().date() - timedelta(days=6)
     # Get today's date range
     # TODO: Commenting this
     # today = datetime.today().date()
