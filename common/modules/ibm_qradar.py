@@ -26,6 +26,7 @@ from tenant.models import (
     LastMonthAvgEpsLog,
     MonthlyAvgEpsLog,
     ReconEventLog,
+    RemoteUsersCount,
     SuccessfulLogonEvent,
     SuspiciousEventLog,
     TopAlertEventLog,
@@ -2086,3 +2087,44 @@ class IBMQradar:
             logger.error(f"Error inserting SuccessfulLogonEvent records: {str(e)}")
             transaction.rollback()
 
+
+    
+    # ibm_qradar.py
+    def _transform_remote_users_data(self, data_list, integration_id, domain_id, full_date):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return []
+
+        transformed = []
+        for entry in data_list:
+            try:
+                transformed.append({
+                    "total_remote_users": float(entry.get("total_remote_users", 0)),
+                    "full_date": full_date,
+                    "integration_id": integration_id,
+                    "qradar_tenant_id": tenant_id,
+                })
+            except Exception as e:
+                logger.error(f"Error transforming remote users data {entry}: {str(e)}")
+                continue
+
+        return transformed
+
+    def _insert_remote_users_data(self, data):
+        if not data:
+            logger.warning("No remote users data to insert")
+            return
+
+        logger.info(f"Inserting {len(data)} RemoteUsersCount records")
+        records = [RemoteUsersCount(**item) for item in data]
+
+        try:
+            with transaction.atomic():
+                RemoteUsersCount.objects.bulk_create(records)
+                logger.success(f"Inserted RemoteUsersCount records: {len(records)}")
+        except Exception as e:
+            logger.error(f"Error inserting RemoteUsersCount records: {str(e)}")
+            transaction.rollback()

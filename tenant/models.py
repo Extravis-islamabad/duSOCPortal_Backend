@@ -1149,3 +1149,20 @@ class SuccessfulLogonEvent(models.Model):
 
     def __str__(self):
         return f"{self.username} - {self.source_ip} - {self.event_count}"
+    
+    
+
+
+class RemoteUsersCount(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    total_remote_users = models.FloatField()
+    full_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "remote_users_count"
+        verbose_name_plural = "Remote Users Counts"
+
+    def __str__(self):
+        return f"{self.qradar_tenant} - {self.full_date}: {self.total_remote_users}"
