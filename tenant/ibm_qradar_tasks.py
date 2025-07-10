@@ -995,7 +995,7 @@ def sync_dos_for_admin(username, password, ip_address, port, integration_id):
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)
             transformed = ibm_qradar._transform_dos_data(
-                results, integration_id, domain_id
+                results, integration_id, domain_id, date=start_str
             )
 
             if transformed:
