@@ -1913,8 +1913,38 @@ class IBMQradar:
             logger.error(f"Error inserting TopAlertEventLog records: {str(e)}")
             transaction.rollback()
 
+    # def _transform_daily_closure_reason_data(
+    #     self, data_list, integration_id, domain_id
+    # ):
+    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+    #     tenant_id = name_to_id_map.get(domain_id)
+
+    #     if not tenant_id:
+    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+    #         return []
+
+    #     transformed = []
+    #     for entry in data_list:
+    #         date = entry.get("date")
+    #         closure_reason = entry.get("closure_reason")
+    #         reason_count = entry.get("reason_count")
+    #         if date is None or closure_reason is None or reason_count is None:
+    #             logger.warning(f"Skipping invalid daily closure reason data: {entry}")
+    #             continue
+
+    #         transformed.append(
+    #             {
+    #                 "date": date,
+    #                 "closure_reason": closure_reason,
+    #                 "reason_count": reason_count,
+    #                 "integration_id": integration_id,
+    #                 "qradar_tenant_id": tenant_id,
+    #             }
+    #         )
+
+    #     return transformed
     def _transform_daily_closure_reason_data(
-        self, data_list, integration_id, domain_id
+        self, data_list, integration_id, domain_id, date=None
     ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -1925,22 +1955,34 @@ class IBMQradar:
 
         transformed = []
         for entry in data_list:
-            date = entry.get("date")
+            event_date = entry.get("date")
             closure_reason = entry.get("closure_reason")
             reason_count = entry.get("reason_count")
-            if date is None or closure_reason is None or reason_count is None:
+            if event_date is None or closure_reason is None or reason_count is None:
                 logger.warning(f"Skipping invalid daily closure reason data: {entry}")
                 continue
 
-            transformed.append(
-                {
-                    "date": date,
-                    "closure_reason": closure_reason,
-                    "reason_count": reason_count,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                }
-            )
+            if date is None:
+                transformed.append(
+                    {
+                        "date": event_date,
+                        "closure_reason": closure_reason,
+                        "reason_count": reason_count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                )
+            else:
+                transformed.append(
+                    {
+                        "date": event_date,
+                        "closure_reason": closure_reason,
+                        "reason_count": reason_count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                        "created_at": date,
+                    }
+                )
 
         return transformed
 

@@ -1006,7 +1006,7 @@ class DailyClosureReasonLog(models.Model):
     date = models.DateField()
     closure_reason = models.CharField(max_length=255)
     reason_count = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
 
     class Meta:
         db_table = "daily_closure_reason_log"

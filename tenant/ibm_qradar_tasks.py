@@ -1448,16 +1448,67 @@ def sync_daily_closure_reason_counts():
         )
 
 
+# @shared_task
+# def sync_daily_closure_reason_for_admin(
+#     username, password, ip_address, port, integration_id
+# ):
+#     from datetime import datetime, time  # Import inside function
+
+#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
+
+#     # Get today's date range
+#     today = datetime.today().date()
+#     min_dt = datetime.combine(today, time.min)  # 00:00:00
+#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
+
+#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
+#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+#     with IBMQradar(
+#         username=username, password=password, ip_address=ip_address, port=port
+#     ) as ibm_qradar:
+#         logger.info("Running QRadarTasks.sync_daily_closure_reason_for_admin() task")
+
+#         for domain_id in db_ids:
+#             query = IBMQradarConstants.AQL_QUERY_FOR_DAILY_CLOSURE_REASONS.format(
+#                 domain_id=domain_id,
+#                 start_time=start_str,
+#                 end_time=end_str,
+#             )
+
+#             logger.info(
+#                 f"Executing DAILY CLOSURE REASON AQL for domain {domain_id} ({start_str} → {end_str})"
+#             )
+
+#             search_id = ibm_qradar._get_do_aql_query(query=query)
+#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
+
+#             if not data_ready:
+#                 logger.warning(
+#                     f"No daily closure reason data returned for domain {domain_id}"
+#                 )
+#                 continue
+
+#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
+#             transformed = ibm_qradar._transform_daily_closure_reason_data(
+#                 results, integration_id, domain_id
+#             )
+
+#             if transformed:
+#                 ibm_qradar._insert_daily_closure_reason_data(transformed)
 @shared_task
 def sync_daily_closure_reason_for_admin(
     username, password, ip_address, port, integration_id
 ):
-    from datetime import datetime, time  # Import inside function
+    from datetime import datetime, time, timedelta  # Import inside function
 
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
+    today = datetime.today().date() - timedelta(days=1)
     # Get today's date range
-    today = datetime.today().date()
+    # TODO: Commenting this
+    # today = datetime.today().date()
+
     min_dt = datetime.combine(today, time.min)  # 00:00:00
     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
 
@@ -1491,11 +1542,12 @@ def sync_daily_closure_reason_for_admin(
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)
             transformed = ibm_qradar._transform_daily_closure_reason_data(
-                results, integration_id, domain_id
+                results, integration_id, domain_id, date=start_str
             )
 
             if transformed:
                 ibm_qradar._insert_daily_closure_reason_data(transformed)
+
 
 
 @shared_task
@@ -2219,10 +2271,10 @@ def sync_ibm_qradar_daily_sync():
     # sync_top_dos_event_counts.delay()                           DONE
     # logger.info("Running sync_daily_event_counts() task")
     # sync_daily_event_counts.delay()                             DONE
-    logger.info("Running sync_top_alert_event_counts() task")
-    sync_top_alert_event_counts.delay()
-    # logger.info("Running sync_daily_closure_reason_counts() task")
-    # sync_daily_closure_reason_counts.delay()
+    # logger.info("Running sync_top_alert_event_counts() task")
+    # sync_top_alert_event_counts.delay()                         DONE
+    logger.info("Running sync_daily_closure_reason_counts() task")
+    sync_daily_closure_reason_counts.delay()
     # logger.info("Running sync_monthly_avg_eps() task")
     # sync_monthly_avg_eps.delay()
     # logger.info("Running sync_last_month_avg_eps() task")
