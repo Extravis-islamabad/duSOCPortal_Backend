@@ -1047,7 +1047,7 @@ class WeeklyAvgEpsLog(models.Model):
     week = models.CharField(max_length=7)  # Format: yyyy-ww
     week_start = models.CharField(max_length=6)  # Format: dd-MMM
     weekly_avg_eps = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
 
     class Meta:
         db_table = "weekly_avg_eps_log"

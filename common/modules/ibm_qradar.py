@@ -2137,7 +2137,35 @@ class IBMQradar:
             logger.error(f"Error inserting LastMonthAvgEpsLog records: {str(e)}")
             transaction.rollback()
 
-    def _transform_weekly_avg_eps_data(self, data_list, integration_id, domain_id):
+    # def _transform_weekly_avg_eps_data(self, data_list, integration_id, domain_id):
+    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+    #     tenant_id = name_to_id_map.get(domain_id)
+
+    #     if not tenant_id:
+    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+    #         return []
+
+    #     transformed = []
+    #     for entry in data_list:
+    #         week = entry.get("week")
+    #         week_start = entry.get("week_start")
+    #         weekly_avg_eps = entry.get("weekly_avg_eps")
+    #         if week is None or week_start is None or weekly_avg_eps is None:
+    #             logger.warning(f"Skipping invalid weekly avg EPS data: {entry}")
+    #             continue
+
+    #         transformed.append(
+    #             {
+    #                 "week": week,
+    #                 "week_start": week_start,
+    #                 "weekly_avg_eps": weekly_avg_eps,
+    #                 "integration_id": integration_id,
+    #                 "qradar_tenant_id": tenant_id,
+    #             }
+    #         )
+
+    #     return transformed
+    def _transform_weekly_avg_eps_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -2154,15 +2182,27 @@ class IBMQradar:
                 logger.warning(f"Skipping invalid weekly avg EPS data: {entry}")
                 continue
 
-            transformed.append(
-                {
-                    "week": week,
-                    "week_start": week_start,
-                    "weekly_avg_eps": weekly_avg_eps,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                }
-            )
+            if date is None:
+                transformed.append(
+                    {
+                        "week": week,
+                        "week_start": week_start,
+                        "weekly_avg_eps": weekly_avg_eps,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                )
+            else:
+                transformed.append(
+                    {
+                        "week": week,
+                        "week_start": week_start,
+                        "weekly_avg_eps": weekly_avg_eps,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                        "created_at": date,
+                    }
+                )
 
         return transformed
 
