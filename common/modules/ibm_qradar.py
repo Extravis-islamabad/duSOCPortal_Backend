@@ -1837,7 +1837,33 @@ class IBMQradar:
             logger.error(f"Error inserting DailyEventLog records: {str(e)}")
             transaction.rollback()
 
-    def _transform_top_alert_data(self, data_list, integration_id, domain_id):
+    # def _transform_top_alert_data(self, data_list, integration_id, domain_id):
+    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+    #     tenant_id = name_to_id_map.get(domain_id)
+
+    #     if not tenant_id:
+    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+    #         return []
+
+    #     transformed = []
+    #     for entry in data_list:
+    #         alert_name = entry.get("alert_name")
+    #         event_count = entry.get("event_count")
+    #         if alert_name is None or event_count is None:
+    #             logger.warning(f"Skipping invalid top alert data: {entry}")
+    #             continue
+
+    #         transformed.append(
+    #             {
+    #                 "alert_name": alert_name,
+    #                 "event_count": event_count,
+    #                 "integration_id": integration_id,
+    #                 "qradar_tenant_id": tenant_id,
+    #             }
+    #         )
+
+    #     return transformed
+    def _transform_top_alert_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -1853,14 +1879,25 @@ class IBMQradar:
                 logger.warning(f"Skipping invalid top alert data: {entry}")
                 continue
 
-            transformed.append(
-                {
-                    "alert_name": alert_name,
-                    "event_count": event_count,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                }
-            )
+            if date is None:
+                transformed.append(
+                    {
+                        "alert_name": alert_name,
+                        "event_count": event_count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                )
+            else:
+                transformed.append(
+                    {
+                        "alert_name": alert_name,
+                        "event_count": event_count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                        "created_at": date,
+                    }
+                )
 
         return transformed
 

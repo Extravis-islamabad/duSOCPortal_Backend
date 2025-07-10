@@ -991,7 +991,7 @@ class TopAlertEventLog(models.Model):
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
     alert_name = models.CharField(max_length=255)
     event_count = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
 
     class Meta:
         db_table = "top_alert_event_log"
