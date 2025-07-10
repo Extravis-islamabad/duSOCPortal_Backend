@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_datetime
 DUBAI_TZ = pytz.timezone("Asia/Dubai")
 from loguru import logger
 
-from common.constants import CortexSOARConstants, SSLConstants
+from common.constants import CortexSOARConstants, SAORExcludedTenants, SSLConstants
 from tenant.models import DUCortexSOARIncidentFinalModel, DuCortexSOARTenants
 
 
@@ -117,7 +117,9 @@ class CortexSOAR:
         """
         df = pd.DataFrame(accounts)
         df = df[["id", "name"]]
-        df = df[df["name"].str.contains("CDC")]
+        df = df[
+            df["name"].str.contains("CDC") & (df["name"] != SAORExcludedTenants.ACCOUNT)
+        ]
         df.rename(columns={"id": "db_id"}, inplace=True)
         df["integration_id"] = integration_id
         results = df.to_dict(orient="records")
