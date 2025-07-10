@@ -1827,6 +1827,7 @@ def sync_daily_event_counts_for_admin(
             if transformed:
                 ibm_qradar._insert_daily_event_count_data(transformed)
 
+
 @shared_task
 def sync_successful_logons_for_admin(
     username, password, ip_address, port, integration_id
@@ -1875,6 +1876,7 @@ def sync_successful_logons_for_admin(
 
             if transformed:
                 ibm_qradar._insert_successful_logon_data(transformed)
+
 
 @shared_task
 def sync_successful_logons():
@@ -1931,9 +1933,7 @@ def sync_remote_users_count_for_admin(
             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
 
             if not data_ready:
-                logger.warning(
-                    f"No remote users data returned for domain {domain_id}"
-                )
+                logger.warning(f"No remote users data returned for domain {domain_id}")
                 continue
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)
@@ -1943,6 +1943,7 @@ def sync_remote_users_count_for_admin(
 
             if transformed:
                 ibm_qradar._insert_remote_users_data(transformed)
+
 
 @shared_task
 def sync_remote_users_count():
@@ -1961,37 +1962,38 @@ def sync_remote_users_count():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
 def sync_ibm_qradar_daily_sync():
-    logger.info("Running sync_recon_event_counts() task")
-    sync_recon_event_counts.delay()
-    logger.info("Running sync_correlated_event_counts() task")
-    sync_correlated_event_counts.delay()
-    logger.info("Running sync_weekly_correlated_event_counts() task")
-    sync_weekly_correlated_event_counts.delay()
-    logger.info("Running sync_suspicious_event_counts() task")
-    sync_suspicious_event_counts.delay()
+    # logger.info("Running sync_recon_event_counts() task")
+    # sync_recon_event_counts.delay()
+    # logger.info("Running sync_correlated_event_counts() task")
+    # sync_correlated_event_counts.delay()
+    # logger.info("Running sync_weekly_correlated_event_counts() task")
+    # sync_weekly_correlated_event_counts.delay()
+    # logger.info("Running sync_suspicious_event_counts() task")
+    # sync_suspicious_event_counts.delay()
     logger.info("Running sync_dos_event_counts() task")
     sync_dos_event_counts.delay()
-    logger.info("Running sync_top_dos_event_counts() task")
-    sync_top_dos_event_counts.delay()
-    logger.info("Running sync_daily_event_counts() task")
-    sync_daily_event_counts.delay()
-    logger.info("Running sync_top_alert_event_counts() task")
-    sync_top_alert_event_counts.delay()
-    logger.info("Running sync_daily_closure_reason_counts() task")
-    sync_daily_closure_reason_counts.delay()
-    logger.info("Running sync_monthly_avg_eps() task")
-    sync_monthly_avg_eps.delay()
-    logger.info("Running sync_last_month_avg_eps() task")
-    sync_last_month_avg_eps.delay()
-    logger.info("Running sync_weekly_avg_eps() task")
-    sync_weekly_avg_eps.delay()
-    logger.info("Running sync_total_traffic() task")
-    sync_total_traffic.delay()
-    logger.info("Running sync_destination_address_counts() task")
-    sync_destination_address_counts.delay()
-    logger.info("Running sync_top_destination_connection_counts() task")
-    sync_top_destination_connection_counts.delay()
-    logger.info("Running sync_daily_event_counts_logs() task")
-    sync_daily_event_counts_logs.delay()
+    # logger.info("Running sync_top_dos_event_counts() task")
+    # sync_top_dos_event_counts.delay()
+    # logger.info("Running sync_daily_event_counts() task")
+    # sync_daily_event_counts.delay()
+    # logger.info("Running sync_top_alert_event_counts() task")
+    # sync_top_alert_event_counts.delay()
+    # logger.info("Running sync_daily_closure_reason_counts() task")
+    # sync_daily_closure_reason_counts.delay()
+    # logger.info("Running sync_monthly_avg_eps() task")
+    # sync_monthly_avg_eps.delay()
+    # logger.info("Running sync_last_month_avg_eps() task")
+    # sync_last_month_avg_eps.delay()
+    # logger.info("Running sync_weekly_avg_eps() task")
+    # sync_weekly_avg_eps.delay()
+    # logger.info("Running sync_total_traffic() task")
+    # sync_total_traffic.delay()
+    # logger.info("Running sync_destination_address_counts() task")
+    # sync_destination_address_counts.delay()
+    # logger.info("Running sync_top_destination_connection_counts() task")
+    # sync_top_destination_connection_counts.delay()
+    # logger.info("Running sync_daily_event_counts_logs() task")
+    # sync_daily_event_counts_logs.delay()
