@@ -1572,7 +1572,8 @@ class IBMQradar:
             logger.error(f"Error inserting SuspiciousEventLog records: {str(e)}")
             transaction.rollback()
 
-    def _transform_dos_data(self, data_list, integration_id, domain_id):
+    # TODO: Consider this example for DoS
+    def _transform_dos_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -1586,13 +1587,23 @@ class IBMQradar:
                 logger.warning(f"Skipping invalid DoS data: {entry}")
                 continue
 
-            return [
-                {
-                    "total_dos_events": count,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                }
-            ]
+            if date is None:
+                return [
+                    {
+                        "total_dos_events": count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                ]
+            else:
+                return [
+                    {
+                        "total_dos_events": count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                        "created_at": date,
+                    }
+                ]
 
         return []
 
@@ -2046,9 +2057,10 @@ class IBMQradar:
             logger.error(f"Error inserting DailyEventCountLog records: {str(e)}")
             transaction.rollback()
 
-
     # ibm_qradar.py
-    def _transform_successful_logon_data(self, data_list, integration_id, domain_id, full_date):
+    def _transform_successful_logon_data(
+        self, data_list, integration_id, domain_id, full_date
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -2059,16 +2071,18 @@ class IBMQradar:
         transformed = []
         for entry in data_list:
             try:
-                transformed.append({
-                    "username": entry.get("username"),
-                    "logon_type": entry.get("logon_type"),
-                    "source_ip": entry.get("sourceip"),
-                    "log_source": entry.get("log_source"),
-                    "event_count": float(entry.get("event_count", 0)),
-                    "full_date": full_date,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                })
+                transformed.append(
+                    {
+                        "username": entry.get("username"),
+                        "logon_type": entry.get("logon_type"),
+                        "source_ip": entry.get("sourceip"),
+                        "log_source": entry.get("log_source"),
+                        "event_count": float(entry.get("event_count", 0)),
+                        "full_date": full_date,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                )
             except Exception as e:
                 logger.error(f"Error transforming logon data {entry}: {str(e)}")
                 continue
@@ -2087,10 +2101,10 @@ class IBMQradar:
             logger.error(f"Error inserting SuccessfulLogonEvent records: {str(e)}")
             transaction.rollback()
 
-
-    
     # ibm_qradar.py
-    def _transform_remote_users_data(self, data_list, integration_id, domain_id, full_date):
+    def _transform_remote_users_data(
+        self, data_list, integration_id, domain_id, full_date
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -2101,12 +2115,14 @@ class IBMQradar:
         transformed = []
         for entry in data_list:
             try:
-                transformed.append({
-                    "total_remote_users": float(entry.get("total_remote_users", 0)),
-                    "full_date": full_date,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                })
+                transformed.append(
+                    {
+                        "total_remote_users": float(entry.get("total_remote_users", 0)),
+                        "full_date": full_date,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                )
             except Exception as e:
                 logger.error(f"Error transforming remote users data {entry}: {str(e)}")
                 continue

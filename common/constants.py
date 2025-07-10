@@ -281,7 +281,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_SUCCESSFUL_LOGONS = """
-    SELECT 
+    SELECT
         username,
         qidname(qid) AS logon_type,
         sourceip,
@@ -298,13 +298,13 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
-    
+
     AQL_QUERY_FOR_REMOTE_USERS_COUNT = """
     SELECT UNIQUECOUNT(username) AS total_remote_users
     FROM events
     WHERE domainid = {domain_id}
-     AND (LOWER(rulename(creeventlist)) LIKE '%vpn%' 
-         OR LOWER(rulename(creeventlist)) LIKE '%remote%' 
+     AND (LOWER(rulename(creeventlist)) LIKE '%vpn%'
+         OR LOWER(rulename(creeventlist)) LIKE '%remote%'
          OR LOWER(rulename(creeventlist)) LIKE '%ssh%')
      AND username IS NOT NULL
     START PARSEDATETIME('{start_time}')
