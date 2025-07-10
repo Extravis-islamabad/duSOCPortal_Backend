@@ -986,7 +986,7 @@ def sync_suspicious_for_admin(username, password, ip_address, port, integration_
 
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
-    today = datetime.today().date() - timedelta(days=3)
+    today = datetime.today().date() - timedelta(days=4)
     # Get today's date range
     # TODO : Commenting this
     # today = datetime.today().date()
