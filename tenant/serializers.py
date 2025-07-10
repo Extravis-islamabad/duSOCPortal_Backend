@@ -145,11 +145,11 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
     def update(self, company, validated_data):
         tenants = company.tenants.all()
 
-        permissions = validated_data.pop("permissions", None)
-        integration_ids = validated_data.pop("integration_ids", None)
-        itsm_ids = validated_data.pop("itsm_tenant_ids", None)
-        soar_ids = validated_data.pop("soar_tenant_ids", None)
-        qradar_data = validated_data.pop("qradar_tenants", None)
+        permissions = validated_data.get("permissions", None)
+        integration_ids = validated_data.get("integration_ids", None)
+        itsm_ids = validated_data.get("itsm_tenant_ids", None)
+        soar_ids = validated_data.get("soar_tenant_ids", None)
+        qradar_data = validated_data.get("qradar_tenants", None)
         is_defualt_threat_intel = validated_data.get("is_defualt_threat_intel", None)
 
         if "integration_ids" in validated_data:
