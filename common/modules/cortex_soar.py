@@ -117,6 +117,7 @@ class CortexSOAR:
         """
         df = pd.DataFrame(accounts)
         df = df[["id", "name"]]
+        df = df[df["name"].str.contains("CDC")]
         df.rename(columns={"id": "db_id"}, inplace=True)
         df["integration_id"] = integration_id
         results = df.to_dict(orient="records")
