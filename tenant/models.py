@@ -1127,7 +1127,6 @@ class ChatMessage(models.Model):
         db_table = "chat_service"
 
 
-
 class SuccessfulLogonEvent(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
@@ -1142,15 +1141,13 @@ class SuccessfulLogonEvent(models.Model):
     class Meta:
         db_table = "successful_logon_events"
         indexes = [
-            models.Index(fields=['username']),
-            models.Index(fields=['source_ip']),
-            models.Index(fields=['full_date']),
+            models.Index(fields=["username"]),
+            models.Index(fields=["source_ip"]),
+            models.Index(fields=["full_date"]),
         ]
 
     def __str__(self):
         return f"{self.username} - {self.source_ip} - {self.event_count}"
-    
-    
 
 
 class RemoteUsersCount(models.Model):
