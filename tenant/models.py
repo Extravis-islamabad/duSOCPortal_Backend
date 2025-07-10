@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from django.db import models
+from django.utils import timezone
 from loguru import logger
 
 from authentication.models import User
@@ -948,7 +949,7 @@ class DosEventLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
     total_dos_events = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
 
     class Meta:
         db_table = "dos_event_log"
