@@ -280,6 +280,24 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
+    AQL_QUERY_FOR_SUCCESSFUL_LOGONS = """
+    SELECT 
+        username,
+        qidname(qid) AS logon_type,
+        sourceip,
+        LOGSOURCENAME(logsourceid) AS log_source,
+        COUNT(*) AS event_count
+    FROM events
+    WHERE domainid = {domain_id}
+        AND highLevelCategory = 3000
+        AND username IS NOT NULL
+        AND username != 'N/A'
+        AND LOWER(qidname(qid)) LIKE '%success%'
+    GROUP BY username, qid, sourceip, logsourceid
+    ORDER BY event_count DESC
+    START PARSEDATETIME('{start_time}')
+    STOP PARSEDATETIME('{end_time}')
+    """
 
 
 class ITSMConstants:

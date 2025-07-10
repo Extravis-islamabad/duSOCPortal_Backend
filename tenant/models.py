@@ -1125,3 +1125,27 @@ class ChatMessage(models.Model):
 
     class Meta:
         db_table = "chat_service"
+
+
+
+class SuccessfulLogonEvent(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
+    username = models.CharField(max_length=255)
+    logon_type = models.TextField()
+    source_ip = models.CharField(max_length=45)
+    log_source = models.CharField(max_length=255)
+    event_count = models.FloatField()
+    full_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "successful_logon_events"
+        indexes = [
+            models.Index(fields=['username']),
+            models.Index(fields=['source_ip']),
+            models.Index(fields=['full_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.username} - {self.source_ip} - {self.event_count}"
