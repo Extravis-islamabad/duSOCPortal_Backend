@@ -1032,7 +1032,7 @@ class LastMonthAvgEpsLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
     last_month_avg_eps = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
 
     class Meta:
         db_table = "last_month_avg_eps_log"
