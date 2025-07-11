@@ -1678,7 +1678,7 @@ def sync_destination_address_for_admin(
 
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
-    today = datetime.today().date() - timedelta(days=1)
+    today = datetime.today().date() - timedelta(days=2)
     # Get today's date range
     # TODO: Commenting this
     # today = datetime.today().date()
