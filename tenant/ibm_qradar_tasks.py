@@ -1874,7 +1874,7 @@ def sync_daily_event_counts_for_admin(
 
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
-    today = datetime.today().date() - timedelta(days=4)
+    today = datetime.today().date() - timedelta(days=6)
     # Get today's date range
     # TODO: Commenting this
     # today = datetime.today().date()
