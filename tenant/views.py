@@ -16,6 +16,7 @@ from django.db.models import (
     Q,
     Sum,
     When,
+    Min
 )
 from django.db.models.functions import ExtractSecond, TruncDate, TruncDay, TruncHour
 from django.utils import timezone
@@ -5028,10 +5029,19 @@ class IncidentReportView(APIView):
                 ).aggregate(total=Sum("last_month_avg_eps"))["total"]
                 or 0
             )
+            # weekly_avg_eps = (
+            
+            #     WeeklyAvgEpsLog.objects.filter(created_at__gte=date_threshold)
+            #     .order_by("week")
+            #     .values("week", "week_start", "weekly_avg_eps")
+            # )
             weekly_avg_eps = (
                 WeeklyAvgEpsLog.objects.filter(created_at__gte=date_threshold)
-                .order_by("week")
-                .values("week", "week_start", "weekly_avg_eps")
+                .annotate(created_at_date=TruncDate("created_at"))
+                .values("week", "week_start", "created_at_date")
+                .annotate(weekly_avg_eps=Avg("weekly_avg_eps"))
+                .order_by("week_start")
+                .values("week", "week_start", "weekly_avg_eps", created_at=F("created_at_date"))
             )
             total_traffic = (
                 TotalTrafficLog.objects.filter(
@@ -5051,10 +5061,18 @@ class IncidentReportView(APIView):
                 .order_by("-connection_count")[:5]
                 .values("destination_address", "connection_count")
             )
+            # daily_event_count = (
+            #     DailyEventCountLog.objects.filter(created_at__gte=date_threshold)
+            #     .order_by("full_date")
+            #     .values("full_date", "daily_count")
+            # )
             daily_event_count = (
                 DailyEventCountLog.objects.filter(created_at__gte=date_threshold)
+                .values("full_date")  # Group by date
+                .annotate(
+                    daily_count=Min("daily_count")  # Or any other aggregate function
+                )
                 .order_by("full_date")
-                .values("full_date", "daily_count")
             )
 
             # Add to your response
