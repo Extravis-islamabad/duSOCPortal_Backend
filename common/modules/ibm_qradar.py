@@ -2218,29 +2218,63 @@ class IBMQradar:
             logger.error(f"Error inserting WeeklyAvgEpsLog records: {str(e)}")
             transaction.rollback()
 
-    def _transform_total_traffic_data(self, data_list, integration_id, domain_id):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-        tenant_id = name_to_id_map.get(domain_id)
+    # def _transform_total_traffic_data(self, data_list, integration_id, domain_id):
+    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+    #     tenant_id = name_to_id_map.get(domain_id)
 
-        if not tenant_id:
-            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+    #     if not tenant_id:
+    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+    #         return []
+
+    #     for entry in data_list:
+    #         total_traffic = entry.get("total_traffic")
+    #         if total_traffic is None:
+    #             logger.warning(f"Skipping invalid total traffic data: {entry}")
+    #             continue
+
+    #         return [
+    #             {
+    #                 "total_traffic": total_traffic,
+    #                 "integration_id": integration_id,
+    #                 "qradar_tenant_id": tenant_id,
+    #             }
+    #         ]
+
+    #     return []
+    
+    def _transform_total_traffic_data(self, data_list, integration_id, domain_id, date=None):
+            name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+            tenant_id = name_to_id_map.get(domain_id)
+
+            if not tenant_id:
+                logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+                return []
+
+            for entry in data_list:
+                total_traffic = entry.get("total_traffic")
+                if total_traffic is None:
+                    logger.warning(f"Skipping invalid total traffic data: {entry}")
+                    continue
+
+                if date is None:
+                    return [
+                        {
+                            "total_traffic": total_traffic,
+                            "integration_id": integration_id,
+                            "qradar_tenant_id": tenant_id,
+                        }
+                    ]
+                else:
+                    return [
+                        {
+                            "total_traffic": total_traffic,
+                            "integration_id": integration_id,
+                            "qradar_tenant_id": tenant_id,
+                            "created_at": date,
+                        }
+                    ]
+
             return []
-
-        for entry in data_list:
-            total_traffic = entry.get("total_traffic")
-            if total_traffic is None:
-                logger.warning(f"Skipping invalid total traffic data: {entry}")
-                continue
-
-            return [
-                {
-                    "total_traffic": total_traffic,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                }
-            ]
-
-        return []
 
     def _insert_total_traffic_data(self, data):
         logger.info(f"Inserting {len(data)} TotalTrafficLog records")
