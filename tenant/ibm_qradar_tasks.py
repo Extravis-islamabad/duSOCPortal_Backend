@@ -935,51 +935,6 @@ def sync_suspicious_event_counts():
             integration_id=result.integration.id,
         )
 
-
-# @shared_task
-# def sync_suspicious_for_admin(username, password, ip_address, port, integration_id):
-#     from datetime import datetime, time  # Import inside function
-
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     # Get today's date range
-#     today = datetime.today().date()
-#     min_dt = datetime.combine(today, time.min)  # 00:00:00
-#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-
-#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_suspicious_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_SUSPICIOUS_EVENTS.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing SUSPICIOUS AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(f"No suspicious data returned for domain {domain_id}")
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_suspicious_data(
-#                 results, integration_id, domain_id
-#             )
-
-#             if transformed:
-#                 ibm_qradar._insert_suspicious_event_data(transformed)
 @shared_task
 def sync_suspicious_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
@@ -1114,50 +1069,7 @@ def sync_top_dos_event_counts():
         )
 
 
-# @shared_task
-# def sync_top_dos_for_admin(username, password, ip_address, port, integration_id):
-#     from datetime import datetime, time  # Import inside function
 
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     # Get today's date range
-#     today = datetime.today().date()
-#     min_dt = datetime.combine(today, time.min)  # 00:00:00
-#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-
-#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_top_dos_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_TOP_DOS_EVENTS.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing TOP DOS AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(f"No top DoS data returned for domain {domain_id}")
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_top_dos_data(
-#                 results, integration_id, domain_id
-#             )
-
-#             if transformed:
-#                 ibm_qradar._insert_top_dos_event_data(transformed)
 
 @shared_task
 def sync_top_dos_for_admin(username, password, ip_address, port, integration_id):
@@ -1224,51 +1136,6 @@ def sync_daily_event_counts():
             integration_id=result.integration.id,
         )
 
-
-# @shared_task
-# def sync_daily_for_admin(username, password, ip_address, port, integration_id):
-#     from datetime import datetime, time  # Import inside function
-
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     # Get today's date range
-#     today = datetime.today().date()
-#     min_dt = datetime.combine(today, time.min)  # 00:00:00
-#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-
-#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_daily_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_DAILY_EVENTS.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing DAILY AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(f"No daily event data returned for domain {domain_id}")
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_daily_event_data(
-#                 results, integration_id, domain_id
-#             )
-
-#             if transformed:
-#                 ibm_qradar._insert_daily_event_data(transformed)
 @shared_task
 def sync_daily_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
@@ -1336,50 +1203,6 @@ def sync_top_alert_event_counts():
         )
 
 
-# @shared_task
-# def sync_top_alert_for_admin(username, password, ip_address, port, integration_id):
-#     from datetime import datetime, time  # Import inside function
-
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     # Get today's date range
-#     today = datetime.today().date()
-#     min_dt = datetime.combine(today, time.min)  # 00:00:00
-#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-
-#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_top_alert_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_TOP_ALERT_EVENTS.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing TOP ALERT AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(f"No top alert data returned for domain {domain_id}")
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_top_alert_data(
-#                 results, integration_id, domain_id
-#             )
-
-#             if transformed:
-#                 ibm_qradar._insert_top_alert_event_data(transformed)
 @shared_task
 def sync_top_alert_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time, timedelta  # Import inside function
@@ -1447,55 +1270,6 @@ def sync_daily_closure_reason_counts():
             integration_id=result.integration.id,
         )
 
-
-# @shared_task
-# def sync_daily_closure_reason_for_admin(
-#     username, password, ip_address, port, integration_id
-# ):
-#     from datetime import datetime, time  # Import inside function
-
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     # Get today's date range
-#     today = datetime.today().date()
-#     min_dt = datetime.combine(today, time.min)  # 00:00:00
-#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-
-#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_daily_closure_reason_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_DAILY_CLOSURE_REASONS.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing DAILY CLOSURE REASON AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(
-#                     f"No daily closure reason data returned for domain {domain_id}"
-#                 )
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_daily_closure_reason_data(
-#                 results, integration_id, domain_id
-#             )
-
-#             if transformed:
-#                 ibm_qradar._insert_daily_closure_reason_data(transformed)
 @shared_task
 def sync_daily_closure_reason_for_admin(
     username, password, ip_address, port, integration_id
@@ -1568,54 +1342,7 @@ def sync_monthly_avg_eps():
         )
 
 
-# @shared_task
-# def sync_monthly_avg_eps_for_admin(
-#     username, password, ip_address, port, integration_id
-# ):
-#     from datetime import datetime, time  # Import inside function
 
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     # Get today's date range
-#     today = datetime.today().date()
-#     min_dt = datetime.combine(today, time.min)  # 00:00:00
-#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-
-#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_monthly_avg_eps_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_MONTHLY_AVG_EPS.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing MONTHLY AVG EPS AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(
-#                     f"No monthly avg EPS data returned for domain {domain_id}"
-#                 )
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_monthly_avg_eps_data(
-#                 results, integration_id, domain_id
-#             )
-
-#             if transformed:
-#                 ibm_qradar._insert_monthly_avg_eps_data(transformed)
 @shared_task
 def sync_monthly_avg_eps_for_admin(
     username, password, ip_address, port, integration_id
@@ -1687,54 +1414,6 @@ def sync_last_month_avg_eps():
         )
 
 
-# @shared_task
-# def sync_last_month_avg_eps_for_admin(
-#     username, password, ip_address, port, integration_id
-# ):
-#     from datetime import datetime, time  # Import inside function
-
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     # Get today's date range
-#     today = datetime.today().date()
-#     min_dt = datetime.combine(today, time.min)  # 00:00:00
-#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-
-#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_last_month_avg_eps_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_LAST_MONTH_AVG_EPS.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing LAST MONTH AVG EPS AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(
-#                     f"No last month avg EPS data returned for domain {domain_id}"
-#                 )
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_last_month_avg_eps_data(
-#                 results, integration_id, domain_id
-#             )
-
-#             if transformed:
-#                 ibm_qradar._insert_last_month_avg_eps_data(transformed)
 @shared_task
 def sync_last_month_avg_eps_for_admin(
     username, password, ip_address, port, integration_id
@@ -1806,52 +1485,7 @@ def sync_weekly_avg_eps():
         )
 
 
-# @shared_task
-# def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integration_id):
-#     from datetime import datetime, time  # Import inside function
 
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     # Get today's date range
-#     today = datetime.today().date()
-#     min_dt = datetime.combine(today, time.min)  # 00:00:00
-#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-
-#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_weekly_avg_eps_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_WEEKLY_AVG_EPS.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing WEEKLY AVG EPS AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(
-#                     f"No weekly avg EPS data returned for domain {domain_id}"
-#                 )
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_weekly_avg_eps_data(
-#                 results, integration_id, domain_id
-#             )
-
-#             if transformed:
-#                 ibm_qradar._insert_weekly_avg_eps_data(transformed)
 
 @shared_task
 def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integration_id):
@@ -1921,50 +1555,6 @@ def sync_total_traffic():
         )
 
 
-# @shared_task
-# def sync_total_traffic_for_admin(username, password, ip_address, port, integration_id):
-#     from datetime import datetime, time  # Import inside function
-
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     # Get today's date range
-#     today = datetime.today().date()
-#     min_dt = datetime.combine(today, time.min)  # 00:00:00
-#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-
-#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_total_traffic_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_TOTAL_TRAFFIC.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing TOTAL TRAFFIC AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(f"No total traffic data returned for domain {domain_id}")
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_total_traffic_data(
-#                 results, integration_id, domain_id
-#             )
-
-#             if transformed:
-#                 ibm_qradar._insert_total_traffic_data(transformed)
 
 @shared_task
 def sync_total_traffic_for_admin(username, password, ip_address, port, integration_id):
@@ -1972,7 +1562,7 @@ def sync_total_traffic_for_admin(username, password, ip_address, port, integrati
 
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
-    today = datetime.today().date() - timedelta(days=4)
+    today = datetime.today().date() - timedelta(days=5)
     # Get today's date range
     # TODO: Commenting this
     # today = datetime.today().date()
