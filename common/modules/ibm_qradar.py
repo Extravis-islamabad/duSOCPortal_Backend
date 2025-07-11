@@ -1453,7 +1453,9 @@ class IBMQradar:
     #             f"Error in _transform_weekly_correlated_data: {str(e)}", exc_info=True
     #         )
     #         return []
-    def _transform_weekly_correlated_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_weekly_correlated_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         """Transform weekly correlated events data for database insertion"""
         try:
             logger.info(f"Starting weekly transformation for domain {domain_id}")
@@ -1543,7 +1545,6 @@ class IBMQradar:
                 f"Error in _transform_weekly_correlated_data: {str(e)}", exc_info=True
             )
             return []
-
 
     def _insert_weekly_correlated_event_data(self, data):
         """Insert weekly correlated event data into database"""
@@ -1660,7 +1661,9 @@ class IBMQradar:
             )
             return False
 
-    def _transform_suspicious_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_suspicious_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -1753,7 +1756,6 @@ class IBMQradar:
             logger.error(f"Error inserting DosEventLog records: {str(e)}")
             transaction.rollback()
 
-   
     def _transform_top_dos_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -1791,6 +1793,7 @@ class IBMQradar:
                 )
 
         return transformed
+
     def _insert_top_dos_event_data(self, data):
         logger.info(f"Inserting {len(data)} TopDosEventLog records")
         records = [TopDosEventLog(**item) for item in data]
@@ -1803,8 +1806,9 @@ class IBMQradar:
             logger.error(f"Error inserting TopDosEventLog records: {str(e)}")
             transaction.rollback()
 
-
-    def _transform_daily_event_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_daily_event_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -1842,7 +1846,6 @@ class IBMQradar:
 
         return transformed
 
-
     def _insert_daily_event_data(self, data):
         logger.info(f"Inserting {len(data)} DailyEventLog records")
         records = [DailyEventLog(**item) for item in data]
@@ -1855,7 +1858,9 @@ class IBMQradar:
             logger.error(f"Error inserting DailyEventLog records: {str(e)}")
             transaction.rollback()
 
-    def _transform_top_alert_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_top_alert_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -1904,7 +1909,6 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error inserting TopAlertEventLog records: {str(e)}")
             transaction.rollback()
-
 
     def _transform_daily_closure_reason_data(
         self, data_list, integration_id, domain_id, date=None
@@ -1963,7 +1967,9 @@ class IBMQradar:
             logger.error(f"Error inserting DailyClosureReasonLog records: {str(e)}")
             transaction.rollback()
 
-    def _transform_monthly_avg_eps_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_monthly_avg_eps_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -2009,7 +2015,9 @@ class IBMQradar:
             logger.error(f"Error inserting MonthlyAvgEpsLog records: {str(e)}")
             transaction.rollback()
 
-    def _transform_last_month_avg_eps_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_last_month_avg_eps_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -2042,6 +2050,7 @@ class IBMQradar:
                 ]
 
         return []
+
     def _insert_last_month_avg_eps_data(self, data):
         logger.info(f"Inserting {len(data)} LastMonthAvgEpsLog records")
         records = [LastMonthAvgEpsLog(**item) for item in data]
@@ -2054,7 +2063,9 @@ class IBMQradar:
             logger.error(f"Error inserting LastMonthAvgEpsLog records: {str(e)}")
             transaction.rollback()
 
-    def _transform_weekly_avg_eps_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_weekly_avg_eps_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -2107,41 +2118,41 @@ class IBMQradar:
             logger.error(f"Error inserting WeeklyAvgEpsLog records: {str(e)}")
             transaction.rollback()
 
-    
-    
-    def _transform_total_traffic_data(self, data_list, integration_id, domain_id, date=None):
-            name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-            tenant_id = name_to_id_map.get(domain_id)
+    def _transform_total_traffic_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        tenant_id = name_to_id_map.get(domain_id)
 
-            if not tenant_id:
-                logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-                return []
-
-            for entry in data_list:
-                total_traffic = entry.get("total_traffic")
-                if total_traffic is None:
-                    logger.warning(f"Skipping invalid total traffic data: {entry}")
-                    continue
-
-                if date is None:
-                    return [
-                        {
-                            "total_traffic": total_traffic,
-                            "integration_id": integration_id,
-                            "qradar_tenant_id": tenant_id,
-                        }
-                    ]
-                else:
-                    return [
-                        {
-                            "total_traffic": total_traffic,
-                            "integration_id": integration_id,
-                            "qradar_tenant_id": tenant_id,
-                            "created_at": date,
-                        }
-                    ]
-
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
             return []
+
+        for entry in data_list:
+            total_traffic = entry.get("total_traffic")
+            if total_traffic is None:
+                logger.warning(f"Skipping invalid total traffic data: {entry}")
+                continue
+
+            if date is None:
+                return [
+                    {
+                        "total_traffic": total_traffic,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                ]
+            else:
+                return [
+                    {
+                        "total_traffic": total_traffic,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                        "created_at": date,
+                    }
+                ]
+
+        return []
 
     def _insert_total_traffic_data(self, data):
         logger.info(f"Inserting {len(data)} TotalTrafficLog records")
@@ -2155,7 +2166,9 @@ class IBMQradar:
             logger.error(f"Error inserting TotalTrafficLog records: {str(e)}")
             transaction.rollback()
 
-    def _transform_destination_address_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_destination_address_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -2192,7 +2205,6 @@ class IBMQradar:
                 )
 
         return transformed
-
 
     def _insert_destination_address_data(self, data):
         logger.info(f"Inserting {len(data)} DestinationAddressLog records")
@@ -2279,6 +2291,7 @@ class IBMQradar:
                 )
 
         return transformed
+
     def _insert_top_destination_connection_data(self, data):
         logger.info(f"Inserting {len(data)} TopDestinationConnectionLog records")
         records = [TopDestinationConnectionLog(**item) for item in data]
@@ -2321,7 +2334,9 @@ class IBMQradar:
     #         )
 
     #     return transformed
-    def _transform_daily_event_count_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_daily_event_count_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -2358,7 +2373,6 @@ class IBMQradar:
                 )
 
         return transformed
-
 
     def _insert_daily_event_count_data(self, data):
         logger.info(f"Inserting {len(data)} DailyEventCountLog records")

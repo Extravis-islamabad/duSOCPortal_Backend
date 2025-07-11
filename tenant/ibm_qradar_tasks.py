@@ -511,6 +511,7 @@ def sync_event_count_for_admin(username, password, ip_address, port, integration
 #                 results, integration_id, domain_id
 #             )
 
+
 #             if transformed:
 #                 ibm_qradar._insert_recon_event_data(transformed)
 @shared_task
@@ -934,6 +935,7 @@ def sync_suspicious_event_counts():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
 def sync_suspicious_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
@@ -1068,8 +1070,6 @@ def sync_top_dos_event_counts():
         )
 
 
-
-
 @shared_task
 def sync_top_dos_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time  # Import inside function
@@ -1117,7 +1117,8 @@ def sync_top_dos_for_admin(username, password, ip_address, port, integration_id)
 
             if transformed:
                 ibm_qradar._insert_top_dos_event_data(transformed)
-                
+
+
 @shared_task
 def sync_daily_event_counts():
     results = IntegrationCredentials.objects.filter(
@@ -1134,6 +1135,7 @@ def sync_daily_event_counts():
             port=result.port,
             integration_id=result.integration.id,
         )
+
 
 @shared_task
 def sync_daily_for_admin(username, password, ip_address, port, integration_id):
@@ -1251,7 +1253,6 @@ def sync_top_alert_for_admin(username, password, ip_address, port, integration_i
                 ibm_qradar._insert_top_alert_event_data(transformed)
 
 
-
 @shared_task
 def sync_daily_closure_reason_counts():
     results = IntegrationCredentials.objects.filter(
@@ -1268,6 +1269,7 @@ def sync_daily_closure_reason_counts():
             port=result.port,
             integration_id=result.integration.id,
         )
+
 
 @shared_task
 def sync_daily_closure_reason_for_admin(
@@ -1322,7 +1324,6 @@ def sync_daily_closure_reason_for_admin(
                 ibm_qradar._insert_daily_closure_reason_data(transformed)
 
 
-
 @shared_task
 def sync_monthly_avg_eps():
     results = IntegrationCredentials.objects.filter(
@@ -1339,7 +1340,6 @@ def sync_monthly_avg_eps():
             port=result.port,
             integration_id=result.integration.id,
         )
-
 
 
 @shared_task
@@ -1484,8 +1484,6 @@ def sync_weekly_avg_eps():
         )
 
 
-
-
 @shared_task
 def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time, timedelta  # Import inside function
@@ -1536,6 +1534,7 @@ def sync_weekly_avg_eps_for_admin(username, password, ip_address, port, integrat
             if transformed:
                 ibm_qradar._insert_weekly_avg_eps_data(transformed)
 
+
 @shared_task
 def sync_total_traffic():
     results = IntegrationCredentials.objects.filter(
@@ -1552,7 +1551,6 @@ def sync_total_traffic():
             port=result.port,
             integration_id=result.integration.id,
         )
-
 
 
 @shared_task
@@ -1602,6 +1600,7 @@ def sync_total_traffic_for_admin(username, password, ip_address, port, integrati
 
             if transformed:
                 ibm_qradar._insert_total_traffic_data(transformed)
+
 
 @shared_task
 def sync_destination_address_counts():
@@ -1692,7 +1691,6 @@ def sync_top_destination_connection_counts():
         )
 
 
-
 # @shared_task
 # def sync_top_destination_connection_for_admin(
 #     username, password, ip_address, port, integration_id
@@ -1740,6 +1738,7 @@ def sync_top_destination_connection_counts():
 #             transformed = ibm_qradar._transform_top_destination_connection_data(
 #                 results, integration_id, domain_id
 #             )
+
 
 #             if transformed:
 #                 ibm_qradar._insert_top_destination_connection_data(transformed)
@@ -1865,6 +1864,7 @@ def sync_daily_event_counts_logs():
 #             if transformed:
 #                 ibm_qradar._insert_daily_event_count_data(transformed)
 
+
 @shared_task
 def sync_daily_event_counts_for_admin(
     username, password, ip_address, port, integration_id
@@ -1916,6 +1916,7 @@ def sync_daily_event_counts_for_admin(
 
             if transformed:
                 ibm_qradar._insert_daily_event_count_data(transformed)
+
 
 @shared_task
 def sync_successful_logons_for_admin(
@@ -2085,4 +2086,4 @@ def sync_ibm_qradar_daily_sync():
     # logger.info("Running sync_top_destination_connection_counts() task")         DONE
     # sync_top_destination_connection_counts.delay()
     # logger.info("Running sync_daily_event_counts_logs() task")    DONE
-    # sync_daily_event_counts_logs.delay() 
+    # sync_daily_event_counts_logs.delay()
