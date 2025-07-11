@@ -1060,7 +1060,7 @@ class TotalTrafficLog(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
     total_traffic = models.FloatField()
-    created_at =models.DateTimeField(blank=True, null=True, default=timezone.now)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
 
     class Meta:
         db_table = "total_traffic_log"
