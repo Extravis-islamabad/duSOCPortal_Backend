@@ -1569,29 +1569,6 @@ class IBMQradar:
             )
             return False
 
-    # def _transform_suspicious_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     for entry in data_list:
-    #         count = entry.get("total_suspicious_events")
-    #         if count is None:
-    #             logger.warning(f"Skipping invalid suspicious data: {entry}")
-    #             continue
-
-    #         return [
-    #             {
-    #                 "total_suspicious_events": count,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         ]
-
-    #     return []
     def _transform_suspicious_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -1685,32 +1662,7 @@ class IBMQradar:
             logger.error(f"Error inserting DosEventLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_top_dos_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     transformed = []
-    #     for entry in data_list:
-    #         event_name = entry.get("event_name")
-    #         event_count = entry.get("event_count")
-    #         if event_name is None or event_count is None:
-    #             logger.warning(f"Skipping invalid top DoS data: {entry}")
-    #             continue
-
-    #         transformed.append(
-    #             {
-    #                 "event_name": event_name,
-    #                 "event_count": event_count,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         )
-
-    #     return transformed
+   
     def _transform_top_dos_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -1760,32 +1712,7 @@ class IBMQradar:
             logger.error(f"Error inserting TopDosEventLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_daily_event_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
 
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     transformed = []
-    #     for entry in data_list:
-    #         date = entry.get("date")
-    #         daily_count = entry.get("daily_count")
-    #         if date is None or daily_count is None:
-    #             logger.warning(f"Skipping invalid daily event data: {entry}")
-    #             continue
-
-    #         transformed.append(
-    #             {
-    #                 "date": date,
-    #                 "daily_count": daily_count,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         )
-
-    #     return transformed
     def _transform_daily_event_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -1837,32 +1764,6 @@ class IBMQradar:
             logger.error(f"Error inserting DailyEventLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_top_alert_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     transformed = []
-    #     for entry in data_list:
-    #         alert_name = entry.get("alert_name")
-    #         event_count = entry.get("event_count")
-    #         if alert_name is None or event_count is None:
-    #             logger.warning(f"Skipping invalid top alert data: {entry}")
-    #             continue
-
-    #         transformed.append(
-    #             {
-    #                 "alert_name": alert_name,
-    #                 "event_count": event_count,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         )
-
-    #     return transformed
     def _transform_top_alert_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -1913,36 +1814,7 @@ class IBMQradar:
             logger.error(f"Error inserting TopAlertEventLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_daily_closure_reason_data(
-    #     self, data_list, integration_id, domain_id
-    # ):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
 
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     transformed = []
-    #     for entry in data_list:
-    #         date = entry.get("date")
-    #         closure_reason = entry.get("closure_reason")
-    #         reason_count = entry.get("reason_count")
-    #         if date is None or closure_reason is None or reason_count is None:
-    #             logger.warning(f"Skipping invalid daily closure reason data: {entry}")
-    #             continue
-
-    #         transformed.append(
-    #             {
-    #                 "date": date,
-    #                 "closure_reason": closure_reason,
-    #                 "reason_count": reason_count,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         )
-
-    #     return transformed
     def _transform_daily_closure_reason_data(
         self, data_list, integration_id, domain_id, date=None
     ):
@@ -2000,29 +1872,6 @@ class IBMQradar:
             logger.error(f"Error inserting DailyClosureReasonLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_monthly_avg_eps_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     for entry in data_list:
-    #         monthly_avg_eps = entry.get("monthly_avg_eps")
-    #         if monthly_avg_eps is None:
-    #             logger.warning(f"Skipping invalid monthly avg EPS data: {entry}")
-    #             continue
-
-    #         return [
-    #             {
-    #                 "monthly_avg_eps": monthly_avg_eps,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         ]
-
-    #     return []
     def _transform_monthly_avg_eps_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -2069,29 +1918,6 @@ class IBMQradar:
             logger.error(f"Error inserting MonthlyAvgEpsLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_last_month_avg_eps_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     for entry in data_list:
-    #         last_month_avg_eps = entry.get("last_month_avg_eps")
-    #         if last_month_avg_eps is None:
-    #             logger.warning(f"Skipping invalid last month avg EPS data: {entry}")
-    #             continue
-
-    #         return [
-    #             {
-    #                 "last_month_avg_eps": last_month_avg_eps,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         ]
-
-    #     return []
     def _transform_last_month_avg_eps_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -2137,34 +1963,6 @@ class IBMQradar:
             logger.error(f"Error inserting LastMonthAvgEpsLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_weekly_avg_eps_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     transformed = []
-    #     for entry in data_list:
-    #         week = entry.get("week")
-    #         week_start = entry.get("week_start")
-    #         weekly_avg_eps = entry.get("weekly_avg_eps")
-    #         if week is None or week_start is None or weekly_avg_eps is None:
-    #             logger.warning(f"Skipping invalid weekly avg EPS data: {entry}")
-    #             continue
-
-    #         transformed.append(
-    #             {
-    #                 "week": week,
-    #                 "week_start": week_start,
-    #                 "weekly_avg_eps": weekly_avg_eps,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         )
-
-    #     return transformed
     def _transform_weekly_avg_eps_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -2218,29 +2016,7 @@ class IBMQradar:
             logger.error(f"Error inserting WeeklyAvgEpsLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_total_traffic_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     for entry in data_list:
-    #         total_traffic = entry.get("total_traffic")
-    #         if total_traffic is None:
-    #             logger.warning(f"Skipping invalid total traffic data: {entry}")
-    #             continue
-
-    #         return [
-    #             {
-    #                 "total_traffic": total_traffic,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         ]
-
-    #     return []
+    
     
     def _transform_total_traffic_data(self, data_list, integration_id, domain_id, date=None):
             name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
@@ -2288,32 +2064,6 @@ class IBMQradar:
             logger.error(f"Error inserting TotalTrafficLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_destination_address_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     transformed = []
-    #     for entry in data_list:
-    #         destination_address = entry.get("destinationaddress")
-    #         address_count = entry.get("address_count")
-    #         if destination_address is None or address_count is None:
-    #             logger.warning(f"Skipping invalid destination address data: {entry}")
-    #             continue
-
-    #         transformed.append(
-    #             {
-    #                 "destination_address": destination_address,
-    #                 "address_count": address_count,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         )
-
-    #     return transformed
     def _transform_destination_address_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -2367,8 +2117,38 @@ class IBMQradar:
             logger.error(f"Error inserting DestinationAddressLog records: {str(e)}")
             transaction.rollback()
 
+    # def _transform_top_destination_connection_data(
+    #     self, data_list, integration_id, domain_id
+    # ):
+    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+    #     tenant_id = name_to_id_map.get(domain_id)
+
+    #     if not tenant_id:
+    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+    #         return []
+
+    #     transformed = []
+    #     for entry in data_list:
+    #         destination_address = entry.get("destinationaddress")
+    #         connection_count = entry.get("connection_count")
+    #         if destination_address is None or connection_count is None:
+    #             logger.warning(
+    #                 f"Skipping invalid top destination connection data: {entry}"
+    #             )
+    #             continue
+
+    #         transformed.append(
+    #             {
+    #                 "destination_address": destination_address,
+    #                 "connection_count": connection_count,
+    #                 "integration_id": integration_id,
+    #                 "qradar_tenant_id": tenant_id,
+    #             }
+    #         )
+
+    #     return transformed
     def _transform_top_destination_connection_data(
-        self, data_list, integration_id, domain_id
+        self, data_list, integration_id, domain_id, date=None
     ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -2387,17 +2167,27 @@ class IBMQradar:
                 )
                 continue
 
-            transformed.append(
-                {
-                    "destination_address": destination_address,
-                    "connection_count": connection_count,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                }
-            )
+            if date is None:
+                transformed.append(
+                    {
+                        "destination_address": destination_address,
+                        "connection_count": connection_count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                )
+            else:
+                transformed.append(
+                    {
+                        "destination_address": destination_address,
+                        "connection_count": connection_count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                        "created_at": date,
+                    }
+                )
 
         return transformed
-
     def _insert_top_destination_connection_data(self, data):
         logger.info(f"Inserting {len(data)} TopDestinationConnectionLog records")
         records = [TopDestinationConnectionLog(**item) for item in data]

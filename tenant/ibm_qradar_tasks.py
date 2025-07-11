@@ -1622,54 +1622,6 @@ def sync_destination_address_counts():
         )
 
 
-# @shared_task
-# def sync_destination_address_for_admin(
-#     username, password, ip_address, port, integration_id
-# ):
-#     from datetime import datetime, time  # Import inside function
-
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     # Get today's date range
-#     today = datetime.today().date()
-#     min_dt = datetime.combine(today, time.min)  # 00:00:00
-#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
-
-#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_destination_address_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_DESTINATION_ADDRESS_COUNTS.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing DESTINATION ADDRESS AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(
-#                     f"No destination address data returned for domain {domain_id}"
-#                 )
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_destination_address_data(
-#                 results, integration_id, domain_id
-#             )
-
-#             if transformed:
-#                 ibm_qradar._insert_destination_address_data(transformed)
 @shared_task
 def sync_destination_address_for_admin(
     username, password, ip_address, port, integration_id
@@ -1741,20 +1693,22 @@ def sync_top_destination_connection_counts():
         )
 
 
+
 # @shared_task
 # def sync_top_destination_connection_for_admin(
 #     username, password, ip_address, port, integration_id
 # ):
+#     from datetime import datetime, time  # Import inside function
+
 #     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
-#     now = datetime.now()
-#     end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
-#     start_time = (now - timedelta(days=7)).replace(
-#         hour=0, minute=0, second=0, microsecond=0
-#     )
+#     # Get today's date range
+#     today = datetime.today().date()
+#     min_dt = datetime.combine(today, time.min)  # 00:00:00
+#     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
 
-#     start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+#     start_str = min_dt.strftime("%Y-%m-%d %H:%M:%S")
+#     end_str = max_dt.strftime("%Y-%m-%d %H:%M:%S")
 
 #     with IBMQradar(
 #         username=username, password=password, ip_address=ip_address, port=port
@@ -1788,19 +1742,21 @@ def sync_top_destination_connection_counts():
 #                 results, integration_id, domain_id
 #             )
 
-
 #             if transformed:
 #                 ibm_qradar._insert_top_destination_connection_data(transformed)
 @shared_task
 def sync_top_destination_connection_for_admin(
     username, password, ip_address, port, integration_id
 ):
-    from datetime import datetime, time  # Import inside function
+    from datetime import datetime, time, timedelta  # Import inside function
 
     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
 
+    today = datetime.today().date() - timedelta(days=2)
     # Get today's date range
-    today = datetime.today().date()
+    # TODO: Commenting this
+    # today = datetime.today().date()
+
     min_dt = datetime.combine(today, time.min)  # 00:00:00
     max_dt = datetime.combine(today, time.max)  # 23:59:59.999999
 
@@ -1836,7 +1792,7 @@ def sync_top_destination_connection_for_admin(
 
             results = ibm_qradar._get_eps_results_by_search_id(search_id)
             transformed = ibm_qradar._transform_top_destination_connection_data(
-                results, integration_id, domain_id
+                results, integration_id, domain_id, date=start_str
             )
 
             if transformed:
@@ -1861,54 +1817,6 @@ def sync_daily_event_counts_logs():
         )
 
 
-# @shared_task
-# def sync_daily_event_counts_for_admin(
-#     username, password, ip_address, port, integration_id
-# ):
-#     db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
-#     now = datetime.now()
-#     end_time = now.replace(hour=23, minute=59, second=59, microsecond=0)
-#     start_time = (now - timedelta(days=7)).replace(
-#         hour=0, minute=0, second=0, microsecond=0
-#     )
-
-#     start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-#     end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
-
-#     with IBMQradar(
-#         username=username, password=password, ip_address=ip_address, port=port
-#     ) as ibm_qradar:
-#         logger.info("Running QRadarTasks.sync_daily_event_counts_for_admin() task")
-
-#         for domain_id in db_ids:
-#             query = IBMQradarConstants.AQL_QUERY_FOR_DAILY_EVENT_COUNTS.format(
-#                 domain_id=domain_id,
-#                 start_time=start_str,
-#                 end_time=end_str,
-#             )
-
-#             logger.info(
-#                 f"Executing DAILY EVENT COUNTS AQL for domain {domain_id} ({start_str} → {end_str})"
-#             )
-
-#             search_id = ibm_qradar._get_do_aql_query(query=query)
-#             data_ready = ibm_qradar._check_eps_results_by_search_id(search_id)
-
-#             if not data_ready:
-#                 logger.warning(
-#                     f"No daily event count data returned for domain {domain_id}"
-#                 )
-#                 continue
-
-#             results = ibm_qradar._get_eps_results_by_search_id(search_id)
-#             transformed = ibm_qradar._transform_daily_event_count_data(
-#                 results, integration_id, domain_id
-#             )
-
-
-#             if transformed:
-#                 ibm_qradar._insert_daily_event_count_data(transformed)
 @shared_task
 def sync_daily_event_counts_for_admin(
     username, password, ip_address, port, integration_id
@@ -2122,9 +2030,9 @@ def sync_ibm_qradar_daily_sync():
     # sync_weekly_avg_eps.delay()                                 DONE
     # logger.info("Running sync_total_traffic() task")
     # sync_total_traffic.delay()                                  DONE
-    logger.info("Running sync_destination_address_counts() task")
-    sync_destination_address_counts.delay()
-    # logger.info("Running sync_top_destination_connection_counts() task")
-    # sync_top_destination_connection_counts.delay()
+    # logger.info("Running sync_destination_address_counts() task")
+    # sync_destination_address_counts.delay()                     DONE
+    logger.info("Running sync_top_destination_connection_counts() task")
+    sync_top_destination_connection_counts.delay()
     # logger.info("Running sync_daily_event_counts_logs() task")
     # sync_daily_event_counts_logs.delay()

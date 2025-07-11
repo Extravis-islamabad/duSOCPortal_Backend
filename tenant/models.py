@@ -1090,7 +1090,7 @@ class TopDestinationConnectionLog(models.Model):
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
     destination_address = models.CharField(max_length=45)  # IPv4/IPv6 address length
     connection_count = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
 
     class Meta:
         db_table = "top_destination_connection_log"
