@@ -877,7 +877,7 @@ class EventCountLog(models.Model):
     event_name = models.CharField(max_length=512)
     event_count = models.FloatField()
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

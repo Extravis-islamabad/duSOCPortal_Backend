@@ -1453,9 +1453,7 @@ class IBMQradar:
     #             f"Error in _transform_weekly_correlated_data: {str(e)}", exc_info=True
     #         )
     #         return []
-    def _transform_weekly_correlated_data(
-        self, data_list, integration_id, domain_id, date=None
-    ):
+    def _transform_weekly_correlated_data(self, data_list, integration_id, domain_id, date=None):
         """Transform weekly correlated events data for database insertion"""
         try:
             logger.info(f"Starting weekly transformation for domain {domain_id}")

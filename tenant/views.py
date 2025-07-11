@@ -4539,7 +4539,7 @@ class IncidentReportView(APIView):
                 "assigned": assigned_incidents,
             }
 
-            # Process incident ticket details
+        
             incident_ticket_details = []
             for priority_level in [
                 SlaLevelChoices.P4,
@@ -4573,11 +4573,10 @@ class IncidentReportView(APIView):
                     )
                     continue
 
-                priority_incidents = incidents.filter(
-                    incident_priority=reverse_priority_label.get(
-                        priority_level, "Unknown"
-                    ).split(" ")[0]
-                )
+                # Adjust priority filter to match database incident_priority values
+                priority_key = reverse_priority_label.get(priority_level, "Unknown")
+                priority_incidents = incidents.filter(incident_priority=priority_key)
+
                 open_tickets = priority_incidents.filter(status=1).count()
 
                 sla_breach_tickets = 0
@@ -4589,26 +4588,23 @@ class IncidentReportView(APIView):
                     created = incident.created
                     any_breach = False
 
+                    # Calculate TTA (Time to Acknowledge)
                     if incident.incident_tta and created:
-                        tta_delta = (
-                            incident.incident_tta - created
-                        ).total_seconds() / 60
+                        tta_delta = (incident.incident_tta - created).total_seconds() / 60
                         tta_times.append(tta_delta)
                         if tta_delta > sla_metric.tta_minutes:
                             any_breach = True
 
+                    # Calculate TTN (Time to Notify)
                     if incident.incident_ttn and created:
-                        ttn_delta = (
-                            incident.incident_ttn - created
-                        ).total_seconds() / 60
+                        ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
                         ttn_times.append(ttn_delta)
                         if ttn_delta > sla_metric.ttn_minutes:
                             any_breach = True
 
+                    # Calculate TTDN (Time to Detection)
                     if incident.incident_ttdn and created:
-                        ttdn_delta = (
-                            incident.incident_ttdn - created
-                        ).total_seconds() / 60
+                        ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
                         ttdn_times.append(ttdn_delta)
                         if ttdn_delta > sla_metric.ttdn_minutes:
                             any_breach = True
@@ -4616,6 +4612,7 @@ class IncidentReportView(APIView):
                     if any_breach:
                         sla_breach_tickets += 1
 
+                # Calculate averages, ensuring non-zero results when data exists
                 avg_tta = sum(tta_times) / len(tta_times) if tta_times else 0
                 avg_ttn = sum(ttn_times) / len(ttn_times) if ttn_times else 0
                 avg_ttdn = sum(ttdn_times) / len(ttdn_times) if ttdn_times else 0
@@ -4626,9 +4623,9 @@ class IncidentReportView(APIView):
                         "priority_level": priority_level,
                         "open_tickets": open_tickets,
                         "sla_breach_tickets": sla_breach_tickets,
-                        "avg_tta_minutes": round(avg_tta, 2),
-                        "avg_ttn_minutes": round(avg_ttn, 2),
-                        "avg_ttdn_minutes": round(avg_ttdn, 2),
+                        "avg_tta_minutes": round(avg_tta, 2) if avg_tta > 0 else 0,
+                        "avg_ttn_minutes": round(avg_ttn, 2) if avg_ttn > 0 else 0,
+                        "avg_ttdn_minutes": round(avg_ttdn, 2) if avg_ttdn > 0 else 0,
                         "sla_tta_minutes": sla_metric.tta_minutes,
                         "sla_ttn_minutes": sla_metric.ttn_minutes,
                         "sla_ttdn_minutes": sla_metric.ttdn_minutes,
