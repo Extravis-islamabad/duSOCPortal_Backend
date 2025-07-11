@@ -921,7 +921,7 @@ class WeeklyCorrelatedEventLog(models.Model):
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
     week = models.CharField(max_length=10)
     weekly_count = models.FloatField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
 
     class Meta:
         db_table = "weekly_correlated_event_log"

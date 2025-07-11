@@ -1367,7 +1367,93 @@ class IBMQradar:
             )
             return False
 
-    def _transform_weekly_correlated_data(self, data_list, integration_id, domain_id):
+    # def _transform_weekly_correlated_data(self, data_list, integration_id, domain_id):
+    #     """Transform weekly correlated events data for database insertion"""
+    #     try:
+    #         logger.info(f"Starting weekly transformation for domain {domain_id}")
+    #         logger.info(f"Input weekly data: {data_list}")
+    #         logger.info(f"Integration ID: {integration_id}")
+
+    #         # Get tenant mapping
+    #         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+    #         logger.info(f"Available tenant mappings: {name_to_id_map}")
+
+    #         tenant_id = name_to_id_map.get(domain_id)
+    #         logger.info(f"Tenant ID for domain {domain_id}: {tenant_id}")
+
+    #         if not tenant_id:
+    #             logger.error(f"No QRadar tenant found for domain_id: {domain_id}")
+    #             logger.error(f"Available domain_ids: {list(name_to_id_map.keys())}")
+    #             return []
+
+    #         if not data_list:
+    #             logger.warning("No weekly data received from QRadar")
+    #             return []
+
+    #         # Process each entry in the data list
+    #         transformed_data = []
+    #         for i, entry in enumerate(data_list):
+    #             logger.info(f"Processing weekly entry {i+1}/{len(data_list)}: {entry}")
+
+    #             if not isinstance(entry, dict):
+    #                 logger.warning(f"Expected dict but got {type(entry)}: {entry}")
+    #                 continue
+
+    #             # Extract week and count
+    #             week = entry.get("week")
+    #             weekly_count = entry.get("weekly_count")
+
+    #             # Validate week format
+    #             if not week:
+    #                 logger.warning(f"Missing week in entry: {entry}")
+    #                 continue
+
+    #             # Validate week format (should be yyyy-ww)
+    #             if not isinstance(week, str) or len(week) != 7 or "-" not in week:
+    #                 logger.warning(f"Invalid week format: {week}")
+    #                 continue
+
+    #             # Validate and convert count
+    #             if weekly_count is None:
+    #                 logger.warning(f"Missing weekly_count in entry: {entry}")
+    #                 continue
+
+    #             try:
+    #                 weekly_count = float(weekly_count)
+    #                 if weekly_count < 0:
+    #                     logger.warning(
+    #                         f"Negative weekly count: {weekly_count}, setting to 0"
+    #                     )
+    #                     weekly_count = 0
+    #             except (ValueError, TypeError):
+    #                 logger.warning(
+    #                     f"Invalid weekly_count value: {weekly_count}, skipping entry"
+    #                 )
+    #                 continue
+
+    #             transformed_entry = {
+    #                 "week": week,
+    #                 "weekly_count": weekly_count,
+    #                 "integration_id": integration_id,
+    #                 "qradar_tenant_id": tenant_id,
+    #             }
+
+    #             transformed_data.append(transformed_entry)
+    #             logger.info(
+    #                 f"Successfully transformed weekly entry: {transformed_entry}"
+    #             )
+
+    #         logger.info(
+    #             f"Weekly transformation complete: {len(transformed_data)} records created"
+    #         )
+    #         return transformed_data
+
+    #     except Exception as e:
+    #         logger.error(
+    #             f"Error in _transform_weekly_correlated_data: {str(e)}", exc_info=True
+    #         )
+    #         return []
+    def _transform_weekly_correlated_data(self, data_list, integration_id, domain_id, date=None):
         """Transform weekly correlated events data for database insertion"""
         try:
             logger.info(f"Starting weekly transformation for domain {domain_id}")
@@ -1438,6 +1524,10 @@ class IBMQradar:
                     "qradar_tenant_id": tenant_id,
                 }
 
+                # Add created_at date if provided
+                if date is not None:
+                    transformed_entry["created_at"] = date
+
                 transformed_data.append(transformed_entry)
                 logger.info(
                     f"Successfully transformed weekly entry: {transformed_entry}"
@@ -1453,6 +1543,7 @@ class IBMQradar:
                 f"Error in _transform_weekly_correlated_data: {str(e)}", exc_info=True
             )
             return []
+
 
     def _insert_weekly_correlated_event_data(self, data):
         """Insert weekly correlated event data into database"""
