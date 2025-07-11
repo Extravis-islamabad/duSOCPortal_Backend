@@ -2204,7 +2204,33 @@ class IBMQradar:
             )
             transaction.rollback()
 
-    def _transform_daily_event_count_data(self, data_list, integration_id, domain_id):
+    # def _transform_daily_event_count_data(self, data_list, integration_id, domain_id):
+    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+    #     tenant_id = name_to_id_map.get(domain_id)
+
+    #     if not tenant_id:
+    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+    #         return []
+
+    #     transformed = []
+    #     for entry in data_list:
+    #         full_date = entry.get("full_date")
+    #         daily_count = entry.get("daily_count")
+    #         if full_date is None or daily_count is None:
+    #             logger.warning(f"Skipping invalid daily event count data: {entry}")
+    #             continue
+
+    #         transformed.append(
+    #             {
+    #                 "full_date": full_date,
+    #                 "daily_count": daily_count,
+    #                 "integration_id": integration_id,
+    #                 "qradar_tenant_id": tenant_id,
+    #             }
+    #         )
+
+    #     return transformed
+    def _transform_daily_event_count_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -2220,16 +2246,28 @@ class IBMQradar:
                 logger.warning(f"Skipping invalid daily event count data: {entry}")
                 continue
 
-            transformed.append(
-                {
-                    "full_date": full_date,
-                    "daily_count": daily_count,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                }
-            )
+            if date is None:
+                transformed.append(
+                    {
+                        "full_date": full_date,
+                        "daily_count": daily_count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                )
+            else:
+                transformed.append(
+                    {
+                        "full_date": full_date,
+                        "daily_count": daily_count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                        "created_at": date,
+                    }
+                )
 
         return transformed
+
 
     def _insert_daily_event_count_data(self, data):
         logger.info(f"Inserting {len(data)} DailyEventCountLog records")
