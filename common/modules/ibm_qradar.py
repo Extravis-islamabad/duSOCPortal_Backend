@@ -2288,7 +2288,33 @@ class IBMQradar:
             logger.error(f"Error inserting TotalTrafficLog records: {str(e)}")
             transaction.rollback()
 
-    def _transform_destination_address_data(self, data_list, integration_id, domain_id):
+    # def _transform_destination_address_data(self, data_list, integration_id, domain_id):
+    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+    #     tenant_id = name_to_id_map.get(domain_id)
+
+    #     if not tenant_id:
+    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+    #         return []
+
+    #     transformed = []
+    #     for entry in data_list:
+    #         destination_address = entry.get("destinationaddress")
+    #         address_count = entry.get("address_count")
+    #         if destination_address is None or address_count is None:
+    #             logger.warning(f"Skipping invalid destination address data: {entry}")
+    #             continue
+
+    #         transformed.append(
+    #             {
+    #                 "destination_address": destination_address,
+    #                 "address_count": address_count,
+    #                 "integration_id": integration_id,
+    #                 "qradar_tenant_id": tenant_id,
+    #             }
+    #         )
+
+    #     return transformed
+    def _transform_destination_address_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
 
@@ -2304,16 +2330,28 @@ class IBMQradar:
                 logger.warning(f"Skipping invalid destination address data: {entry}")
                 continue
 
-            transformed.append(
-                {
-                    "destination_address": destination_address,
-                    "address_count": address_count,
-                    "integration_id": integration_id,
-                    "qradar_tenant_id": tenant_id,
-                }
-            )
+            if date is None:
+                transformed.append(
+                    {
+                        "destination_address": destination_address,
+                        "address_count": address_count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                    }
+                )
+            else:
+                transformed.append(
+                    {
+                        "destination_address": destination_address,
+                        "address_count": address_count,
+                        "integration_id": integration_id,
+                        "qradar_tenant_id": tenant_id,
+                        "created_at": date,
+                    }
+                )
 
         return transformed
+
 
     def _insert_destination_address_data(self, data):
         logger.info(f"Inserting {len(data)} DestinationAddressLog records")
