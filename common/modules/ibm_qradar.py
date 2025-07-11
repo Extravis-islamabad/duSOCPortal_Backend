@@ -1109,10 +1109,41 @@ class IBMQradar:
             logger.error(f"Error in IBMQRadar._insert_total_events(): {str(e)}")
             transaction.rollback()
 
-    def _transform_event_count_data(self, data_list, integration_id, domain_id):
+    # def _transform_event_count_data(self, data_list, integration_id, domain_id):
+    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+    #     tenant_id = name_to_id_map.get(domain_id)
+    #     transformed = []
+
+    #     for entry in data_list:
+    #         event_name = entry.get("event_name")
+    #         event_count = entry.get("event_count")
+
+    #         if not event_name or event_count is None:
+    #             logger.warning(f"Skipping invalid event data: {entry}")
+    #             continue
+
+    #         if not tenant_id:
+    #             logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+    #             continue
+
+    #         transformed.append(
+    #             {
+    #                 "event_name": event_name.strip(),
+    #                 "event_count": event_count,
+    #                 "qradar_tenant_id": tenant_id,
+    #                 "integration_id": integration_id,
+    #             }
+    #         )
+
+    #     return transformed
+    def _transform_event_count_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
         transformed = []
+
+        if not tenant_id:
+            logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
+            return transformed
 
         for entry in data_list:
             event_name = entry.get("event_name")
@@ -1122,18 +1153,25 @@ class IBMQradar:
                 logger.warning(f"Skipping invalid event data: {entry}")
                 continue
 
-            if not tenant_id:
-                logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-                continue
-
-            transformed.append(
-                {
-                    "event_name": event_name.strip(),
-                    "event_count": event_count,
-                    "qradar_tenant_id": tenant_id,
-                    "integration_id": integration_id,
-                }
-            )
+            if date is None:
+                transformed.append(
+                    {
+                        "event_name": event_name.strip(),
+                        "event_count": event_count,
+                        "qradar_tenant_id": tenant_id,
+                        "integration_id": integration_id,
+                    }
+                )
+            else:
+                transformed.append(
+                    {
+                        "event_name": event_name.strip(),
+                        "event_count": event_count,
+                        "qradar_tenant_id": tenant_id,
+                        "integration_id": integration_id,
+                        "created_at": date,
+                    }
+                )
 
         return transformed
 
@@ -1453,7 +1491,9 @@ class IBMQradar:
     #             f"Error in _transform_weekly_correlated_data: {str(e)}", exc_info=True
     #         )
     #         return []
-    def _transform_weekly_correlated_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_weekly_correlated_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         """Transform weekly correlated events data for database insertion"""
         try:
             logger.info(f"Starting weekly transformation for domain {domain_id}")
