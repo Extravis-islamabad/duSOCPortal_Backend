@@ -131,14 +131,14 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
-    AQL_QUERY_FOR_SUSPICIOUS_EVENTS = """
-    SELECT COUNT(*) AS total_suspicious_events
-    FROM events
-    WHERE domainid = {domain_id}
-    AND highLevelCategory = 7000
-    START PARSEDATETIME('{start_time}')
-    STOP PARSEDATETIME('{end_time}')
-    """
+    # AQL_QUERY_FOR_SUSPICIOUS_EVENTS = """
+    # SELECT COUNT(*) AS total_suspicious_events
+    # FROM events
+    # WHERE domainid = {domain_id}
+    # AND highLevelCategory = 7000
+    # START PARSEDATETIME('{start_time}')
+    # STOP PARSEDATETIME('{end_time}')
+    # """
     AQL_QUERY_FOR_DOS_EVENTS = """
     SELECT COUNT(*) AS total_dos_events
     FROM events
@@ -265,7 +265,7 @@ class IBMQradarConstants:
     WHERE domainid = {domain_id}
     GROUP BY destinationaddress
     ORDER BY connection_count DESC
-    LIMIT 5
+
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
@@ -281,7 +281,7 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
     AQL_QUERY_FOR_SUCCESSFUL_LOGONS = """
-    SELECT
+    SELECT 
         username,
         qidname(qid) AS logon_type,
         sourceip,
@@ -298,13 +298,13 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
-
+    
     AQL_QUERY_FOR_REMOTE_USERS_COUNT = """
     SELECT UNIQUECOUNT(username) AS total_remote_users
     FROM events
     WHERE domainid = {domain_id}
-     AND (LOWER(rulename(creeventlist)) LIKE '%vpn%'
-         OR LOWER(rulename(creeventlist)) LIKE '%remote%'
+     AND (LOWER(rulename(creeventlist)) LIKE '%vpn%' 
+         OR LOWER(rulename(creeventlist)) LIKE '%remote%' 
          OR LOWER(rulename(creeventlist)) LIKE '%ssh%')
      AND username IS NOT NULL
     START PARSEDATETIME('{start_time}')
@@ -373,7 +373,3 @@ class FilterType(Enum):
 
 
 SEVERITY_LABELS = {0: "Unknown", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
-
-
-class SAORExcludedTenants:
-    ACCOUNT = "acc_CDC-Mey-DuSentinel"
