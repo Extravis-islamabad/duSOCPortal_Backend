@@ -1424,6 +1424,13 @@ class IncidentsView(APIView):
 
         # Step 5: Initialize filters with Q object
         filters = Q(cortex_soar_tenant__in=soar_ids)
+        filters &= (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+        )
 
         # Step 6: Apply non-date filters
         if id_filter:
@@ -1719,6 +1726,9 @@ class IncidentDetailView(APIView):
                     "qradar_sub_category",
                     "incident_tta",
                     "tta_calculation",
+                    "incident_tta",
+                    "incident_ttn",
+                    "incident_ttdn",
                     "source_ips",
                     "log_source_type",
                     "list_of_rules_offense",
@@ -1852,10 +1862,6 @@ class IncidentDetailView(APIView):
                         }
                     )
 
-            # Determine priority
-            # priority = incident["incident_priority"] or (
-            #     {1: "P1", 2: "P2", 3: "P3", 4: "P4"}.get(incident["severity"], "P4")
-            # )
             ticket_id = None
             ticket_db_id = None
             ticket = DuITSMFinalTickets.objects.filter(
@@ -1898,14 +1904,13 @@ class IncidentDetailView(APIView):
                         if incident["modified"]
                         else "Unknown"
                     ),
-                    "creator": "System",  # No creator field in schema
                     "assignee": (
                         "N/A" if incident["owner"] == " " else incident["owner"]
                     ),
                     "description": incident["name"].strip().split(" ", 1)[1],
                     "customFields": {
                         "phase": incident["incident_phase"] or "Detection",
-                        "priority": incident["incident_phase"] or None,
+                        "priority": incident["incident_priority"] or None,
                         "severity": incident["severity"],
                         "sourceIPs": source_ips_str,
                         "logSourceType": log_source_type_str,
@@ -1925,6 +1930,9 @@ class IncidentDetailView(APIView):
                     "offense_db_id": offense_db_id,
                     "ticket_id": ticket_id,
                     "ticket_db_id": ticket_db_id,
+                    "tta": incident["incident_tta"],
+                    "ttn": incident["incident_ttn"],
+                    "ttdn": incident["incident_ttdn"],
                 }
             }
 
