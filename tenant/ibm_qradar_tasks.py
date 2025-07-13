@@ -468,6 +468,7 @@ def sync_ibm_admin_eps():
 #             if transformed:
 #                 ibm_qradar._insert_event_count_data(transformed)
 
+
 @shared_task
 def sync_event_count_for_admin(username, password, ip_address, port, integration_id):
     from datetime import datetime, time, timedelta  # Import inside function
@@ -511,6 +512,7 @@ def sync_event_count_for_admin(username, password, ip_address, port, integration
             )
             if transformed:
                 ibm_qradar._insert_event_count_data(transformed)
+
 
 # @shared_task
 # def sync_recon_for_admin(username, password, ip_address, port, integration_id):

@@ -1136,7 +1136,9 @@ class IBMQradar:
     #         )
 
     #     return transformed
-    def _transform_event_count_data(self, data_list, integration_id, domain_id, date=None):
+    def _transform_event_count_data(
+        self, data_list, integration_id, domain_id, date=None
+    ):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
         transformed = []
