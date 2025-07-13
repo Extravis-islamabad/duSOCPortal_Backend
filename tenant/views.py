@@ -510,6 +510,7 @@ class GetTenantAssetsStats(APIView):
             error_assets = base_queryset.filter(status__iexact="error").count()
             na_assets = base_queryset.filter(status__iexact="na").count()
             disabled_assets = base_queryset.filter(status__iexact="disabled").count()
+            warning_assets = base_queryset.filter(status__iexact="warn").count()
             return Response(
                 {
                     "total_assets": total_assets,
@@ -517,6 +518,7 @@ class GetTenantAssetsStats(APIView):
                     "error_assets": error_assets,
                     "disabled_assets": disabled_assets,
                     "na_assets": na_assets,
+                    "warning_assets": warning_assets,
                 },
                 status=status.HTTP_200_OK,
             )
