@@ -13,10 +13,10 @@ from django.db.models import (
     F,
     FloatField,
     IntegerField,
+    Min,
     Q,
     Sum,
     When,
-    Min
 )
 from django.db.models.functions import ExtractSecond, TruncDate, TruncDay, TruncHour
 from django.utils import timezone
@@ -455,6 +455,74 @@ class GetTenantAssetsList(APIView):
 
         except Exception as e:
             logger.error(f"Error in GetTenantAssetsList: {str(e)}")
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetTenantAssetsStats(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        """
+        Return asset statistics:
+        - total_assets
+        - success_assets
+        - error_assets
+        """
+        try:
+            tenant = Tenant.objects.select_related("tenant").get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            siem_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SIEM_INTEGRATION,
+                siem_subtype=SiemSubTypes.IBM_QRADAR,
+                status=True,
+            )
+            if not siem_integrations.exists():
+                return Response(
+                    {"error": "No active SIEM integration configured for tenant."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            collector_ids = (
+                TenantQradarMapping.objects.filter(company=tenant.company)
+                .prefetch_related("event_collectors")
+                .values_list("event_collectors__id", flat=True)
+            )
+            if not collector_ids:
+                return Response(
+                    {"detail": "No Event Collectors mapped to this tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            base_queryset = IBMQradarAssests.objects.filter(
+                event_collector_id__in=collector_ids
+            )
+
+            total_assets = base_queryset.count()
+            success_assets = base_queryset.filter(status__iexact="success").count()
+            error_assets = base_queryset.filter(status__iexact="error").count()
+            na_assets = base_queryset.filter(status__iexact="na").count()
+            disabled_assets = base_queryset.filter(status__iexact="disabled").count()
+            return Response(
+                {
+                    "total_assets": total_assets,
+                    "success_assets": success_assets,
+                    "error_assets": error_assets,
+                    "disabled_assets": disabled_assets,
+                    "na_assets": na_assets,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error(f"Error in GetTenantAssetsStats: {str(e)}")
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -4540,7 +4608,6 @@ class IncidentReportView(APIView):
                 "assigned": assigned_incidents,
             }
 
-        
             incident_ticket_details = []
             for priority_level in [
                 SlaLevelChoices.P4,
@@ -4591,21 +4658,27 @@ class IncidentReportView(APIView):
 
                     # Calculate TTA (Time to Acknowledge)
                     if incident.incident_tta and created:
-                        tta_delta = (incident.incident_tta - created).total_seconds() / 60
+                        tta_delta = (
+                            incident.incident_tta - created
+                        ).total_seconds() / 60
                         tta_times.append(tta_delta)
                         if tta_delta > sla_metric.tta_minutes:
                             any_breach = True
 
                     # Calculate TTN (Time to Notify)
                     if incident.incident_ttn and created:
-                        ttn_delta = (incident.incident_ttn - created).total_seconds() / 60
+                        ttn_delta = (
+                            incident.incident_ttn - created
+                        ).total_seconds() / 60
                         ttn_times.append(ttn_delta)
                         if ttn_delta > sla_metric.ttn_minutes:
                             any_breach = True
 
                     # Calculate TTDN (Time to Detection)
                     if incident.incident_ttdn and created:
-                        ttdn_delta = (incident.incident_ttdn - created).total_seconds() / 60
+                        ttdn_delta = (
+                            incident.incident_ttdn - created
+                        ).total_seconds() / 60
                         ttdn_times.append(ttdn_delta)
                         if ttdn_delta > sla_metric.ttdn_minutes:
                             any_breach = True
@@ -5030,7 +5103,7 @@ class IncidentReportView(APIView):
                 or 0
             )
             # weekly_avg_eps = (
-            
+
             #     WeeklyAvgEpsLog.objects.filter(created_at__gte=date_threshold)
             #     .order_by("week")
             #     .values("week", "week_start", "weekly_avg_eps")
@@ -5041,7 +5114,12 @@ class IncidentReportView(APIView):
                 .values("week", "week_start", "created_at_date")
                 .annotate(weekly_avg_eps=Avg("weekly_avg_eps"))
                 .order_by("week_start")
-                .values("week", "week_start", "weekly_avg_eps", created_at=F("created_at_date"))
+                .values(
+                    "week",
+                    "week_start",
+                    "weekly_avg_eps",
+                    created_at=F("created_at_date"),
+                )
             )
             total_traffic = (
                 TotalTrafficLog.objects.filter(
