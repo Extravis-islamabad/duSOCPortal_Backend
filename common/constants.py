@@ -370,6 +370,7 @@ class FilterType(Enum):
     LAST_6_MONTHS = 6  # Represents "Last 6 months"
     LAST_3_WEEKS = 7  # Represents "Last 3 weeks"
     LAST_MONTH = 8  # Repre
+    CUSTOM_RANGE = 9
 
 
 SEVERITY_LABELS = {0: "Unknown", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
