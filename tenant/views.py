@@ -2902,6 +2902,90 @@ class EPSCountValuesByDomainAPIView(APIView):
             )
 
 
+# class EPSGraphAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             filter_value = int(
+#                 request.query_params.get("filter_type", FilterType.TODAY.value)
+#             )
+#             filter_enum = FilterType(filter_value)
+#         except (ValueError, KeyError):
+#             return Response(
+#                 {
+#                     "error": "Invalid filter value. Use 1 (TODAY), 2 (WEEK), or 3 (MONTH)."
+#                 },
+#                 status=400,
+#             )
+
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+
+#         now = timezone.now()
+#         if filter_enum == FilterType.TODAY:
+#             start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+#             time_trunc = TruncHour("created_at")
+#         elif filter_enum == FilterType.WEEK:
+#             start_time = now - timedelta(days=6)
+#             time_trunc = TruncDay("created_at")
+#         elif filter_enum == FilterType.MONTH:
+#             start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+#             time_trunc = TruncDate("created_at")
+#         else:
+#             return Response(
+#                 {"error": "Invalid filter. Use 'day', 'week', or 'month'."}, status=400
+#             )
+
+#         # Get relevant qradar domains
+#         qradar_tenant_ids = tenant.company.qradar_mappings.values_list(
+#             "qradar_tenant__id", flat=True
+#         )
+
+#         # EPS data
+#         eps_data_raw = (
+#             IBMQradarEPS.objects.filter(
+#                 domain_id__in=qradar_tenant_ids, created_at__gte=start_time
+#             )
+#             .annotate(interval=time_trunc)
+#             .values("interval")
+#             .annotate(total_eps=Sum("eps"))
+#             .order_by("interval")
+#         )
+
+#         eps_data = [
+#             {
+#                 "interval": entry["interval"],
+#                 "total_eps": float(
+#                     Decimal(entry["total_eps"]).quantize(
+#                         Decimal("0.01"), rounding=ROUND_HALF_UP
+#                     )
+#                 ),
+#             }
+#             for entry in eps_data_raw
+#         ]
+#         # Get contracted volume info (we assume only one mapping per company)
+#         mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
+#         contracted_volume = mapping.contracted_volume if mapping else None
+#         contracted_volume_type = mapping.contracted_volume_type if mapping else None
+#         contracted_volume_type_display = (
+#             mapping.get_contracted_volume_type_display() if mapping else None
+#         )
+
+#         return Response(
+#             {
+#                 "contracted_volume": contracted_volume,
+#                 "contracted_volume_type": contracted_volume_type,
+#                 "contracted_volume_type_display": contracted_volume_type_display,
+#                 "eps_graph": eps_data,
+#             },
+#             status=200,
+#         )
+
+
 class EPSGraphAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2914,18 +2998,20 @@ class EPSGraphAPIView(APIView):
             filter_enum = FilterType(filter_value)
         except (ValueError, KeyError):
             return Response(
-                {
-                    "error": "Invalid filter value. Use 1 (TODAY), 2 (WEEK), or 3 (MONTH)."
-                },
-                status=400,
+                {"error": "Invalid filter value."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found."}, status=404)
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         now = timezone.now()
+
+        # Determine time range and truncation
         if filter_enum == FilterType.TODAY:
             start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
             time_trunc = TruncHour("created_at")
@@ -2935,21 +3021,66 @@ class EPSGraphAPIView(APIView):
         elif filter_enum == FilterType.MONTH:
             start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             time_trunc = TruncDate("created_at")
+        elif filter_enum == FilterType.YEAR:
+            start_time = now.replace(
+                month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            time_trunc = TruncDate("created_at")
+        elif filter_enum == FilterType.QUARTER:
+            month = (now.month - 1) // 3 * 3 + 1
+            start_time = now.replace(
+                month=month, day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            time_trunc = TruncDate("created_at")
+        elif filter_enum == FilterType.LAST_6_MONTHS:
+            start_time = now - timedelta(days=182)
+            time_trunc = TruncDate("created_at")
+        elif filter_enum == FilterType.LAST_3_WEEKS:
+            start_time = now - timedelta(weeks=3)
+            time_trunc = TruncDate("created_at")
+        elif filter_enum == FilterType.LAST_MONTH:
+            first_day_this_month = now.replace(day=1)
+            last_month = first_day_this_month - timedelta(days=1)
+            start_time = last_month.replace(day=1)
+            time_trunc = TruncDate("created_at")
+        elif filter_enum == FilterType.CUSTOM_RANGE:
+            start_str = request.query_params.get("start_date")
+            end_str = request.query_params.get("end_date")
+            try:
+                start_time = datetime.strptime(start_str, "%Y-%m-%d")
+                end_time = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
+                if start_time > end_time:
+                    return Response(
+                        {"error": "Start date must be before end date."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            except (ValueError, TypeError):
+                return Response(
+                    {"error": "Invalid custom date format. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            time_trunc = TruncDate("created_at")
         else:
             return Response(
-                {"error": "Invalid filter. Use 'day', 'week', or 'month'."}, status=400
+                {"error": "Unsupported filter."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Get relevant qradar domains
+        # Get QRadar domain IDs
         qradar_tenant_ids = tenant.company.qradar_mappings.values_list(
             "qradar_tenant__id", flat=True
         )
 
-        # EPS data
+        # If custom range, apply both start and end time
+        filter_kwargs = {"domain_id__in": qradar_tenant_ids}
+        if filter_enum == FilterType.CUSTOM_RANGE:
+            filter_kwargs["created_at__range"] = (start_time, end_time)
+        else:
+            filter_kwargs["created_at__gte"] = start_time
+
+        # Query EPS data
         eps_data_raw = (
-            IBMQradarEPS.objects.filter(
-                domain_id__in=qradar_tenant_ids, created_at__gte=start_time
-            )
+            IBMQradarEPS.objects.filter(**filter_kwargs)
             .annotate(interval=time_trunc)
             .values("interval")
             .annotate(total_eps=Sum("eps"))
@@ -2967,7 +3098,8 @@ class EPSGraphAPIView(APIView):
             }
             for entry in eps_data_raw
         ]
-        # Get contracted volume info (we assume only one mapping per company)
+
+        # Contracted volume info
         mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
         contracted_volume = mapping.contracted_volume if mapping else None
         contracted_volume_type = mapping.contracted_volume_type if mapping else None
