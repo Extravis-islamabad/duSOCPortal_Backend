@@ -1020,6 +1020,7 @@ class IBMQradarAssestsSerializer(serializers.ModelSerializer):
 class DuITSMTicketsSerializer(serializers.ModelSerializer):
     itsm_tenant = serializers.SerializerMethodField()
     integration = serializers.SerializerMethodField()
+    soar_owner = serializers.SerializerMethodField()
 
     class Meta:
         model = DuITSMFinalTickets
@@ -1033,6 +1034,7 @@ class DuITSMTicketsSerializer(serializers.ModelSerializer):
             "created_by_name",
             "account_name",
             "soar_id",
+            "soar_owner",
             "status",
             "created_at",
             "updated_at",
@@ -1045,6 +1047,17 @@ class DuITSMTicketsSerializer(serializers.ModelSerializer):
 
     def get_integration(self, obj):
         return obj.integration.instance_name if obj.integration else None
+
+    def get_soar_owner(self, obj):
+        if not obj.soar_id:
+            return None
+        try:
+            incident = DUCortexSOARIncidentFinalModel.objects.filter(
+                db_id=obj.soar_id
+            ).first()
+            return incident.owner
+        except DUCortexSOARIncidentFinalModel.DoesNotExist:
+            return None
 
 
 class DUCortexSOARIncidentSerializer(serializers.ModelSerializer):
