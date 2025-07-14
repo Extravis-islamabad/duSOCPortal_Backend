@@ -1669,6 +1669,7 @@ class DashboardView(APIView):
 #                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
 #             )
 
+
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1913,7 +1914,9 @@ class IncidentsView(APIView):
 
                 # Use isoformat() for consistent datetime formatting
                 created_date = row["created"].isoformat() if row["created"] else "N/A"
-                created_at_date = row["created_at"].isoformat() if row.get("created_at") else "N/A"
+                created_at_date = (
+                    row["created_at"].isoformat() if row.get("created_at") else "N/A"
+                )
                 occurred_date = row["occured"].isoformat() if row["occured"] else "N/A"
 
                 description = (
@@ -1960,6 +1963,8 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5618,6 +5623,7 @@ class SLASeverityMetricsView(APIView):
 #                 status=200,
 #             )
 
+
 #         except Exception as e:
 #             logger.error(f"Error in IncidentReportView: {str(e)}")
 #             return Response({"error": str(e)}, status=500)
@@ -6265,12 +6271,16 @@ class IncidentReportView(APIView):
                 incident_filters
             ).count()
             open_counts = (
-                DUCortexSOARIncidentFinalModel.objects.filter(incident_filters, status=1)
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    incident_filters, status=1
+                )
                 .values("incident_priority")
                 .annotate(count=Count("id"))
             )
             closed_counts = (
-                DUCortexSOARIncidentFinalModel.objects.filter(incident_filters, status=2)
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    incident_filters, status=2
+                )
                 .values("incident_priority")
                 .annotate(count=Count("id"))
             )
@@ -6396,14 +6406,16 @@ class IncidentReportView(APIView):
 
             # Apply date filters to all log queries
             total_eps = (
-                TotalEvents.objects.filter(log_filters).aggregate(total_eps=Sum("total_events"))[
-                    "total_eps"
-                ]
+                TotalEvents.objects.filter(log_filters).aggregate(
+                    total_eps=Sum("total_events")
+                )["total_eps"]
                 or 0
             )
-            suspicious_activities = EventCountLog.objects.filter(log_filters).order_by("-event_count")[
-                :10
-            ].values("event_name", "event_count")
+            suspicious_activities = (
+                EventCountLog.objects.filter(log_filters)
+                .order_by("-event_count")[:10]
+                .values("event_name", "event_count")
+            )
             recon_event_count = (
                 ReconEventLog.objects.filter(log_filters).aggregate(
                     total=Sum("total_recon_events")
@@ -6492,9 +6504,7 @@ class IncidentReportView(APIView):
             daily_event_count = (
                 DailyEventCountLog.objects.filter(log_filters)
                 .values("full_date")
-                .annotate(
-                    daily_count=Min("daily_count")
-                )
+                .annotate(daily_count=Min("daily_count"))
                 .order_by("full_date")
             )
 
