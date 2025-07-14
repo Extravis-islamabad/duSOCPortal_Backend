@@ -1049,15 +1049,32 @@ class DuITSMTicketsSerializer(serializers.ModelSerializer):
         return obj.integration.instance_name if obj.integration else None
 
     def get_soar_owner(self, obj):
+        """
+        Return the `owner` from DUCortexSOARIncidentFinalModel that
+        matches this ticket's `soar_id` **and** belongs to the current tenant's SOAR accounts.
+        """
         if not obj.soar_id:
             return None
-        try:
-            incident = DUCortexSOARIncidentFinalModel.objects.filter(
-                db_id=obj.soar_id
-            ).first()
-            return incident.owner
-        except DUCortexSOARIncidentFinalModel.DoesNotExist:
+
+        # The serializer receives the request via context in the view.
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
             return None
+
+        # Identify the tenant of the current user
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return None
+
+        soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
+
+        # Fetch the first matching incident inside those SOAR tenants
+        incident = DUCortexSOARIncidentFinalModel.objects.filter(
+            db_id=obj.soar_id, cortex_soar_tenant_id__in=soar_ids
+        ).first()
+
+        return incident.owner if incident else None
 
 
 class DUCortexSOARIncidentSerializer(serializers.ModelSerializer):

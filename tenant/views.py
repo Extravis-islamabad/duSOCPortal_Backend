@@ -731,7 +731,7 @@ class TenantITSMTicketDetailView(APIView):
                 status=404,
             )
 
-        serializer = DuITSMTicketsSerializer(ticket)
+        serializer = DuITSMTicketsSerializer(ticket, context={"request": request})
         return Response(serializer.data, status=200)
 
 
