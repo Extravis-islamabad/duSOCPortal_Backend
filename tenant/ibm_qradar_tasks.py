@@ -172,6 +172,7 @@ def sync_offenses():
             )
             if transformed_data:
                 ibm_qradar._insert_offenses(transformed_data)
+            ibm_qradar.backfill_offense_dates()
 
 
 @shared_task
