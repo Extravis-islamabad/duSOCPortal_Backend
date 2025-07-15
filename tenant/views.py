@@ -1669,7 +1669,6 @@ class DashboardView(APIView):
 #                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
 #             )
 
-
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1914,9 +1913,7 @@ class IncidentsView(APIView):
 
                 # Use isoformat() for consistent datetime formatting
                 created_date = row["created"].isoformat() if row["created"] else "N/A"
-                created_at_date = (
-                    row["created_at"].isoformat() if row.get("created_at") else "N/A"
-                )
+                created_at_date = row["created_at"].isoformat() if row.get("created_at") else "N/A"
                 occurred_date = row["occured"].isoformat() if row["occured"] else "N/A"
 
                 description = (
@@ -1963,8 +1960,6 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4347,6 +4342,122 @@ class SLAIncidentsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
+# class SLAComplianceView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#             logger.info(f"SLAComplianceView | Authenticated Tenant ID: {tenant.id}")
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+
+#         try:
+#             soar_integrations = tenant.company.integrations.filter(
+#                 integration_type=IntegrationTypes.SOAR_INTEGRATION,
+#                 soar_subtype=SoarSubTypes.CORTEX_SOAR,
+#                 status=True,
+#             )
+#             if not soar_integrations.exists():
+#                 return Response(
+#                     {"error": "No active SOAR integration configured."}, status=400
+#                 )
+
+#             soar_tenants = tenant.company.soar_tenants.all()
+#             if not soar_tenants:
+#                 return Response({"error": "No SOAR tenants found."}, status=404)
+#             soar_ids = [t.id for t in soar_tenants]
+
+#             filters = Q(cortex_soar_tenant_id__in=soar_ids)
+
+#             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+#                 filters,
+#                 incident_tta__isnull=False,
+#                 incident_ttn__isnull=False,
+#                 incident_ttdn__isnull=False,
+#             )
+
+#             if tenant.company.is_default_sla:
+#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
+#             else:
+#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
+#                     soar_tenant__in=soar_tenants, company=tenant.company
+#                 )
+
+#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+#             priority_map = {
+#                 "P1 Critical": SlaLevelChoices.P1,
+#                 "P2 High": SlaLevelChoices.P2,
+#                 "P3 Medium": SlaLevelChoices.P3,
+#                 "P4 Low": SlaLevelChoices.P4,
+#             }
+
+#             met_sla_count = 0
+#             breached_sla_count = 0
+#             total_incident_count = 0
+
+#             for incident in incidents:
+#                 sla_level = priority_map.get(incident.incident_priority)
+#                 if not sla_level:
+#                     continue
+
+#                 sla_metric = sla_metrics_dict.get(sla_level)
+#                 if not sla_metric:
+#                     continue
+
+#                 total_incident_count += 1
+#                 created = incident.created
+#                 any_breach = False
+
+#                 if incident.incident_tta:
+#                     tta_minutes = (incident.incident_tta - created).total_seconds() / 60
+#                     if tta_minutes > sla_metric.tta_minutes:
+#                         any_breach = True
+
+#                 if incident.incident_ttn:
+#                     ttn_minutes = (incident.incident_ttn - created).total_seconds() / 60
+#                     if ttn_minutes > sla_metric.ttn_minutes:
+#                         any_breach = True
+
+#                 if incident.incident_ttdn:
+#                     ttdn_minutes = (
+#                         incident.incident_ttdn - created
+#                     ).total_seconds() / 60
+#                     if ttdn_minutes > sla_metric.ttdn_minutes:
+#                         any_breach = True
+
+#                 if any_breach:
+#                     breached_sla_count += 1
+#                 else:
+#                     met_sla_count += 1
+
+#             incident_met_percentage = (
+#                 round((met_sla_count / total_incident_count) * 100, 2)
+#                 if total_incident_count > 0
+#                 else 0.0
+#             )
+#             total_breach_incident_percentage = (
+#                 round((breached_sla_count / total_incident_count) * 100, 2)
+#                 if total_incident_count > 0
+#                 else 0.0
+#             )
+
+#             return Response(
+#                 {
+#                     "total_breached_incidents": breached_sla_count,
+#                     "total_met_target_incidents": met_sla_count,
+#                     "overall_compliance_percentage": incident_met_percentage,
+#                     "incident_met_percentage": incident_met_percentage,
+#                     "total_breach_incident_percentage": total_breach_incident_percentage,
+#                 }
+#             )
+
+#         except Exception as e:
+#             logger.error(f"SLAComplianceView Error: {str(e)}")
+#             return Response({"error": str(e)}, status=500)
+
 class SLAComplianceView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4374,14 +4485,17 @@ class SLAComplianceView(APIView):
                 return Response({"error": "No SOAR tenants found."}, status=404)
             soar_ids = [t.id for t in soar_tenants]
 
+            # Apply the same filters as in SLASeverityMetricsView
             filters = Q(cortex_soar_tenant_id__in=soar_ids)
-
-            incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                filters,
-                incident_tta__isnull=False,
-                incident_ttn__isnull=False,
-                incident_ttdn__isnull=False,
+            filters &= (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
             )
+
+            incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
 
             if tenant.company.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
@@ -4451,19 +4565,20 @@ class SLAComplianceView(APIView):
 
             return Response(
                 {
+                    "total_incidents": total_incident_count,
                     "total_breached_incidents": breached_sla_count,
-                    "total_met_target_incidents": met_sla_count,
+                    "total_met_incidents": met_sla_count,
                     "overall_compliance_percentage": incident_met_percentage,
                     "incident_met_percentage": incident_met_percentage,
-                    "total_breach_incident_percentage": total_breach_incident_percentage,
+                    "breach_percentage": total_breach_incident_percentage,
+                    "compliance_status": "fulfilled" if incident_met_percentage >= 80 else "breached",
                 }
             )
 
         except Exception as e:
             logger.error(f"SLAComplianceView Error: {str(e)}")
             return Response({"error": str(e)}, status=500)
-
-
+        
 class SLASeverityIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4597,6 +4712,105 @@ class SLASeverityIncidentsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
+# class SLASeverityMetricsView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         try:
+#             soar_tenants = tenant.company.soar_tenants.all()
+#             if not soar_tenants:
+#                 return Response(
+#                     {"error": "No SOAR tenants found."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+#             soar_ids = [t.id for t in soar_tenants]
+
+#             if tenant.company.is_default_sla:
+#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
+#             else:
+#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
+#                     soar_tenant__in=soar_tenants, company=tenant.company
+#                 )
+
+#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+#             response_list = []
+
+#             severity_levels = {
+#                 SlaLevelChoices.P1: 4,
+#                 SlaLevelChoices.P2: 3,
+#                 SlaLevelChoices.P3: 2,
+#                 SlaLevelChoices.P4: 1,
+#             }
+
+#             for level in severity_levels:
+#                 sla = sla_metrics_dict.get(level)
+#                 if not sla:
+#                     continue
+
+#                 incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+#                     cortex_soar_tenant_id__in=soar_ids,
+#                     incident_priority=SlaLevelChoices(level).label,
+#                     incident_tta__isnull=False,
+#                     incident_ttn__isnull=False,
+#                     incident_ttdn__isnull=False,
+#                 )
+
+#                 total = incidents.count()
+#                 met = 0
+
+#                 for inc in incidents:
+#                     created = inc.created
+#                     any_breach = False
+
+#                     if inc.incident_tta:
+#                         tta_delta = (inc.incident_tta - created).total_seconds() / 60
+#                         if tta_delta > sla.tta_minutes:
+#                             any_breach = True
+
+#                     if inc.incident_ttn:
+#                         ttn_delta = (inc.incident_ttn - created).total_seconds() / 60
+#                         if ttn_delta > sla.ttn_minutes:
+#                             any_breach = True
+
+#                     if inc.incident_ttdn:
+#                         ttdn_delta = (inc.incident_ttdn - created).total_seconds() / 60
+#                         if ttdn_delta > sla.ttdn_minutes:
+#                             any_breach = True
+
+#                     if not any_breach:
+#                         met += 1
+
+#                 compliance = round((met / total) * 100, 2) if total > 0 else 0.0
+
+#                 response_list.append(
+#                     {
+#                         "severity_label": SlaLevelChoices(level).label,
+#                         "tta_minutes": sla.tta_minutes,
+#                         "ttn_minutes": sla.ttn_minutes,
+#                         "ttdn_minutes": sla.ttdn_minutes,
+#                         "target_sla": f"TTA: {sla.tta_minutes} mins, TTN: {sla.ttn_minutes} mins, TTDN: {sla.ttdn_minutes} mins",
+#                         "compliance_percentage": compliance,
+#                         "status": "Fulfilled" if compliance >= 80 else "Breached",
+#                     }
+#                 )
+
+#             return Response(response_list)
+
+#         except Exception as e:
+#             logger.error(f"Error in SLASeverityMetricsView: {str(e)}")
+#             return Response(
+#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
 class SLASeverityMetricsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4642,50 +4856,63 @@ class SLASeverityMetricsView(APIView):
                 if not sla:
                     continue
 
-                incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant_id__in=soar_ids,
-                    incident_priority=SlaLevelChoices(level).label,
-                    incident_tta__isnull=False,
-                    incident_ttn__isnull=False,
-                    incident_ttdn__isnull=False,
+                filters = Q(cortex_soar_tenant_id__in=soar_ids)
+                filters &= (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
                 )
+                filters &= Q(incident_priority=SlaLevelChoices(level).label)
 
-                total = incidents.count()
-                met = 0
+                incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+
+                total_incidents = incidents.count()
+                tta_success = 0
+                tta_breached = 0
+                ttn_success = 0
+                ttn_breached = 0
+                ttdn_success = 0
+                ttdn_breached = 0
 
                 for inc in incidents:
                     created = inc.created
-                    any_breach = False
-
-                    if inc.incident_tta:
-                        tta_delta = (inc.incident_tta - created).total_seconds() / 60
-                        if tta_delta > sla.tta_minutes:
-                            any_breach = True
-
-                    if inc.incident_ttn:
-                        ttn_delta = (inc.incident_ttn - created).total_seconds() / 60
-                        if ttn_delta > sla.ttn_minutes:
-                            any_breach = True
-
-                    if inc.incident_ttdn:
-                        ttdn_delta = (inc.incident_ttdn - created).total_seconds() / 60
-                        if ttdn_delta > sla.ttdn_minutes:
-                            any_breach = True
-
-                    if not any_breach:
-                        met += 1
-
-                compliance = round((met / total) * 100, 2) if total > 0 else 0.0
+                    
+                    # Calculate TTA metrics
+                    tta_delta = (inc.incident_tta - created).total_seconds() / 60
+                    if tta_delta <= sla.tta_minutes:
+                        tta_success += 1
+                    else:
+                        tta_breached += 1
+                    
+                    # Calculate TTN metrics
+                    ttn_delta = (inc.incident_ttn - created).total_seconds() / 60
+                    if ttn_delta <= sla.ttn_minutes:
+                        ttn_success += 1
+                    else:
+                        ttn_breached += 1
+                    
+                    # Calculate TTDN metrics
+                    ttdn_delta = (inc.incident_ttdn - created).total_seconds() / 60
+                    if ttdn_delta <= sla.ttdn_minutes:
+                        ttdn_success += 1
+                    else:
+                        ttdn_breached += 1
 
                 response_list.append(
                     {
-                        "severity_label": SlaLevelChoices(level).label,
-                        "tta_minutes": sla.tta_minutes,
-                        "ttn_minutes": sla.ttn_minutes,
-                        "ttdn_minutes": sla.ttdn_minutes,
-                        "target_sla": f"TTA: {sla.tta_minutes} mins, TTN: {sla.ttn_minutes} mins, TTDN: {sla.ttdn_minutes} mins",
-                        "compliance_percentage": compliance,
-                        "status": "Fulfilled" if compliance >= 80 else "Breached",
+                        "incident_type": SlaLevelChoices(level).label,
+                        "total_incidents": total_incidents,
+                        "tta_successful_incidents": tta_success,
+                        "tta_breached_incidents": tta_breached,
+                        "ttn_successful_incidents": ttn_success,
+                        "ttn_breached_incidents": ttn_breached,
+                        "ttdn_successful_incidents": ttdn_success,
+                        "ttdn_breached_incidents": ttdn_breached,
+                        "tta_sla_minutes": sla.tta_minutes,
+                        "ttn_sla_minutes": sla.ttn_minutes,
+                        "ttdn_sla_minutes": sla.ttdn_minutes,
                     }
                 )
 
@@ -5623,7 +5850,6 @@ class SLASeverityMetricsView(APIView):
 #                 status=200,
 #             )
 
-
 #         except Exception as e:
 #             logger.error(f"Error in IncidentReportView: {str(e)}")
 #             return Response({"error": str(e)}, status=500)
@@ -6271,16 +6497,12 @@ class IncidentReportView(APIView):
                 incident_filters
             ).count()
             open_counts = (
-                DUCortexSOARIncidentFinalModel.objects.filter(
-                    incident_filters, status=1
-                )
+                DUCortexSOARIncidentFinalModel.objects.filter(incident_filters, status=1)
                 .values("incident_priority")
                 .annotate(count=Count("id"))
             )
             closed_counts = (
-                DUCortexSOARIncidentFinalModel.objects.filter(
-                    incident_filters, status=2
-                )
+                DUCortexSOARIncidentFinalModel.objects.filter(incident_filters, status=2)
                 .values("incident_priority")
                 .annotate(count=Count("id"))
             )
@@ -6406,16 +6628,14 @@ class IncidentReportView(APIView):
 
             # Apply date filters to all log queries
             total_eps = (
-                TotalEvents.objects.filter(log_filters).aggregate(
-                    total_eps=Sum("total_events")
-                )["total_eps"]
+                TotalEvents.objects.filter(log_filters).aggregate(total_eps=Sum("total_events"))[
+                    "total_eps"
+                ]
                 or 0
             )
-            suspicious_activities = (
-                EventCountLog.objects.filter(log_filters)
-                .order_by("-event_count")[:10]
-                .values("event_name", "event_count")
-            )
+            suspicious_activities = EventCountLog.objects.filter(log_filters).order_by("-event_count")[
+                :10
+            ].values("event_name", "event_count")
             recon_event_count = (
                 ReconEventLog.objects.filter(log_filters).aggregate(
                     total=Sum("total_recon_events")
@@ -6504,7 +6724,9 @@ class IncidentReportView(APIView):
             daily_event_count = (
                 DailyEventCountLog.objects.filter(log_filters)
                 .values("full_date")
-                .annotate(daily_count=Min("daily_count"))
+                .annotate(
+                    daily_count=Min("daily_count")
+                )
                 .order_by("full_date")
             )
 
