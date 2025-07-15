@@ -4854,79 +4854,101 @@ class SLASeverityMetricsView(APIView):
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
-            response_list = []
+            # Get all relevant incidents in a single query
+            filters = Q(cortex_soar_tenant_id__in=soar_ids)
+            filters &= (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(
+                    incident_priority__in=[
+                        SlaLevelChoices.P1.label,
+                        SlaLevelChoices.P2.label,
+                        SlaLevelChoices.P3.label,
+                        SlaLevelChoices.P4.label,
+                    ]
+                )
+            )
 
-            severity_levels = {
-                SlaLevelChoices.P1: 4,
-                SlaLevelChoices.P2: 3,
-                SlaLevelChoices.P3: 2,
-                SlaLevelChoices.P4: 1,
+            incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                filters
+            ).select_related()
+
+            # Initialize response structure
+            response_data = {
+                level.label: {
+                    "incident_type": level.label,
+                    "total_incidents": 0,
+                    "tta_successful_incidents": 0,
+                    "tta_breached_incidents": 0,
+                    "ttn_successful_incidents": 0,
+                    "ttn_breached_incidents": 0,
+                    "ttdn_successful_incidents": 0,
+                    "ttdn_breached_incidents": 0,
+                    "tta_sla_minutes": sla_metrics_dict.get(level, {}).tta_minutes
+                    if sla_metrics_dict.get(level)
+                    else None,
+                    "ttn_sla_minutes": sla_metrics_dict.get(level, {}).ttn_minutes
+                    if sla_metrics_dict.get(level)
+                    else None,
+                    "ttdn_sla_minutes": sla_metrics_dict.get(level, {}).ttdn_minutes
+                    if sla_metrics_dict.get(level)
+                    else None,
+                }
+                for level in [
+                    SlaLevelChoices.P1,
+                    SlaLevelChoices.P2,
+                    SlaLevelChoices.P3,
+                    SlaLevelChoices.P4,
+                ]
             }
 
-            for level in severity_levels:
-                sla = sla_metrics_dict.get(level)
-                if not sla:
+            # Process all incidents in memory
+            for inc in incidents:
+                level = None
+                # Find matching SLA level
+                for slevel in [
+                    SlaLevelChoices.P1,
+                    SlaLevelChoices.P2,
+                    SlaLevelChoices.P3,
+                    SlaLevelChoices.P4,
+                ]:
+                    if inc.incident_priority == slevel.label:
+                        level = slevel
+                        break
+
+                if not level or level not in sla_metrics_dict:
                     continue
 
-                filters = Q(cortex_soar_tenant_id__in=soar_ids)
-                filters &= (
-                    ~Q(owner__isnull=True)
-                    & ~Q(owner__exact="")
-                    & Q(incident_tta__isnull=False)
-                    & Q(incident_ttn__isnull=False)
-                    & Q(incident_ttdn__isnull=False)
-                )
-                filters &= Q(incident_priority=SlaLevelChoices(level).label)
+                sla = sla_metrics_dict[level]
+                created = inc.created
+                response_data[level.label]["total_incidents"] += 1
 
-                incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+                # Calculate TTA metrics
+                tta_delta = (inc.incident_tta - created).total_seconds() / 60
+                if tta_delta <= sla.tta_minutes:
+                    response_data[level.label]["tta_successful_incidents"] += 1
+                else:
+                    response_data[level.label]["tta_breached_incidents"] += 1
 
-                total_incidents = incidents.count()
-                tta_success = 0
-                tta_breached = 0
-                ttn_success = 0
-                ttn_breached = 0
-                ttdn_success = 0
-                ttdn_breached = 0
+                # Calculate TTN metrics
+                ttn_delta = (inc.incident_ttn - created).total_seconds() / 60
+                if ttn_delta <= sla.ttn_minutes:
+                    response_data[level.label]["ttn_successful_incidents"] += 1
+                else:
+                    response_data[level.label]["ttn_breached_incidents"] += 1
 
-                for inc in incidents:
-                    created = inc.created
+                # Calculate TTDN metrics
+                ttdn_delta = (inc.incident_ttdn - created).total_seconds() / 60
+                if ttdn_delta <= sla.ttdn_minutes:
+                    response_data[level.label]["ttdn_successful_incidents"] += 1
+                else:
+                    response_data[level.label]["ttdn_breached_incidents"] += 1
 
-                    # Calculate TTA metrics
-                    tta_delta = (inc.incident_tta - created).total_seconds() / 60
-                    if tta_delta <= sla.tta_minutes:
-                        tta_success += 1
-                    else:
-                        tta_breached += 1
-
-                    # Calculate TTN metrics
-                    ttn_delta = (inc.incident_ttn - created).total_seconds() / 60
-                    if ttn_delta <= sla.ttn_minutes:
-                        ttn_success += 1
-                    else:
-                        ttn_breached += 1
-
-                    # Calculate TTDN metrics
-                    ttdn_delta = (inc.incident_ttdn - created).total_seconds() / 60
-                    if ttdn_delta <= sla.ttdn_minutes:
-                        ttdn_success += 1
-                    else:
-                        ttdn_breached += 1
-
-                response_list.append(
-                    {
-                        "incident_type": SlaLevelChoices(level).label,
-                        "total_incidents": total_incidents,
-                        "tta_successful_incidents": tta_success,
-                        "tta_breached_incidents": tta_breached,
-                        "ttn_successful_incidents": ttn_success,
-                        "ttn_breached_incidents": ttn_breached,
-                        "ttdn_successful_incidents": ttdn_success,
-                        "ttdn_breached_incidents": ttdn_breached,
-                        "tta_sla_minutes": sla.tta_minutes,
-                        "ttn_sla_minutes": sla.ttn_minutes,
-                        "ttdn_sla_minutes": sla.ttdn_minutes,
-                    }
-                )
+            # Convert to list format for response
+            response_list = list(response_data.values())
 
             return Response(response_list)
 
