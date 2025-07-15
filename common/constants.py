@@ -311,6 +311,8 @@ class IBMQradarConstants:
     STOP PARSEDATETIME('{end_time}')
     """
 
+    AQL_QUERY_FOR_GEOLOCATION = "SELECT sourceip, GEO::LOOKUP(sourceip, 'geo_json') AS geo FROM events group by sourceip"
+
 
 class ITSMConstants:
     ITSM_START_INDEX = 1
