@@ -1,5 +1,5 @@
 # Project variables
-COMPOSE=docker-compose
+COMPOSE=docker compose -f docker-compose-backend-staging.yml
 PROJECT_NAME=duSOC
 
 # Default target
@@ -11,33 +11,20 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  up              Start all services"
-	@echo "  up-build        Build images and start all services"
-	@echo "  down            Stop all services"
-	@echo "  restart         Restart all services"
-	@echo "  restart-backend-services Restart all backend services"
-	@echo "  logs            View logs for all services"
-	@echo "  logs-backend    View logs for backend"
-	@echo "  bash-backend    Shell into backend container"
-	@echo "  bash-celery     Shell into celery worker"
-	@echo "  ps              Show container status"
-	@echo "  prune           Remove unused containers and volumes"
+	@echo "  restart-backend-services  Restart backend, celery, celery-beat, celery-intel"
+	@echo "  logs                      View logs for all services"
+	@echo "  logs-backend              View logs for backend"
+	@echo "  bash-backend              Shell into backend container"
+	@echo "  bash-celery               Shell into celery worker"
+	@echo "  ps                        Show container status"
 	@echo ""
 
 # Start containers
-up:
-	$(COMPOSE) up -d
 
-# Build and start
-up-build:
-	$(COMPOSE) up -d --build
 
-# Stop containers
-down:
-	$(COMPOSE) down
-
-# Restart
-restart: down up
+# Restart backend-related services only
+restart-backend-services:
+	$(COMPOSE) restart backend celery celery-beat celery-intel
 
 # Logs
 logs:
@@ -53,14 +40,6 @@ bash-backend:
 bash-celery:
 	$(COMPOSE) exec celery sh
 
-# Status
+# Container status
 ps:
 	$(COMPOSE) ps
-
-# Clean unused
-prune:
-	docker system prune -f --volumes
-
-
-restart-backend-services:
-	$(COMPOSE) restart backend celery celery-beat celery-intel
