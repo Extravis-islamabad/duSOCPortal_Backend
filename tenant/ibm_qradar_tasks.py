@@ -16,6 +16,7 @@ from tenant.models import (
     CorrelatedEventLog,
     CustomerEPS,
     DuIbmQradarTenants,
+    SourceIPGeoLocation,
     WeeklyCorrelatedEventLog,
 )
 
@@ -235,6 +236,8 @@ def sync_eps_for_domain(
 def sync_geo_location_child(
     username: str, password: str, ip_address: str, port: int, integration_id: int
 ):
+    SourceIPGeoLocation.objects.all().delete()
+    logger.info("Running QRadarTasks.sync_geo_location_child() task")
     with IBMQradar(
         username=username, password=password, ip_address=ip_address, port=port
     ) as ibm_qradar:
