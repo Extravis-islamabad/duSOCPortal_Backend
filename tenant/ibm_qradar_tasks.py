@@ -253,7 +253,7 @@ def sync_geo_location_child(
 
         data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
         transformed_data = ibm_qradar.transform_geo_events(
-            data_list=data, integration_id=integration_id
+            events=data, integration_id=integration_id
         )
         if transformed_data:
             ibm_qradar.insert_geo_events(transformed_data=transformed_data)
