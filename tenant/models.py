@@ -1164,3 +1164,20 @@ class RemoteUsersCount(models.Model):
 
     def __str__(self):
         return f"{self.qradar_tenant} - {self.full_date}: {self.total_remote_users}"
+
+
+class SourceIPGeoLocation(models.Model):
+    integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
+    source_ip = models.GenericIPAddressField()
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    geo_type = models.CharField(max_length=50, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "source_ip_geolocations"
+
+    def __str__(self):
+        return f"{self.source_ip} - ({self.latitude}, {self.longitude})"
