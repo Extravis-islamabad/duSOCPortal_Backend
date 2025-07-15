@@ -3,6 +3,7 @@ import time
 import pandas as pd
 import requests
 from django.db import transaction
+from django.db.models import Q
 from loguru import logger
 from requests.auth import HTTPBasicAuth
 
@@ -674,6 +675,66 @@ class IBMQradar:
             f"IBMQRadar._transform_offenses() took: {time.time() - start} seconds, transformed {len(records)} offenses"
         )
         return records, asset_map
+
+    def backfill_offense_dates(self):
+        """
+        Backfill offense dates for records where dates are null but timestamps are present.
+
+        This function is intended to be used as a one-time data migration to fill in missing
+        dates in the IBMQradarOffense table. It will update the following fields if they are
+        null and the corresponding timestamp field is not null:
+
+            - start_date
+            - last_updated_date
+            - last_persisted_date
+            - first_persisted_date
+
+        The function will print a message to the log indicating how many records were updated.
+        """
+        from datetime import datetime
+
+        def to_date(ts):
+            try:
+                if ts in (None, 0, "0"):
+                    return None
+                return datetime.utcfromtimestamp(int(ts) / 1000).date()
+            except Exception as e:
+                logger.warning(f"Failed to convert timestamp {ts}: {e}")
+                return None
+
+        offenses = IBMQradarOffense.objects.filter(
+            Q(start_date__isnull=True, start_time__isnull=False)
+            | Q(last_updated_date__isnull=True, last_updated_time__isnull=False)
+            | Q(last_persisted_date__isnull=True, last_persisted_time__isnull=False)
+            | Q(first_persisted_date__isnull=True, first_persisted_time__isnull=False)
+        )
+
+        updated_count = 0
+
+        for offense in offenses:
+            updated = False
+
+            if offense.start_date is None and offense.start_time:
+                offense.start_date = to_date(offense.start_time)
+                updated = True
+
+            if offense.last_updated_date is None and offense.last_updated_time:
+                offense.last_updated_date = to_date(offense.last_updated_time)
+                updated = True
+
+            if offense.last_persisted_date is None and offense.last_persisted_time:
+                offense.last_persisted_date = to_date(offense.last_persisted_time)
+                updated = True
+
+            if offense.first_persisted_date is None and offense.first_persisted_time:
+                offense.first_persisted_date = to_date(offense.first_persisted_time)
+                updated = True
+
+            if updated:
+                offense.save()
+                updated_count += 1
+
+        logger.info(f"Backfill complete. Updated {updated_count} offenses.")
 
     def _insert_offenses(self, transformed_data):
         """
