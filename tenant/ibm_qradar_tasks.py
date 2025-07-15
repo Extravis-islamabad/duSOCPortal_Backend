@@ -232,6 +232,33 @@ def sync_eps_for_domain(
 
 
 @shared_task
+def sync_geo_location_child(
+    username: str, password: str, ip_address: str, port: int, integration_id: int
+):
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        search_id = ibm_qradar._get_do_aql_query(
+            query=IBMQradarConstants.AQL_QUERY_FOR_GEOLOCATION
+        )
+        flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
+        if not flag:
+            logger.warning(
+                f"IBM QRadar.sync_geo_location_child() failed for for integration {integration_id}"
+            )
+            return
+
+        data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+        transformed_data = ibm_qradar.transform_geo_events(
+            data_list=data, integration_id=integration_id
+        )
+        if transformed_data:
+            ibm_qradar.insert_geo_events(transformed_data=transformed_data)
+
+            logger.info("Completed QRadarTasks.sync_geo_location_child() task")
+
+
+@shared_task
 def sync_ibm_tenant_eps():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
@@ -240,6 +267,23 @@ def sync_ibm_tenant_eps():
     )
     for result in results:
         sync_eps_for_domain.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+
+@shared_task
+def sync_geo_location():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+    for result in results:
+        sync_geo_location_child.delay(
             username=result.username,
             password=result.password,
             ip_address=result.ip_address,

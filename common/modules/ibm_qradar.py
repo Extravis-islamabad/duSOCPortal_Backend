@@ -1,3 +1,4 @@
+import json
 import time
 
 import pandas as pd
@@ -28,6 +29,7 @@ from tenant.models import (
     MonthlyAvgEpsLog,
     ReconEventLog,
     RemoteUsersCount,
+    SourceIPGeoLocation,
     SuccessfulLogonEvent,
     SuspiciousEventLog,
     TopAlertEventLog,
@@ -2573,4 +2575,64 @@ class IBMQradar:
                 logger.success(f"Inserted RemoteUsersCount records: {len(records)}")
         except Exception as e:
             logger.error(f"Error inserting RemoteUsersCount records: {str(e)}")
+            transaction.rollback()
+
+    def transform_geo_events(self, events: list, integration_id) -> list:
+        """
+        Transforms a list of raw geo events into a list of dictionaries.
+
+        The dictionary contains the source IP, latitude, longitude, and geo type.
+        If any of the critical fields are None, the event is skipped.
+
+        :param events: The list of raw geo events.
+        :return: The list of transformed geo events.
+        """
+
+        transformed = []
+
+        for event in events:
+            source_ip = event.get("sourceip")
+            geo_data_str = event.get("geo", "{}")
+
+            try:
+                geo_data = json.loads(geo_data_str)
+            except json.JSONDecodeError:
+                continue
+
+            geo_json = geo_data.get("geo_json", {})
+            coordinates = geo_json.get("coordinates", [])
+            geo_type = geo_json.get("type")
+
+            if not (isinstance(coordinates, list) and len(coordinates) == 2):
+                continue
+
+            lng, lat = coordinates
+
+            # Skip if any of the critical fields are None
+            if lat is None or lng is None or geo_type is None:
+                continue
+
+            transformed.append(
+                {
+                    "source_ip": source_ip,
+                    "latitude": lat,
+                    "longitude": lng,
+                    "geo_type": geo_type,
+                    "integration_id": integration_id,
+                }
+            )
+
+        return transformed
+
+    def insert_geo_events(self, transformed_data: list):
+        """
+        Inserts cleaned geo event data using dict unpacking (**).
+        """
+
+        try:
+            objects = [SourceIPGeoLocation(**item) for item in transformed_data]
+            logger.info(f"Inserting {len(objects)} geo events")
+            SourceIPGeoLocation.objects.bulk_create(objects, ignore_conflicts=True)
+        except Exception as e:
+            logger.error(f"Error inserting geo events: {str(e)}")
             transaction.rollback()
