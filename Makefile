@@ -15,6 +15,7 @@ help:
 	@echo "  up-build        Build images and start all services"
 	@echo "  down            Stop all services"
 	@echo "  restart         Restart all services"
+	@echo "  restart-backend-services Restart all backend services"
 	@echo "  logs            View logs for all services"
 	@echo "  logs-backend    View logs for backend"
 	@echo "  bash-backend    Shell into backend container"
@@ -61,5 +62,5 @@ prune:
 	docker system prune -f --volumes
 
 
-restart:
+restart-backend-services:
 	$(COMPOSE) restart backend celery celery-beat celery-intel
