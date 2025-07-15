@@ -31,6 +31,7 @@ from tenant.views import (
     SLASeverityIncidentsView,
     SLASeverityMetricsView,
     SLAStatusView,
+    SourceIPGeoLocationListView,
     TenantAPIView,
     TenantCortexSOARIncidentsAPIView,
     TenantITSMTicketDetailView,
@@ -182,4 +183,9 @@ urlpatterns = [
         name="sla-severity-metrics",
     ),
     path("api/incident-report/", IncidentReportView.as_view(), name="incident-report"),
+    path(
+        "source-ip-geolocations/",
+        SourceIPGeoLocationListView.as_view(),
+        name="source-ip-geolocations",
+    ),
 ]

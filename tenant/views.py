@@ -68,6 +68,7 @@ from tenant.models import (
     ReconEventLog,
     SlaLevelChoices,
     SoarTenantSlaMetric,
+    SourceIPGeoLocation,
     SuspiciousEventLog,
     Tenant,
     TenantPermissionChoices,
@@ -95,6 +96,7 @@ from tenant.serializers import (
     IBMQradarEPSSerializer,
     IBMQradarEventCollectorSerializer,
     RecentIncidentsSerializer,
+    SourceIPGeoLocationSerializer,
     TenantRoleSerializer,
 )
 
@@ -1669,6 +1671,7 @@ class DashboardView(APIView):
 #                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
 #             )
 
+
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1913,7 +1916,9 @@ class IncidentsView(APIView):
 
                 # Use isoformat() for consistent datetime formatting
                 created_date = row["created"].isoformat() if row["created"] else "N/A"
-                created_at_date = row["created_at"].isoformat() if row.get("created_at") else "N/A"
+                created_at_date = (
+                    row["created_at"].isoformat() if row.get("created_at") else "N/A"
+                )
                 occurred_date = row["occured"].isoformat() if row["occured"] else "N/A"
 
                 description = (
@@ -1960,6 +1965,8 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4458,6 +4465,7 @@ class SLAIncidentsView(APIView):
 #             logger.error(f"SLAComplianceView Error: {str(e)}")
 #             return Response({"error": str(e)}, status=500)
 
+
 class SLAComplianceView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4571,14 +4579,17 @@ class SLAComplianceView(APIView):
                     "overall_compliance_percentage": incident_met_percentage,
                     "incident_met_percentage": incident_met_percentage,
                     "breach_percentage": total_breach_incident_percentage,
-                    "compliance_status": "fulfilled" if incident_met_percentage >= 80 else "breached",
+                    "compliance_status": "fulfilled"
+                    if incident_met_percentage >= 80
+                    else "breached",
                 }
             )
 
         except Exception as e:
             logger.error(f"SLAComplianceView Error: {str(e)}")
             return Response({"error": str(e)}, status=500)
-        
+
+
 class SLASeverityIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4806,6 +4817,7 @@ class SLASeverityIncidentsView(APIView):
 
 #             return Response(response_list)
 
+
 #         except Exception as e:
 #             logger.error(f"Error in SLASeverityMetricsView: {str(e)}")
 #             return Response(
@@ -4878,21 +4890,21 @@ class SLASeverityMetricsView(APIView):
 
                 for inc in incidents:
                     created = inc.created
-                    
+
                     # Calculate TTA metrics
                     tta_delta = (inc.incident_tta - created).total_seconds() / 60
                     if tta_delta <= sla.tta_minutes:
                         tta_success += 1
                     else:
                         tta_breached += 1
-                    
+
                     # Calculate TTN metrics
                     ttn_delta = (inc.incident_ttn - created).total_seconds() / 60
                     if ttn_delta <= sla.ttn_minutes:
                         ttn_success += 1
                     else:
                         ttn_breached += 1
-                    
+
                     # Calculate TTDN metrics
                     ttdn_delta = (inc.incident_ttdn - created).total_seconds() / 60
                     if ttdn_delta <= sla.ttdn_minutes:
@@ -5850,6 +5862,7 @@ class SLASeverityMetricsView(APIView):
 #                 status=200,
 #             )
 
+
 #         except Exception as e:
 #             logger.error(f"Error in IncidentReportView: {str(e)}")
 #             return Response({"error": str(e)}, status=500)
@@ -6497,12 +6510,16 @@ class IncidentReportView(APIView):
                 incident_filters
             ).count()
             open_counts = (
-                DUCortexSOARIncidentFinalModel.objects.filter(incident_filters, status=1)
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    incident_filters, status=1
+                )
                 .values("incident_priority")
                 .annotate(count=Count("id"))
             )
             closed_counts = (
-                DUCortexSOARIncidentFinalModel.objects.filter(incident_filters, status=2)
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    incident_filters, status=2
+                )
                 .values("incident_priority")
                 .annotate(count=Count("id"))
             )
@@ -6628,14 +6645,16 @@ class IncidentReportView(APIView):
 
             # Apply date filters to all log queries
             total_eps = (
-                TotalEvents.objects.filter(log_filters).aggregate(total_eps=Sum("total_events"))[
-                    "total_eps"
-                ]
+                TotalEvents.objects.filter(log_filters).aggregate(
+                    total_eps=Sum("total_events")
+                )["total_eps"]
                 or 0
             )
-            suspicious_activities = EventCountLog.objects.filter(log_filters).order_by("-event_count")[
-                :10
-            ].values("event_name", "event_count")
+            suspicious_activities = (
+                EventCountLog.objects.filter(log_filters)
+                .order_by("-event_count")[:10]
+                .values("event_name", "event_count")
+            )
             recon_event_count = (
                 ReconEventLog.objects.filter(log_filters).aggregate(
                     total=Sum("total_recon_events")
@@ -6724,9 +6743,7 @@ class IncidentReportView(APIView):
             daily_event_count = (
                 DailyEventCountLog.objects.filter(log_filters)
                 .values("full_date")
-                .annotate(
-                    daily_count=Min("daily_count")
-                )
+                .annotate(daily_count=Min("daily_count"))
                 .order_by("full_date")
             )
 
@@ -6766,3 +6783,13 @@ class IncidentReportView(APIView):
         except Exception as e:
             logger.error(f"Error in IncidentReportView: {str(e)}")
             return Response({"error": str(e)}, status=500)
+
+
+class SourceIPGeoLocationListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        records = SourceIPGeoLocation.objects.all().order_by("-created_at")[:10]
+        serializer = SourceIPGeoLocationSerializer(records, many=True)
+        return Response(serializer.data)

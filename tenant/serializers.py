@@ -40,6 +40,7 @@ from .models import (  # SoarTenantSlaMetric,
     IBMQradarEventCollector,
     SlaLevelChoices,
     SoarTenantSlaMetric,
+    SourceIPGeoLocation,
     Tenant,
     TenantQradarMapping,
     TenantRole,
@@ -1399,3 +1400,9 @@ class NonActiveCompanySerializer(serializers.ModelSerializer):
 
     def get_active_integrations(self, obj):
         return obj.integrations.count()
+
+
+class SourceIPGeoLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SourceIPGeoLocation
+        fields = "__all__"
