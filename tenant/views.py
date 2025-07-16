@@ -5912,6 +5912,6 @@ class SourceIPGeoLocationListView(APIView):
     permission_classes = [IsTenant]
 
     def get(self, request):
-        records = SourceIPGeoLocation.objects.all().order_by("-created_at")[:10]
+        records = SourceIPGeoLocation.objects.all().order_by("-created_at")[:50]
         serializer = SourceIPGeoLocationSerializer(records, many=True)
         return Response(serializer.data)
