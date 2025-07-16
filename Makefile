@@ -11,6 +11,8 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
+	@echo "  build-backend             Build backend Docker image"
+	@echo "  deploy-backend            Build and deploy backend services"
 	@echo "  restart-backend-services  Restart backend, celery, celery-beat, celery-intel"
 	@echo "  logs                      View logs for all services"
 	@echo "  logs-backend              View logs for backend"
@@ -19,8 +21,13 @@ help:
 	@echo "  ps                        Show container status"
 	@echo ""
 
-# Start containers
+# Build backend image
+build-backend:
+	sudo docker build -t backend-api:latest .
 
+# Deploy backend services
+deploy-backend: build-backend
+	$(COMPOSE) up -d backend celery celery-beat celery-intel
 
 # Restart backend-related services only
 restart-backend-services:
