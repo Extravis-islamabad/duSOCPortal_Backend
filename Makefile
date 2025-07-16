@@ -13,7 +13,6 @@ help:
 	@echo "Targets:"
 	@echo "  build-backend             Build backend Docker image"
 	@echo "  deploy-backend            Build and deploy backend services, then prune"
-	@echo "  prune                     Remove unused Docker resources"
 	@echo "  restart-backend-services  Restart backend, celery, celery-beat, celery-intel"
 	@echo "  logs                      View logs for all services"
 	@echo "  logs-backend              View logs for backend"
@@ -29,11 +28,6 @@ build-backend:
 # Deploy backend services
 deploy-backend: build-backend
 	$(COMPOSE) up -d backend celery celery-beat celery-intel
-	$(MAKE) prune
-
-# Prune unused Docker resources
-prune:
-	docker system prune -f
 
 # Restart backend-related services only
 restart-backend-services:
