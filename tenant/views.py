@@ -4942,7 +4942,7 @@ class SLAOverviewCardsView(APIView):
                             met_sla_count += 1
                     
                     compliance_percent = round((met_sla_count / total_incidents) * 100, 2)
-                    breached_percent = 100 - compliance_percent
+                    breached_percent = round(100 - compliance_percent, 2)  # Ensure exactly 2 decimal places
 
                 results.append({
                     "priority_level": level.label,
