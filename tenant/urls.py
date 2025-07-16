@@ -25,6 +25,7 @@ from tenant.views import (
     OwnerDistributionView,
     PermissionChoicesAPIView,
     RecentIncidentsView,
+    SLAOverviewCardsView,
     SeverityDistributionView,
     SLAComplianceView,
     SLAIncidentsView,
@@ -181,6 +182,11 @@ urlpatterns = [
         "api/sla-severity-metrics-dashboard/",
         SLASeverityMetricsView.as_view(),
         name="sla-severity-metrics",
+    ),
+    path(
+        "api/sla-overview-cards/",
+        SLAOverviewCardsView.as_view(),
+        name="sla-overview-cards",
     ),
     path("api/incident-report/", IncidentReportView.as_view(), name="incident-report"),
     path(
