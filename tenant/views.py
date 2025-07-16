@@ -4858,6 +4858,7 @@ class SLASeverityMetricsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class SLAOverviewCardsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4867,13 +4868,18 @@ class SLAOverviewCardsView(APIView):
             tenant = Tenant.objects.get(tenant=request.user)
             logger.debug(f"SLAOverviewCardsView | Tenant ID: {tenant.id}")
         except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         try:
             # Get SOAR tenants
             soar_tenants = tenant.company.soar_tenants.all()
             if not soar_tenants:
-                return Response({"error": "No SOAR tenants found."}, status=status.HTTP_404_NOT_FOUND)
+                return Response(
+                    {"error": "No SOAR tenants found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
             soar_ids = [t.id for t in soar_tenants]
 
             # Get SLA metrics
@@ -4899,71 +4905,84 @@ class SLAOverviewCardsView(APIView):
             # Get all incidents in one query
             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
                 filters,
-                incident_priority__in=[choice.label for choice in SlaLevelChoices]
+                incident_priority__in=[choice.label for choice in SlaLevelChoices],
             ).select_related()
 
             # Initialize results
             results = []
-            
+
             for level in SlaLevelChoices:
                 sla_metric = sla_metrics_dict.get(level)
                 if not sla_metric:
                     continue  # Skip if no SLA defined for this level
 
-                level_incidents = [inc for inc in incidents if inc.incident_priority == level.label]
+                level_incidents = [
+                    inc for inc in incidents if inc.incident_priority == level.label
+                ]
                 total_incidents = len(level_incidents)
-                
+
                 if total_incidents == 0:
                     compliance_percent = 0.0
                     breached_percent = 0.0
                 else:
                     met_sla_count = 0
-                    
+
                     for inc in level_incidents:
                         created = inc.created
                         any_breach = False
-                        
+
                         # Check TTA
                         tta_delta = (inc.incident_tta - created).total_seconds() / 60
                         if tta_delta > sla_metric.tta_minutes:
                             any_breach = True
-                        
+
                         # Check TTN
                         ttn_delta = (inc.incident_ttn - created).total_seconds() / 60
                         if ttn_delta > sla_metric.ttn_minutes:
                             any_breach = True
-                        
+
                         # Check TTDN
                         ttdn_delta = (inc.incident_ttdn - created).total_seconds() / 60
                         if ttdn_delta > sla_metric.ttdn_minutes:
                             any_breach = True
-                        
+
                         if not any_breach:
                             met_sla_count += 1
-                    
-                    compliance_percent = round((met_sla_count / total_incidents) * 100, 2)
-                    breached_percent = round(100 - compliance_percent, 2)  # Ensure exactly 2 decimal places
 
-                results.append({
-                    "priority_level": level.label,
-                    "priority_value": level.value,
-                    "total_incidents": total_incidents,
-                    "compliance_percentage": compliance_percent,
-                    "breached_percentage": breached_percent,
-                    "status": "compliant" if compliance_percent >= 80 else "breached",
-                    "sla_metrics": {
-                        "tta_minutes": sla_metric.tta_minutes,
-                        "ttn_minutes": sla_metric.ttn_minutes,
-                        "ttdn_minutes": sla_metric.ttdn_minutes,
+                    compliance_percent = round(
+                        (met_sla_count / total_incidents) * 100, 2
+                    )
+                    breached_percent = round(
+                        100 - compliance_percent, 2
+                    )  # Ensure exactly 2 decimal places
+
+                results.append(
+                    {
+                        "priority_level": level.label,
+                        "priority_value": level.value,
+                        "total_incidents": total_incidents,
+                        "compliance_percentage": compliance_percent,
+                        "breached_percentage": breached_percent,
+                        "status": "compliant"
+                        if compliance_percent >= 80
+                        else "breached",
+                        "sla_metrics": {
+                            "tta_minutes": sla_metric.tta_minutes,
+                            "ttn_minutes": sla_metric.ttn_minutes,
+                            "ttdn_minutes": sla_metric.ttdn_minutes,
+                        },
                     }
-                })
+                )
 
             return Response(results)
 
         except Exception as e:
             logger.error(f"Error in SLAOverviewCardsView: {str(e)}")
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 class IncidentReportView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5891,6 +5910,3 @@ class SourceIPGeoLocationListView(APIView):
         records = SourceIPGeoLocation.objects.all().order_by("-created_at")[:10]
         serializer = SourceIPGeoLocationSerializer(records, many=True)
         return Response(serializer.data)
-
-
-
