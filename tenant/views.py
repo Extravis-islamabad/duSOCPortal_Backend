@@ -4631,6 +4631,7 @@ class SLASeverityIncidentsView(APIView):
                     return Response(
                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
                     )
+           
             elif filter_type:
                 try:
                     filter_type = FilterType(int(filter_type))
@@ -4639,7 +4640,9 @@ class SLASeverityIncidentsView(APIView):
                     elif filter_type == FilterType.WEEK:
                         filters &= Q(created__gte=now - timedelta(days=7))
                     elif filter_type == FilterType.MONTH:
-                        filters &= Q(created__gte=now - timedelta(days=30))
+                        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                        end_date = now
+                        filters &= Q(created__range=[start_date, end_date])
                     elif filter_type == FilterType.QUARTER:
                         filters &= Q(created__gte=now - timedelta(days=90))
                     elif filter_type == FilterType.YEAR:
