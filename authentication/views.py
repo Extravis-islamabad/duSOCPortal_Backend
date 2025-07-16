@@ -12,13 +12,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenViewBase
 
 from authentication.permissions import IsAdminUser
 from common.utils import LDAP
 from tenant.models import Company
 
 from .models import User
-from .serializers import UserCreateSerializer, UserDetailSerializer
+from .serializers import (
+    CustomTokenRefreshSerializer,
+    UserCreateSerializer,
+    UserDetailSerializer,
+)
 
 
 class UserCreateAPIView(APIView):
@@ -99,7 +104,6 @@ class UserLoginAPIView(APIView):
                 )
 
         try:
-            # user = User.objects.filter(Q(username=username) | Q(email=username)).first()
             user = User.objects.filter(
                 Q(username__iexact=username) | Q(email__iexact=username),
                 is_active=True,
@@ -323,3 +327,7 @@ class LDAPGroupUsersView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class CustomTokenRefreshView(TokenViewBase):
+    serializer_class = CustomTokenRefreshSerializer

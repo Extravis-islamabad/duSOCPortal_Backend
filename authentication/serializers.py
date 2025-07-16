@@ -1,4 +1,8 @@
 from rest_framework import serializers
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from tenant.models import Tenant, TenantRole, TenantRolePermissions
 
@@ -104,3 +108,23 @@ class ProfilePictureUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["profile_picture", "company_name"]
+
+
+class CustomTokenRefreshSerializer(TokenRefreshSerializer):
+    def validate(self, attrs):
+        self.refresh = attrs["refresh"]
+
+        try:
+            refresh = RefreshToken(self.refresh)
+        except TokenError as e:
+            raise InvalidToken(e.args[0])
+
+        data = {}
+        data["access"] = str(refresh.access_token)
+
+        if api_settings.ROTATE_REFRESH_TOKENS:
+            refresh.blacklist()  # blacklist the old one
+            new_refresh = RefreshToken.for_user(self.context["request"].user)
+            data["refresh"] = str(new_refresh)
+
+        return data
