@@ -241,7 +241,7 @@ class CortexSOAR:
     def _transform_incidents(self, data, integration_id, cortex_tenant):
         """
         Transforms the CortexSOAR data into a format suitable for
-        insertion into the database.
+        insertion into the database with proper validation checks.
 
         :param data: The CortexSOAR data.
         :param integration_id: The ID of the integration.
@@ -260,22 +260,31 @@ class CortexSOAR:
         for entry in data:
             custom = entry.get("CustomFields", {})
             investigation_id = entry.get("investigationId")
+            owner = entry.get("owner")
             
             # Skip if investigation_id is invalid
             if not investigation_id or investigation_id.strip() == "":
                 continue
+                
+            # Skip if owner is invalid
+            if owner is None or owner.strip() == "":
+                continue
 
-            # Handle itsmsyncstatus - ensure proper extraction
-            itsmsyncstatus = custom.get("itsmsyncstatus")
-            if itsmsyncstatus in ("", " ", None):  # Explicit check for empty values
-                itsmsyncstatus = None
-            else:
-                itsmsyncstatus = str(itsmsyncstatus).strip()  # Ensure it's a clean string
-
-            # Parse time fields
+            # Parse time fields and validate them
             incident_tta = self.safe_parse_datetime(custom.get("incidenttta"))
             incident_ttdn = self.safe_parse_datetime(custom.get("incidentttdn"))
             incident_ttn = self.safe_parse_datetime(custom.get("incidentttn"))
+            
+        
+            if incident_tta is None or incident_ttdn is None or incident_ttn is None:
+                continue
+
+           
+            itsmsyncstatus = custom.get("itsmsyncstatus")
+            if itsmsyncstatus in ("", " ", None):
+                itsmsyncstatus = None
+            else:
+                itsmsyncstatus = str(itsmsyncstatus).strip()
 
             # Create the record
             record = DUCortexSOARIncidentFinalModel(
@@ -292,19 +301,13 @@ class CortexSOAR:
                 severity=entry.get("severity"),
                 investigated_id=investigation_id,
                 closing_user_id=entry.get("closingUserId"),
-                owner=entry.get("owner"),  # If none skip this incident ''
+                owner=owner,
                 playbook_id=entry.get("playbookId"),
                 incident_phase=custom.get("incidentphase"),
                 incident_priority=custom.get("incidentpriority"),
-                incident_tta=self.safe_parse_datetime(
-                    custom.get("incidenttta")
-                ),  # If none skip this incident
-                incident_ttdn=self.safe_parse_datetime(
-                    custom.get("incidentttdn")
-                ),  # If none skip this incident
-                incident_ttn=self.safe_parse_datetime(
-                    custom.get("incidentttn")
-                ),  # If none skip this incident
+                incident_tta=incident_tta,
+                incident_ttdn=incident_ttdn,
+                incident_ttn=incident_ttn,
                 initial_notification=custom.get("initialnotification"),
                 list_of_rules_offense=custom.get("listofrulesoffense"),
                 log_source_type=custom.get("logsourcetype"),
@@ -315,7 +318,7 @@ class CortexSOAR:
                 tta_calculation=custom.get("ttacalculation"),
                 integration=integration_id,
                 cortex_soar_tenant=cortex_tenant,
-                itsm_sync_status=custom.get("itsmsyncstatus"),  # Add this line
+                itsm_sync_status=itsmsyncstatus,
             )
             records.append(record)
         return records
