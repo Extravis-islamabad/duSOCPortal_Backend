@@ -262,14 +262,6 @@ class CortexSOAR:
             investigation_id = entry.get("investigationId")
             owner = entry.get("owner")
 
-            # Skip if investigation_id is invalid
-            if not investigation_id or investigation_id.strip() == "":
-                continue
-
-            # Skip if owner is invalid
-            if owner is None or owner.strip() == "":
-                continue
-
             # Parse time fields and validate them
             incident_tta = self.safe_parse_datetime(custom.get("incidenttta"))
             incident_ttdn = self.safe_parse_datetime(custom.get("incidentttdn"))
