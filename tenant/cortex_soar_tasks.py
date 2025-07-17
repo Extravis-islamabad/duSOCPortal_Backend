@@ -1,3 +1,4 @@
+import re
 import time
 
 from celery import shared_task
@@ -35,6 +36,13 @@ def sync_cortex_soar_tenants(
             if accounts is None:
                 logger.error("No data returned from CortexSOAR accounts endpoint")
                 return
+
+            cdc_entries = [
+                item
+                for item in accounts
+                if "name" in item and re.search(r"cdc", item["name"], re.IGNORECASE)
+            ]
+            accounts = cdc_entries
 
             transformed_data = soar._transform_accounts(
                 accounts=accounts, integration_id=integration_id
