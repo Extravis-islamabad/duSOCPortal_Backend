@@ -362,7 +362,7 @@ class DUCortexSOARIncidentFinalModel(models.Model):
         null=True,
         blank=True,
     )
-    # Custom fields
+    # Custom fieldss
     incident_phase = models.CharField(max_length=100, null=True, blank=True)
     incident_priority = models.CharField(max_length=50, blank=True, null=True)
     incident_tta = models.DateTimeField(blank=True, null=True)
