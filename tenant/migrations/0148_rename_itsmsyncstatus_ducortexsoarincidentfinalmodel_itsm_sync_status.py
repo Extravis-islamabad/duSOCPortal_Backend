@@ -4,15 +4,14 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('tenant', '0147_ducortexsoarincidentfinalmodel_itsmsyncstatus'),
+        ("tenant", "0147_ducortexsoarincidentfinalmodel_itsmsyncstatus"),
     ]
 
     operations = [
         migrations.RenameField(
-            model_name='ducortexsoarincidentfinalmodel',
-            old_name='itsmsyncstatus',
-            new_name='itsm_sync_status',
+            model_name="ducortexsoarincidentfinalmodel",
+            old_name="itsmsyncstatus",
+            new_name="itsm_sync_status",
         ),
     ]

@@ -261,25 +261,23 @@ class CortexSOAR:
             custom = entry.get("CustomFields", {})
             investigation_id = entry.get("investigationId")
             owner = entry.get("owner")
-            
+
             # Skip if investigation_id is invalid
             if not investigation_id or investigation_id.strip() == "":
                 continue
-                
+
             # Skip if owner is invalid
             if owner is None or owner.strip() == "":
                 continue
 
-            # Parse time fields and validate thems
+            # Parse time fields and validate them
             incident_tta = self.safe_parse_datetime(custom.get("incidenttta"))
             incident_ttdn = self.safe_parse_datetime(custom.get("incidentttdn"))
             incident_ttn = self.safe_parse_datetime(custom.get("incidentttn"))
-            
-        
+
             if incident_tta is None or incident_ttdn is None or incident_ttn is None:
                 continue
 
-           
             itsmsyncstatus = custom.get("itsmsyncstatus")
             if itsmsyncstatus in ("", " ", None):
                 itsmsyncstatus = None
