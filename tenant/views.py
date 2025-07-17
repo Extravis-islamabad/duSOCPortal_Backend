@@ -1130,8 +1130,11 @@ class DashboardView(APIView):
     def get(self, request):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
+            print(f"Tenant ID: {tenant.id}")  # Print tenant ID to console
+      
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
+            
         soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
@@ -1144,276 +1147,179 @@ class DashboardView(APIView):
             )
 
         soar_tenants = tenant.company.soar_tenants.all()
-        # Assuming 'request.user.tenant' gives you the logged-in tenant instance
-
         if not soar_tenants:
             return Response({"error": "No SOAR tenants found."}, status=404)
 
         soar_ids = [t.id for t in soar_tenants]
-
-        if not soar_ids:
-            return Response({"error": "No SOAR tenants found."}, status=404)
-
         filters = request.query_params.get("filters", "")
         filter_list = (
             [f.strip() for f in filters.split(",") if f.strip()] if filters else []
         )
 
         try:
-            # Get current date for filtering
+            # Date calculations
             today = timezone.now().date()
-            yesterday = (timezone.now() - timedelta(days=1)).date()
-            last_week = (timezone.now() - timedelta(days=7)).date()
+            yesterday = today - timedelta(days=1)
+            last_week = today - timedelta(days=7)
+            last_month = today - timedelta(days=30)
 
             dashboard_data = {}
 
+            # Base queryset
+            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_soar_tenant__in=soar_ids
+            )
+
             # Total Incidents
             if not filter_list or "totalIncidents" in filter_list:
-                total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids
+                total_incidents = incidents_qs.count()
+                
+                # Calculate percentage change from last week
+                last_week_count = incidents_qs.filter(
+                    created__date__range=[last_week, today - timedelta(days=1)]
                 ).count()
-
-                new_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids, created__date=today
+                
+                current_week_count = incidents_qs.filter(
+                    created__date__range=[today - timedelta(days=7), today]
                 ).count()
-
-                last_week_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids, created__date__gte=last_week
-                ).count()
-
-                percent_change = (
-                    ((total_incidents - last_week_incidents) / last_week_incidents)
-                    * 100
-                    if last_week_incidents > 0
-                    else 0
+                
+                percent_change = self._calculate_percentage_change(
+                    current_week_count, last_week_count
                 )
-                change_indicator = "↑" if percent_change >= 0 else "↓"
-                change_text = (
-                    f"{change_indicator} {abs(percent_change):.0f}% from last week"
-                )
-
+                
                 dashboard_data["totalIncidents"] = {
                     "count": total_incidents,
-                    "change": change_text,
-                    "new": new_incidents,
+                    "change": percent_change,
+                    "new": incidents_qs.filter(created__date=today).count()
                 }
 
-            # Unassigned Incidents
-            if not filter_list or "unassigned" in filter_list:
-                unassigned_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids, owner__isnull=True
+            # Open Incidents (status=1)
+            if not filter_list or "open" in filter_list:
+                open_qs = incidents_qs.filter(status=1)
+                open_count = open_qs.count()
+                
+                yesterday_open = incidents_qs.filter(
+                    status=1,
+                    created__date=yesterday
                 ).count()
-
-                critical_unassigned = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids, owner__isnull=True, severity=1
-                ).count()
-
-                yesterday_unassigned = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids,
-                    owner__isnull=True,
-                    created__date=yesterday,
-                ).count()
-
-                unassigned_change = (
-                    ((unassigned_count - yesterday_unassigned) / yesterday_unassigned)
-                    * 100
-                    if yesterday_unassigned > 0
-                    else 0
+                
+                percent_change = self._calculate_percentage_change(
+                    open_count, yesterday_open
                 )
-                unassigned_indicator = "↑" if unassigned_change >= 0 else "↓"
-                unassigned_change_text = f"{unassigned_indicator} {abs(unassigned_change):.0f}% from yesterday"
-
-                dashboard_data["unassigned"] = {
-                    "count": unassigned_count,
-                    "change": unassigned_change_text,
-                    "critical": critical_unassigned,
+                
+                dashboard_data["open"] = {
+                    "count": open_count,
+                    "change": percent_change,
+                    "critical": open_qs.filter(severity=1).count()
                 }
 
-            # Pending Incidents
-            if not filter_list or "pending" in filter_list:
-                pending_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids, status="Pending"
+            # Closed Incidents (status=2)
+            if not filter_list or "closed" in filter_list:
+                closed_qs = incidents_qs.filter(status=2)
+                closed_count = closed_qs.filter(closed__date=today).count()
+                
+                yesterday_closed = incidents_qs.filter(
+                    status=2,
+                    closed__date=yesterday
                 ).count()
-
-                awaiting_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids,
-                    status="Pending",
-                    incident_phase="Awaiting Response",
-                ).count()
-
-                yesterday_pending = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids,
-                    status="Pending",
-                    created__date=yesterday,
-                ).count()
-
-                pending_change = (
-                    ((pending_count - yesterday_pending) / yesterday_pending) * 100
-                    if yesterday_pending > 0
-                    else 0
+                
+                percent_change = self._calculate_percentage_change(
+                    closed_count, yesterday_closed
                 )
-                pending_indicator = "↑" if pending_change >= 0 else "↓"
-                pending_change_text = (
-                    f"{pending_indicator} {abs(pending_change):.0f}% from yesterday"
-                )
+                
+                dashboard_data["closed"] = {
+                    "count": closed_count,
+                    "change": percent_change,
+                    "critical": closed_qs.filter(severity=1, closed__date=today).count()
+                }
 
-                dashboard_data["pending"] = {
-                    "count": pending_count,
-                    "change": pending_change_text,
-                    "awaiting": awaiting_count,
+            # True Positives
+            if not filter_list or "truePositives" in filter_list:
+                tp_qs = incidents_qs.filter(
+                    itsm_sync_status__iexact="Ready",
+                    status=1  # Open incidents
+                )
+                tp_count = tp_qs.count()
+                
+                last_week_tp = incidents_qs.filter(
+                    itsm_sync_status__iexact="Ready",
+                    status=1,
+                    created__date__range=[last_week, today - timedelta(days=1)]
+                ).count()
+                
+                percent_change = self._calculate_percentage_change(
+                    tp_count, last_week_tp
+                )
+                
+                dashboard_data["truePositives"] = {
+                    "count": tp_count,
+                    "change": percent_change
                 }
 
             # False Positives
             if not filter_list or "falsePositives" in filter_list:
-                false_positive_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids, status="False Positive"
-                ).count()
-
-                review_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids,
-                    status="False Positive",
-                    incident_phase="Review Needed",
-                ).count()
-
-                last_week_false_positives = (
-                    DUCortexSOARIncidentFinalModel.objects.filter(
-                        cortex_soar_tenant__in=soar_ids,
-                        status="False Positive",
-                        created__date__gte=last_week,
-                    ).count()
+                fp_filters = (
+                    ~Q(owner__isnull=True) &
+                    ~Q(owner__exact="") &
+                    Q(incident_tta__isnull=False) &
+                    Q(incident_ttn__isnull=False) &
+                    Q(incident_ttdn__isnull=False) &
+                    Q(itsm_sync_status__isnull=False) &
+                    Q(itsm_sync_status__iexact="Done") &
+                    Q(status=1)  # Open incidents
                 )
-
-                fp_change = (
-                    (
-                        (false_positive_count - last_week_false_positives)
-                        / last_week_false_positives
-                    )
-                    * 100
-                    if last_week_false_positives > 0
-                    else 0
+                
+                fp_qs = incidents_qs.filter(fp_filters)
+                fp_count = fp_qs.count()
+                
+                last_week_fp = incidents_qs.filter(
+                    fp_filters,
+                    created__date__range=[last_week, today - timedelta(days=1)]
+                ).count()
+                
+                percent_change = self._calculate_percentage_change(
+                    fp_count, last_week_fp
                 )
-                fp_indicator = "↑" if fp_change >= 0 else "↓"
-                fp_change_text = f"{fp_indicator} {abs(fp_change):.0f}% from last week"
-
+                
                 dashboard_data["falsePositives"] = {
-                    "count": false_positive_count,
-                    "change": fp_change_text,
-                    "review": review_count,
-                }
-
-            # Closed Incidents
-            if not filter_list or "closed" in filter_list:
-                closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids, status="Closed", closed__date=today
-                ).count()
-
-                critical_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids,
-                    status="Closed",
-                    severity=1,
-                    closed__date=today,
-                ).count()
-
-                yesterday_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids,
-                    status="Closed",
-                    closed__date=yesterday,
-                ).count()
-
-                closed_change = (
-                    ((closed_count - yesterday_closed) / yesterday_closed) * 100
-                    if yesterday_closed > 0
-                    else 0
-                )
-                closed_indicator = "↑" if closed_change >= 0 else "↓"
-                closed_change_text = (
-                    f"{closed_indicator} {abs(closed_change):.0f}% from yesterday"
-                )
-
-                dashboard_data["closed"] = {
-                    "count": closed_count,
-                    "change": closed_change_text,
-                    "critical": critical_closed,
-                }
-
-            # Error Incidents
-            if not filter_list or "errors" in filter_list:
-                error_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids, status="Error"
-                ).count()
-
-                api_error_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids,
-                    status="Error",
-                    qradar_category="API Failure",
-                ).count()
-
-                yesterday_errors = DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids,
-                    status="Error",
-                    created__date=yesterday,
-                ).count()
-
-                error_change = error_count - yesterday_errors
-                error_change_text = (
-                    f"↑ {error_change} new since yesterday"
-                    if error_change >= 0
-                    else f"↓ {abs(error_change)} less than yesterday"
-                )
-
-                dashboard_data["errors"] = {
-                    "count": error_count,
-                    "change": error_change_text,
-                    "api": api_error_count,
+                    "count": fp_count,
+                    "change": percent_change,
+                    "review": fp_qs.filter(incident_phase="Review Needed").count()
                 }
 
             # Top Closers
             if not filter_list or "topClosers" in filter_list:
                 top_closers_qs = (
-                    DUCortexSOARIncidentFinalModel.objects.filter(
-                        cortex_soar_tenant__in=soar_ids,
-                        status="Closed",
-                        closing_user_id__isnull=False,
+                    incidents_qs.filter(
+                        status=2,  # Closed incidents
+                        closing_user_id__isnull=False
                     )
                     .values("closing_user_id")
                     .annotate(count=Count("id"))
                     .order_by("-count")[:5]
                 )
-
-                top_closers = [
+                dashboard_data["topClosers"] = [
                     {"name": row["closing_user_id"], "count": row["count"]}
                     for row in top_closers_qs
                 ]
 
-                dashboard_data["topClosers"] = top_closers
-
             # Recent Activities
             if not filter_list or "recentActivities" in filter_list:
                 recent_qs = (
-                    DUCortexSOARIncidentFinalModel.objects.filter(
-                        cortex_soar_tenant__in=soar_ids
-                    )
+                    incidents_qs
                     .order_by("-modified")[:5]
                     .values("id", "name", "modified", "owner", "status")
                 )
-
-                activities = []
-                for row in recent_qs:
-                    time_str = row["modified"].strftime("%I:%M %p")
-                    event = "Status update"
-                    user = row["owner"] or "System"
-                    details = f"INC-{row['id']} - {row['name']} ({row['status']})"
-
-                    activities.append(
-                        {
-                            "time": time_str,
-                            "event": event,
-                            "user": user,
-                            "details": details,
-                        }
-                    )
-
-                dashboard_data["recentActivities"] = activities
+                
+                dashboard_data["recentActivities"] = [
+                    {
+                        "time": row["modified"].strftime("%I:%M %p"),
+                        "event": "Status update",
+                        "user": row["owner"] or "System",
+                        "details": f"INC-{row['id']} - {row['name']} ({'Open' if row['status'] == 1 else 'Closed'})"
+                    }
+                    for row in recent_qs
+                ]
 
             return Response(dashboard_data, status=status.HTTP_200_OK)
 
@@ -1422,6 +1328,18 @@ class DashboardView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    def _calculate_percentage_change(self, current, previous):
+        """Calculate percentage change safely"""
+        if previous == 0:
+            return "0%"  # or "N/A" if you prefer
+            
+        change = ((current - previous) / previous) * 100
+        # Cap at 100% if it goes beyond
+        change = min(100, max(-100, change))
+        
+        direction = "↑" if change >= 0 else "↓"
+        return f"{direction} {abs(round(change, 1))}%"
 
 
 # class IncidentsView(APIView):
