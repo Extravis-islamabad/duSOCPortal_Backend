@@ -68,7 +68,7 @@ urlpatterns = [
         name="get-cortex-soar-tenants",
     ),
     path("get_tenant_assets/", GetTenantAssetsList.as_view(), name="get-tenant-assets"),
-    path("assets/stats/", GetTenantAssetsStats.as_view(), name="tenant-assets-stats"),
+    # path("assets/stats/", GetTenantAssetsStats.as_view(), name="tenant-assets-stats"),
     path("get_itsm_tickets/", TenantITSMTicketsView.as_view(), name="get-itsm-tickets"),
     path("itsm/tickets/<int:db_id>/", TenantITSMTicketDetailView.as_view()),
     path(
