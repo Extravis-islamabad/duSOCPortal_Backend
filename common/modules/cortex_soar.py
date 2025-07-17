@@ -311,7 +311,6 @@ class CortexSOAR:
         """
         Transforms the CortexSOAR data into a format suitable for
         insertion into the database.
-        Skips incidents where incident_tta, incident_ttdn, or incident_ttn are None/empty.
         """
         data = data.get("data", None)
 
@@ -328,22 +327,19 @@ class CortexSOAR:
             if not investigation_id or investigation_id.strip() == "":
                 continue
 
-            # Parse time fields first
+            # Handle itsmsyncstatus - ensure proper extraction
+            itsmsyncstatus = custom.get("itsmsyncstatus")
+            if itsmsyncstatus in ("", " ", None):  # Explicit check for empty values
+                itsmsyncstatus = None
+            else:
+                itsmsyncstatus = str(itsmsyncstatus).strip()  # Ensure it's a clean string
+
+            # Parse time fields
             incident_tta = self.safe_parse_datetime(custom.get("incidenttta"))
             incident_ttdn = self.safe_parse_datetime(custom.get("incidentttdn"))
             incident_ttn = self.safe_parse_datetime(custom.get("incidentttn"))
 
-            # Skip the entire incident if any critical time field is missing
-            if None in (incident_tta, incident_ttdn, incident_ttn):
-                logger.debug(f"Skipping incident {entry.get('id')} due to missing time fields")
-                continue
-
-            # Handle itsmsyncstatus (optional field)
-            itsmsyncstatus = custom.get("itsmsyncstatus")
-            if itsmsyncstatus and itsmsyncstatus.strip() == "":
-                itsmsyncstatus = None
-
-            # Create the record only if all required fields are present
+            # Create the record
             record = DUCortexSOARIncidentFinalModel(
                 db_id=self.extract_digits(entry.get("id")),
                 created=self.safe_parse_datetime(entry.get("created")),
@@ -366,7 +362,7 @@ class CortexSOAR:
                 incident_ttdn=incident_ttdn,
                 incident_ttn=incident_ttn,
                 initial_notification=custom.get("initialnotification"),
-                itsmsyncstatus=itsmsyncstatus,
+                itsmsyncstatus=itsmsyncstatus,  # This should now be properly set
                 list_of_rules_offense=custom.get("listofrulesoffense"),
                 log_source_type=custom.get("logsourcetype"),
                 low_level_categories_events=custom.get("lowlevelcategoriesevents"),
