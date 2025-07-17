@@ -2,6 +2,7 @@ import re
 import time
 
 from celery import shared_task
+from django.db.models import Count
 from loguru import logger
 
 from common.modules.cortex_soar import CortexSOAR
@@ -65,11 +66,14 @@ def sync_cortex_soar_tenants(
 
 @shared_task
 def sync_notes_child(token: str, ip_address: str, port: int, integration_id: int):
-    data = DUCortexSOARIncidentFinalModel.objects.filter(
-        integration_id=integration_id
-    ).values("id", "db_id", "account")
-
     start = time.time()
+    data = (
+        DUCortexSOARIncidentFinalModel.objects.filter(integration_id=integration_id)
+        .annotate(note_count=Count("notes"))
+        .filter(note_count=0)
+        .values("id", "db_id", "account")
+    )
+
     try:
         with CortexSOAR(ip_address=ip_address, port=port, token=token) as soar:
             for item in data:
@@ -80,23 +84,25 @@ def sync_notes_child(token: str, ip_address: str, port: int, integration_id: int
                     f"Syncing notes for incident_id: {incident_id} for account: {account}"
                 )
                 notes = soar._get_notes(account_name=account, incident_id=db_id)
-            if notes is None:
-                logger.error(
-                    "No data returned from CortexSOAR sync_notes_child() endpoint"
+                if notes is None:
+                    logger.error(
+                        "No data returned from CortexSOAR sync_notes_child() endpoint"
+                    )
+                    return
+
+                transformed_data = soar._transform_notes_data(
+                    entries=notes,
+                    incident_id=incident_id,
+                    integration_id=integration_id,
                 )
-                return
+                soar._insert_notes(records=transformed_data)
 
-            transformed_data = soar._transform_notes_data(
-                entries=notes, incident_id=incident_id, integration_id=integration_id
-            )
-            soar._insert_notes(records=transformed_data)
-
-            logger.info(
-                f"Successfully synced {len(transformed_data)} CortexSOAR tenants"
-            )
-            logger.info(
-                f"CortexSOAR.sync_notes_child() task took {time.time() - start} seconds"
-            )
+                logger.info(
+                    f"Successfully synced {len(transformed_data)} CortexSOAR tenants"
+                )
+                logger.info(
+                    f"CortexSOAR.sync_notes_child() task took {time.time() - start} seconds"
+                )
     except Exception as e:
         logger.error(f"Unexpected error in sync_notes_child: {str(e)}")
 
