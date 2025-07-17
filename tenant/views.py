@@ -2183,7 +2183,8 @@ class IncidentDetailView(APIView):
                 notes_by_user_dict[user].append(
                     {
                         "id": note.id,
-                        "category": note.category or "General",
+                        "db_id": note.db_id,
+                        "category": note.category or "",
                         "content": note.content or "",
                         "created": note.created.strftime("%Y-%m-%d %I:%M %p")
                         if note.created

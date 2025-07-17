@@ -505,4 +505,3 @@ class CortexSOAR:
             )
         except Exception as e:
             logger.error(f"An error occurred in CortexSOAR._insert_notes(): {str(e)}")
-            transaction.set_rollback(True)
