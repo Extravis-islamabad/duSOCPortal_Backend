@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import datetime
 
 import pandas as pd
 import requests
@@ -470,6 +471,16 @@ class IBMQradar:
         :param data: A list of dictionaries containing event log information.
         :return: A list of dictionaries containing the transformed event log information.
         """
+
+        def parse_timestamp(ts_str):
+            try:
+                if not ts_str or str(ts_str).strip() in ("0", "", "null"):
+                    return None
+                ts = int(ts_str)
+                return datetime.utcfromtimestamp(ts / 1000).date()
+            except (ValueError, TypeError):
+                return None
+
         collector_map = DBMappings.get_db_id_to_id_mapping(IBMQradarEventCollector)
         log_sources_types_map = DBMappings.get_db_id_to_id_mapping(
             IBMQradarLogSourceTypes
@@ -502,6 +513,10 @@ class IBMQradar:
         df.dropna(subset=["target_event_collector_id"], inplace=True)
         df["event_collector_id"] = df["target_event_collector_id"].map(collector_map)
         df["log_source_type_id"] = df["type_id"].map(log_sources_types_map)
+        df["creation_date_converted"] = df["creation_date"].apply(parse_timestamp)
+        df["modified_date_converted"] = df["modified_date"].apply(parse_timestamp)
+        df["last_event_date_converted"] = df["last_event_time"].apply(parse_timestamp)
+
         df.drop(columns=["type_id"], inplace=True)
         data = df.to_dict(orient="records")
 
@@ -534,6 +549,9 @@ class IBMQradar:
                         "creation_date",
                         "modified_date",
                         "last_event_time",
+                        "creation_date_converted",
+                        "modified_date_converted",
+                        "last_event_date_converted",
                     ],
                     unique_fields=["db_id"],
                 )
