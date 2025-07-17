@@ -238,6 +238,7 @@ class CortexSOAR:
         c = value.split(" ")
         return int(c[-1])
 
+    # TODO : include the itsmsyncstatus field in this also created the relavent field in the DUCortexSOARIncidentFinalModel
     def _transform_incidents(self, data, integration_id, cortex_tenant):
         """
         Transforms the CortexSOAR data into a format suitable for
@@ -280,13 +281,19 @@ class CortexSOAR:
                 severity=entry.get("severity"),
                 investigated_id=investigation_id,
                 closing_user_id=entry.get("closingUserId"),
-                owner=entry.get("owner"),
+                owner=entry.get("owner"),  # If none skip this incident ''
                 playbook_id=entry.get("playbookId"),
                 incident_phase=custom.get("incidentphase"),
                 incident_priority=custom.get("incidentpriority"),
-                incident_tta=self.safe_parse_datetime(custom.get("incidenttta")),
-                incident_ttdn=self.safe_parse_datetime(custom.get("incidentttdn")),
-                incident_ttn=self.safe_parse_datetime(custom.get("incidentttn")),
+                incident_tta=self.safe_parse_datetime(
+                    custom.get("incidenttta")
+                ),  # If none skip this incident
+                incident_ttdn=self.safe_parse_datetime(
+                    custom.get("incidentttdn")
+                ),  # If none skip this incident
+                incident_ttn=self.safe_parse_datetime(
+                    custom.get("incidentttn")
+                ),  # If none skip this incident
                 initial_notification=custom.get("initialnotification"),
                 list_of_rules_offense=custom.get("listofrulesoffense"),
                 log_source_type=custom.get("logsourcetype"),
@@ -417,6 +424,7 @@ class CortexSOAR:
         Transforms raw note entries into a list of DUSoarNotes model instances.
         Skips entries with empty user.
         """
+        logger.info(f"CortexSOAR._transform_notes_data() incident_id: {incident_id}")
         records = []
 
         for rec in entries:

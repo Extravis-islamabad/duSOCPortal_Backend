@@ -76,6 +76,9 @@ def sync_notes_child(token: str, ip_address: str, port: int, integration_id: int
                 incident_id = item["id"]
                 db_id = item["db_id"]
                 account = "acc_{}".format(item["account"])
+                logger.info(
+                    f"Syncing notes for incident_id: {incident_id} for account: {account}"
+                )
                 notes = soar._get_notes(account_name=account, incident_id=db_id)
             if notes is None:
                 logger.error(
