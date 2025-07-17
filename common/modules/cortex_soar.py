@@ -425,7 +425,6 @@ class CortexSOAR:
                     headers=self.headers,
                     json=payload,
                     verify=SSLConstants.VERIFY,
-                    proxies=proxies,
                     timeout=timeout,
                 )
 
