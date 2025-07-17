@@ -322,7 +322,7 @@ class CortexSOAR:
         for entry in data:
             custom = entry.get("CustomFields", {})
             investigation_id = entry.get("investigationId")
-
+            
             # Skip if investigation_id is invalid
             if not investigation_id or investigation_id.strip() == "":
                 continue
@@ -339,17 +339,7 @@ class CortexSOAR:
             incident_ttdn = self.safe_parse_datetime(custom.get("incidentttdn"))
             incident_ttn = self.safe_parse_datetime(custom.get("incidentttn"))
 
-            # Skip the entire incident if any critical time field is missing
-            if None in (incident_tta, incident_ttdn, incident_ttn):
-                logger.debug(f"Skipping incident {entry.get('id')} due to missing time fields")
-                continue
-
-            # Handle itsmsyncstatus (optional field)
-            itsmsyncstatus = custom.get("itsmsyncstatus")
-            if itsmsyncstatus and itsmsyncstatus.strip() == "":
-                itsmsyncstatus = None
-
-            # Create the record only if all required fields are present
+            # Create the record
             record = DUCortexSOARIncidentFinalModel(
                 db_id=self.extract_digits(entry.get("id")),
                 created=self.safe_parse_datetime(entry.get("created")),
