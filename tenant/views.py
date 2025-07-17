@@ -1131,10 +1131,10 @@ class DashboardView(APIView):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
             print(f"Tenant ID: {tenant.id}")  # Print tenant ID to console
-      
+
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
-            
+
         soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
@@ -1172,126 +1172,124 @@ class DashboardView(APIView):
             # Total Incidents
             if not filter_list or "totalIncidents" in filter_list:
                 total_incidents = incidents_qs.count()
-                
+
                 # Calculate percentage change from last week
                 last_week_count = incidents_qs.filter(
                     created__date__range=[last_week, today - timedelta(days=1)]
                 ).count()
-                
+
                 current_week_count = incidents_qs.filter(
                     created__date__range=[today - timedelta(days=7), today]
                 ).count()
-                
+
                 percent_change = self._calculate_percentage_change(
                     current_week_count, last_week_count
                 )
-                
+
                 dashboard_data["totalIncidents"] = {
                     "count": total_incidents,
                     "change": percent_change,
-                    "new": incidents_qs.filter(created__date=today).count()
+                    "new": incidents_qs.filter(created__date=today).count(),
                 }
 
             # Open Incidents (status=1)
             if not filter_list or "open" in filter_list:
                 open_qs = incidents_qs.filter(status=1)
                 open_count = open_qs.count()
-                
+
                 yesterday_open = incidents_qs.filter(
-                    status=1,
-                    created__date=yesterday
+                    status=1, created__date=yesterday
                 ).count()
-                
+
                 percent_change = self._calculate_percentage_change(
                     open_count, yesterday_open
                 )
-                
+
                 dashboard_data["open"] = {
                     "count": open_count,
                     "change": percent_change,
-                    "critical": open_qs.filter(severity=1).count()
+                    "critical": open_qs.filter(severity=1).count(),
                 }
 
             # Closed Incidents (status=2)
             if not filter_list or "closed" in filter_list:
                 closed_qs = incidents_qs.filter(status=2)
                 closed_count = closed_qs.filter(closed__date=today).count()
-                
+
                 yesterday_closed = incidents_qs.filter(
-                    status=2,
-                    closed__date=yesterday
+                    status=2, closed__date=yesterday
                 ).count()
-                
+
                 percent_change = self._calculate_percentage_change(
                     closed_count, yesterday_closed
                 )
-                
+
                 dashboard_data["closed"] = {
                     "count": closed_count,
                     "change": percent_change,
-                    "critical": closed_qs.filter(severity=1, closed__date=today).count()
+                    "critical": closed_qs.filter(
+                        severity=1, closed__date=today
+                    ).count(),
                 }
 
             # True Positives
             if not filter_list or "truePositives" in filter_list:
                 tp_qs = incidents_qs.filter(
-                    itsm_sync_status__iexact="Ready",
-                    status=1  # Open incidents
+                    itsm_sync_status__iexact="Ready", status=1  # Open incidents
                 )
                 tp_count = tp_qs.count()
-                
+
                 last_week_tp = incidents_qs.filter(
                     itsm_sync_status__iexact="Ready",
                     status=1,
-                    created__date__range=[last_week, today - timedelta(days=1)]
+                    created__date__range=[last_week, today - timedelta(days=1)],
                 ).count()
-                
+
                 percent_change = self._calculate_percentage_change(
                     tp_count, last_week_tp
                 )
-                
+
                 dashboard_data["truePositives"] = {
                     "count": tp_count,
-                    "change": percent_change
+                    "change": percent_change,
                 }
 
             # False Positives
             if not filter_list or "falsePositives" in filter_list:
                 fp_filters = (
-                    ~Q(owner__isnull=True) &
-                    ~Q(owner__exact="") &
-                    Q(incident_tta__isnull=False) &
-                    Q(incident_ttn__isnull=False) &
-                    Q(incident_ttdn__isnull=False) &
-                    Q(itsm_sync_status__isnull=False) &
-                    Q(itsm_sync_status__iexact="Done") &
-                    Q(status=1)  # Open incidents
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Done")
+                    & Q(status=1)  # Open incidents
                 )
-                
+
                 fp_qs = incidents_qs.filter(fp_filters)
                 fp_count = fp_qs.count()
-                
+
                 last_week_fp = incidents_qs.filter(
                     fp_filters,
-                    created__date__range=[last_week, today - timedelta(days=1)]
+                    created__date__range=[last_week, today - timedelta(days=1)],
                 ).count()
-                
+
                 percent_change = self._calculate_percentage_change(
                     fp_count, last_week_fp
                 )
-                
+
                 dashboard_data["falsePositives"] = {
                     "count": fp_count,
                     "change": percent_change,
-                    "review": fp_qs.filter(incident_phase="Review Needed").count()
+                    "review": fp_qs.filter(incident_phase="Review Needed").count(),
                 }
 
             # Top Closers
             if not filter_list or "topClosers" in filter_list:
                 top_closers_qs = (
                     incidents_qs.filter(
-                        status=2,  # Closed incidents
-                        closing_user_id__isnull=False
+                        status=2, closing_user_id__isnull=False  # Closed incidents
                     )
                     .values("closing_user_id")
                     .annotate(count=Count("id"))
@@ -1304,18 +1302,16 @@ class DashboardView(APIView):
 
             # Recent Activities
             if not filter_list or "recentActivities" in filter_list:
-                recent_qs = (
-                    incidents_qs
-                    .order_by("-modified")[:5]
-                    .values("id", "name", "modified", "owner", "status")
+                recent_qs = incidents_qs.order_by("-modified")[:5].values(
+                    "id", "name", "modified", "owner", "status"
                 )
-                
+
                 dashboard_data["recentActivities"] = [
                     {
                         "time": row["modified"].strftime("%I:%M %p"),
                         "event": "Status update",
                         "user": row["owner"] or "System",
-                        "details": f"INC-{row['id']} - {row['name']} ({'Open' if row['status'] == 1 else 'Closed'})"
+                        "details": f"INC-{row['id']} - {row['name']} ({'Open' if row['status'] == 1 else 'Closed'})",
                     }
                     for row in recent_qs
                 ]
@@ -1332,11 +1328,11 @@ class DashboardView(APIView):
         """Calculate percentage change safely"""
         if previous == 0:
             return "0%"  # or "N/A" if you prefer
-            
+
         change = ((current - previous) / previous) * 100
         # Cap at 100% if it goes beyond
         change = min(100, max(-100, change))
-        
+
         direction = "↑" if change >= 0 else "↓"
         return f"{direction} {abs(round(change, 1))}%"
 
@@ -2155,9 +2151,11 @@ class IncidentDetailView(APIView):
                 ", ".join(log_source_types) if log_source_types else "Unknown"
             )
 
-            # Fetch related notes for the incident
+            account_name = f"acc_{incident['account']}"
             notes = DUSoarNotes.objects.filter(
-                incident_id=incident["id"], integration_id=soar_integrations.id
+                incident_id=incident["id"],
+                integration_id=soar_integrations.id,
+                account__iexact=account_name,
             ).order_by("-created")
             if not notes.exists():
                 result = IntegrationCredentials.objects.filter(
@@ -2174,7 +2172,9 @@ class IncidentDetailView(APIView):
                     incident_id=incident["id"],
                 )
                 notes = DUSoarNotes.objects.filter(
-                    incident_id=incident["id"], integration_id=result.id
+                    incident_id=incident["id"],
+                    integration_id=soar_integrations.id,
+                    account__iexact=account_name,
                 ).order_by("-created")
 
             notes_by_user_dict = defaultdict(list)
