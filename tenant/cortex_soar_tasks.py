@@ -167,7 +167,7 @@ def sync_notes():
     )
 
     for result in results:
-        sync_notes_child(
+        sync_notes_child.delay(
             token=result.api_key,
             ip_address=result.ip_address,
             port=result.port,
