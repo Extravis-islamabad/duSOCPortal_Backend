@@ -1157,7 +1157,7 @@ class DashboardView(APIView):
         )
 
         try:
-            # Date calculations
+            # Date calculationss
             today = timezone.now().date()
             yesterday = today - timedelta(days=1)
             last_week = today - timedelta(days=7)
