@@ -41,7 +41,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_soar_data
+from tenant.cortex_soar_tasks import sync_notes
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -275,7 +275,7 @@ class GetTenantAssetsList(APIView):
     def get(self, request):
         """
         Retrieve IBM QRadar assets with status counts and pagination
-        
+
         Returns:
             {
                 "count": total_count,
@@ -379,7 +379,9 @@ class GetTenantAssetsList(APIView):
                     filters &= Q(last_event_date_converted=last_event_date)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid last_event_start_date format. Use YYYY-MM-DD."},
+                        {
+                            "error": "Invalid last_event_start_date format. Use YYYY-MM-DD."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -437,14 +439,14 @@ class GetTenantAssetsList(APIView):
                     asset.status = "ERROR"
                     inactive_count += 1
                     continue
-                
+
                 try:
                     last_event_timestamp = int(asset.last_event_time) / 1000
                     last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
                     last_event_time = timezone.make_aware(last_event_time)
-                    
+
                     time_diff = (now - last_event_time).total_seconds() / 60
-                    
+
                     if time_diff > 15:
                         asset.status = "ERROR"
                         inactive_count += 1
@@ -458,11 +460,15 @@ class GetTenantAssetsList(APIView):
             # Apply status filter if provided
             if status_filter:
                 status_filter = status_filter.upper()
-                if status_filter in ['SUCCESS', 'ERROR']:
-                    assets = [asset for asset in assets if asset.status == status_filter]
+                if status_filter in ["SUCCESS", "ERROR"]:
+                    assets = [
+                        asset for asset in assets if asset.status == status_filter
+                    ]
                 else:
                     return Response(
-                        {"error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."},
+                        {
+                            "error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -477,23 +483,23 @@ class GetTenantAssetsList(APIView):
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
             result_page = paginator.paginate_queryset(assets, request)
-            
+
             # Serialize results
             serializer = IBMQradarAssestsSerializer(result_page, many=True)
-            
+
             # Prepare response data
             response_data = {
                 "count": len(assets),  # Total count of all assets
                 "active_assets": active_count,
                 "inactive_assets": inactive_count,
-                "results": serializer.data
+                "results": serializer.data,
             }
-            
+
             # Add pagination links if needed
-            if getattr(paginator, 'page', None):
-                response_data['next'] = paginator.get_next_link()
-                response_data['previous'] = paginator.get_previous_link()
-            
+            if getattr(paginator, "page", None):
+                response_data["next"] = paginator.get_next_link()
+                response_data["previous"] = paginator.get_previous_link()
+
             return Response(response_data)
 
         except Exception as e:
