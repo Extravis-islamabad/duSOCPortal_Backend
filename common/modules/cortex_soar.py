@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_datetime
 DUBAI_TZ = pytz.timezone("Asia/Dubai")
 from loguru import logger
 
-from common.constants import CortexSOARConstants, SSLConstants
+from common.constants import CortexSOARConstants, EnvConstants, SSLConstants
 from tenant.models import (
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
@@ -406,13 +406,29 @@ class CortexSOAR:
         payload = {"userFilter": False}
         endpoint = f"{self.base_url}/{account_name}/{CortexSOARConstants.NOTES_ENDPOINT}/{incident_id}"
         try:
-            response = requests.post(
-                endpoint,
-                headers=self.headers,
-                json=payload,
-                verify=SSLConstants.VERIFY,
-                timeout=timeout,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.post(
+                    endpoint,
+                    headers=self.headers,
+                    json=payload,
+                    verify=SSLConstants.VERIFY,
+                    proxies=proxies,
+                    timeout=timeout,
+                )
+            else:
+                response = requests.post(
+                    endpoint,
+                    headers=self.headers,
+                    json=payload,
+                    verify=SSLConstants.VERIFY,
+                    proxies=proxies,
+                    timeout=timeout,
+                )
+
         except Exception as e:
             logger.error(f"CortexSOAR._get_notes() failed with exception : {str(e)}")
             return
@@ -425,14 +441,14 @@ class CortexSOAR:
         data = response.json()
         return data
 
-    def _transform_notes_data(entries: list, incident_id, integration_id) -> list:
+    def _transform_notes_data(self, entries: list, incident_id, integration_id) -> list:
         """
         Transforms raw note entries into a list of DUSoarNotes model instances.
         Skips entries with empty user.
         """
         logger.info(f"CortexSOAR._transform_notes_data() incident_id: {incident_id}")
         records = []
-
+        entries = entries.get("entries")
         for rec in entries:
             if not rec.get("user"):
                 continue
