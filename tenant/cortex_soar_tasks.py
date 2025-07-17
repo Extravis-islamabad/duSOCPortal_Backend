@@ -239,4 +239,4 @@ def sync_soar_data():
             integration_id=result.integration.id,
         )
     sync_requests_for_soar.delay()
-    # sync_notes.delay()
+    sync_notes.delay()
