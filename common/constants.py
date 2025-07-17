@@ -326,6 +326,7 @@ class ITSMConstants:
 class CortexSOARConstants:
     TENANT_ENDPOINT = "accounts"
     INCIDENT_ENDPOINT = "incidents/search"
+    NOTES_ENDPOINT = "investigation/"
     BATCH_SIZE = 10000
 
 
@@ -376,3 +377,8 @@ class FilterType(Enum):
 
 
 SEVERITY_LABELS = {0: "Unknown", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
+
+
+# SELECT DOMAINNAME(domainid) AS 'client',"Hostname" AS 'Hostname (custom)',MAX("Value") AS 'Peak EPS', AVG("Value") AS 'Average EPS' from events where client='ADGM' AND ( "Metric ID"='EventRate' AND "deviceType"='368' )
+# GROUP BY "Hostname"
+#  last 5 minutes
