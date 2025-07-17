@@ -277,12 +277,14 @@ class GetTenantAssetsList(APIView):
     def get(self, request):
         """
         Retrieve IBM QRadar assets with status counts and pagination
-
+        Returns overall active/inactive counts regardless of filters
+        
         Returns:
             {
-                "count": total_count,
-                "active_assets": active_count,
-                "inactive_assets": inactive_count,
+                "count": filtered_count,
+                "total_assets": total_unfiltered_count,
+                "active_assets": total_active_unfiltered,
+                "inactive_assets": total_inactive_unfiltered,
                 "next": next_page_url,
                 "previous": previous_page_url,
                 "results": serialized_assets
@@ -321,20 +323,37 @@ class GetTenantAssetsList(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            # Step 4: Build filters
-            filters = Q(event_collector_id__in=collector_ids)
+            # Base filter for tenant's assets
+            base_filter = Q(event_collector_id__in=collector_ids)
+            
+            # Step 4: Get ALL assets first for total counts (unfiltered)
+            all_assets = IBMQradarAssests.objects.filter(base_filter).select_related(
+                "event_collector", "log_source_type"
+            )
+            
+            # Calculate TOTAL active/inactive counts (unfiltered)
+            total_active = 0
+            total_inactive = 0
+            now = timezone.now()
+            
+            for asset in all_assets:
+                status = self._get_asset_status(asset, now)
+                if status == "SUCCESS":
+                    total_active += 1
+                else:
+                    total_inactive += 1
+
+            # Step 5: Apply request filters for the actual results
+            filters = base_filter.copy()
 
             # Name filter
-            name = request.query_params.get("name")
-            if name:
+            if name := request.query_params.get("name"):
                 filters &= Q(name__icontains=name)
 
             # ID filter
-            id_filter = request.query_params.get("id")
-            if id_filter:
+            if id_filter := request.query_params.get("id"):
                 try:
-                    id_value = int(id_filter)
-                    filters &= Q(id=id_value)
+                    filters &= Q(id=int(id_filter))
                 except ValueError:
                     return Response(
                         {"error": "Invalid id format. Must be an integer."},
@@ -342,158 +361,112 @@ class GetTenantAssetsList(APIView):
                     )
 
             # DB ID filter
-            db_id = request.query_params.get("db_id")
-            if db_id:
+            if db_id := request.query_params.get("db_id"):
                 try:
-                    db_id_value = int(db_id)
-                    filters &= Q(db_id=db_id_value)
+                    filters &= Q(db_id=int(db_id))
                 except ValueError:
                     return Response(
                         {"error": "Invalid db_id format. Must be an integer."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Status filter will be applied after calculation
-            status_filter = request.query_params.get("status")
-
             # Log source type filter
-            log_source_type = request.query_params.get("log_source_type")
-            if log_source_type:
+            if log_source_type := request.query_params.get("log_source_type"):
                 filters &= Q(log_source_type__name__icontains=log_source_type)
 
             # Enabled filter
-            enabled = request.query_params.get("enabled")
-            if enabled is not None:
+            if enabled := request.query_params.get("enabled"):
                 try:
-                    enabled_value = enabled.lower() == "true"
-                    filters &= Q(enabled=enabled_value)
+                    filters &= Q(enabled=enabled.lower() == "true")
                 except ValueError:
                     return Response(
                         {"error": "Invalid enabled format. Must be true or false."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Last event start date filter
-            last_event_start_date = request.query_params.get("last_event_start_date")
-            if last_event_start_date:
-                try:
-                    last_event_date = parse_date(last_event_start_date)
-                    filters &= Q(last_event_date_converted=last_event_date)
-                except ValueError:
-                    return Response(
-                        {
-                            "error": "Invalid last_event_start_date format. Use YYYY-MM-DD."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            # Last event date filter (handled in Python due to timestamp conversion)
+            last_event_filter = request.query_params.get("last_event_date")
 
-            # Average EPS filters
-            average_eps = request.query_params.get("average_eps")
-            if average_eps:
+            # Average EPS filter
+            if average_eps := request.query_params.get("average_eps"):
                 try:
-                    eps_value = float(average_eps)
-                    filters &= Q(average_eps=eps_value)
+                    filters &= Q(average_eps=float(average_eps))
                 except ValueError:
                     return Response(
                         {"error": "Invalid average_eps format. Must be a number."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Start and end date filters
-            start_date_str = request.query_params.get("start_date")
-            end_date_str = request.query_params.get("end_date")
-            start_date = parse_date(start_date_str) if start_date_str else None
-            end_date = parse_date(end_date_str) if end_date_str else None
+            # Get filtered assets
+            filtered_assets = list(IBMQradarAssests.objects.filter(filters).select_related(
+                "event_collector", "log_source_type"
+            ))
 
+            # Apply last event date filter if provided
+            if last_event_filter:
+                try:
+                    filter_date = self._parse_date(last_event_filter)
+                    filtered_assets = [
+                        asset for asset in filtered_assets
+                        if asset.last_event_date_converted == filter_date
+                    ]
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid last_event_date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Apply date range filters if provided
+            start_date = self._parse_date(request.query_params.get("start_date"))
+            end_date = self._parse_date(request.query_params.get("end_date"))
+            
             if start_date and end_date and start_date > end_date:
                 return Response(
                     {"error": "start_date cannot be greater than end_date."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Fetch assets
-            assets = IBMQradarAssests.objects.filter(filters).select_related(
-                "event_collector", "log_source_type"
-            )
-
-            # Apply date filtering
             if start_date or end_date:
-                filtered_assets = []
-                for asset in assets:
-                    try:
-                        ts = int(asset.creation_date) / 1000
-                        asset_date = datetime.utcfromtimestamp(ts).date()
-                        if (not start_date or asset_date >= start_date) and (
-                            not end_date or asset_date <= end_date
-                        ):
-                            filtered_assets.append(asset)
-                    except (ValueError, TypeError):
-                        continue
-                assets = filtered_assets
-
-            # Calculate status and counts
-            now = timezone.now()
-            active_count = 0
-            inactive_count = 0
-
-            for asset in assets:
-                if not asset.last_event_time:
-                    asset.status = "ERROR"
-                    inactive_count += 1
-                    continue
-
-                try:
-                    last_event_timestamp = int(asset.last_event_time) / 1000
-                    last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
-                    last_event_time = timezone.make_aware(last_event_time)
-
-                    time_diff = (now - last_event_time).total_seconds() / 60
-
-                    if time_diff > 15:
-                        asset.status = "ERROR"
-                        inactive_count += 1
-                    else:
-                        asset.status = "SUCCESS"
-                        active_count += 1
-                except (ValueError, TypeError):
-                    asset.status = "ERROR"
-                    inactive_count += 1
+                filtered_assets = [
+                    asset for asset in filtered_assets
+                    if (not start_date or (asset.creation_date_converted and asset.creation_date_converted >= start_date))
+                    and (not end_date or (asset.creation_date_converted and asset.creation_date_converted <= end_date))
+                ]
 
             # Apply status filter if provided
-            if status_filter:
+            if status_filter := request.query_params.get("status"):
                 status_filter = status_filter.upper()
-                if status_filter in ["SUCCESS", "ERROR"]:
-                    assets = [
-                        asset for asset in assets if asset.status == status_filter
-                    ]
-                else:
+                if status_filter not in ["SUCCESS", "ERROR"]:
                     return Response(
-                        {
-                            "error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."
-                        },
+                        {"error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
+                
+                filtered_assets = [
+                    asset for asset in filtered_assets
+                    if self._get_asset_status(asset, now) == status_filter
+                ]
 
-            # Sort assets
-            assets = sorted(
-                assets,
+            # Sort assets by creation date (newest first)
+            filtered_assets.sort(
                 key=lambda x: x.creation_date_converted or datetime.min.date(),
-                reverse=True,
+                reverse=True
             )
 
             # Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
-            result_page = paginator.paginate_queryset(assets, request)
+            result_page = paginator.paginate_queryset(filtered_assets, request)
 
             # Serialize results
             serializer = IBMQradarAssestsSerializer(result_page, many=True)
 
-            # Prepare response data
+            # Prepare response
             response_data = {
-                "count": len(assets),  # Total count of all assets
-                "active_assets": active_count,
-                "inactive_assets": inactive_count,
+                "count": len(filtered_assets),  # Count of filtered assets
+                "total_assets": len(all_assets),  # Total unfiltered count
+                "active_assets": total_active,    # Unfiltered active count
+                "inactive_assets": total_inactive, # Unfiltered inactive count
                 "results": serializer.data,
             }
 
@@ -510,6 +483,29 @@ class GetTenantAssetsList(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    def _get_asset_status(self, asset, now):
+        """Determine asset status based on last event time"""
+        if not asset.last_event_time:
+            return "ERROR"
+
+        try:
+            last_event_timestamp = int(asset.last_event_time) / 1000
+            last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
+            last_event_time = timezone.make_aware(last_event_time)
+            time_diff = (now - last_event_time).total_seconds() / 60
+            
+            return "ERROR" if time_diff > 15 else "SUCCESS"
+        except (ValueError, TypeError):
+            return "ERROR"
+
+    def _parse_date(self, date_str):
+        """Safe date parsing from string"""
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("Invalid date format")
 
 class GetTenantAssetsStats(APIView):
     authentication_classes = [JWTAuthentication]
@@ -1130,11 +1126,9 @@ class DashboardView(APIView):
     def get(self, request):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
-            print(f"Tenant ID: {tenant.id}")  # Print tenant ID to console
-
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
-
+            
         soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
@@ -1152,169 +1146,135 @@ class DashboardView(APIView):
 
         soar_ids = [t.id for t in soar_tenants]
         filters = request.query_params.get("filters", "")
-        filter_list = (
-            [f.strip() for f in filters.split(",") if f.strip()] if filters else []
-        )
+        filter_list = [f.strip() for f in filters.split(",") if f.strip()] if filters else []
 
         try:
-            # Date calculationss
+            # Base filters for True Positives
+            base_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                ~Q(owner__isnull=True) &
+                ~Q(owner__exact="") &
+                Q(incident_tta__isnull=False) &
+                Q(incident_ttn__isnull=False) &
+                Q(incident_ttdn__isnull=False) &
+                Q(itsm_sync_status__isnull=False) &
+                Q(itsm_sync_status__iexact="Ready")
+            )
+
+            # Date calculations
             today = timezone.now().date()
             yesterday = today - timedelta(days=1)
             last_week = today - timedelta(days=7)
 
             dashboard_data = {}
 
-            # Base queryset
-            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(
-                cortex_soar_tenant__in=soar_ids
-            )
-
             # Total Incidents
             if not filter_list or "totalIncidents" in filter_list:
-                total_incidents = incidents_qs.count()
-
-                # Calculate percentage change from last week
-                last_week_count = incidents_qs.filter(
-                    created__date__range=[last_week, today - timedelta(days=1)]
+                total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(base_filters).count()
+                
+                last_week_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters,
+                    created__date__range=[last_week, yesterday]
                 ).count()
-
-                current_week_count = incidents_qs.filter(
-                    created__date__range=[today - timedelta(days=7), today]
+                
+                current_week_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters,
+                    created__date__range=[today - timedelta(days=6), today]
                 ).count()
-
-                percent_change = self._calculate_percentage_change(
-                    current_week_count, last_week_count
-                )
-
+                
+                percent_change = self._calculate_percentage_change(current_week_count, last_week_count)
+                
                 dashboard_data["totalIncidents"] = {
                     "count": total_incidents,
                     "change": percent_change,
-                    "new": incidents_qs.filter(created__date=today).count(),
+                    "new": DUCortexSOARIncidentFinalModel.objects.filter(
+                        base_filters,
+                        created__date=today
+                    ).count()
                 }
 
             # Open Incidents (status=1)
             if not filter_list or "open" in filter_list:
-                open_qs = incidents_qs.filter(status=1)
-                open_count = open_qs.count()
-
-                yesterday_open = incidents_qs.filter(
-                    status=1, created__date=yesterday
+                open_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters,
+                    status=1
                 ).count()
-
-                percent_change = self._calculate_percentage_change(
-                    open_count, yesterday_open
-                )
-
+                
+                yesterday_open = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters,
+                    status=1,
+                    created__date=yesterday
+                ).count()
+                
+                percent_change = self._calculate_percentage_change(open_count, yesterday_open)
+                
                 dashboard_data["open"] = {
                     "count": open_count,
-                    "change": percent_change,
-                    "critical": open_qs.filter(severity=1).count(),
+                    "change": percent_change
                 }
 
             # Closed Incidents (status=2)
             if not filter_list or "closed" in filter_list:
-                closed_qs = incidents_qs.filter(status=2)
-                closed_count = closed_qs.filter(closed__date=today).count()
-
-                yesterday_closed = incidents_qs.filter(
-                    status=2, closed__date=yesterday
+                closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters,
+                    status=2
                 ).count()
-
-                percent_change = self._calculate_percentage_change(
-                    closed_count, yesterday_closed
-                )
-
+                
+                yesterday_closed = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters,
+                    status=2,
+                    closed__date=yesterday
+                ).count()
+                
+                today_closed = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters,
+                    status=2,
+                    closed__date=today
+                ).count()
+                
+                percent_change = self._calculate_percentage_change(today_closed, yesterday_closed)
+                
                 dashboard_data["closed"] = {
                     "count": closed_count,
-                    "change": percent_change,
-                    "critical": closed_qs.filter(
-                        severity=1, closed__date=today
-                    ).count(),
+                    "change": percent_change
                 }
 
             # True Positives
             if not filter_list or "truePositives" in filter_list:
-                tp_qs = incidents_qs.filter(
-                    itsm_sync_status__iexact="Ready", status=1  # Open incidents
-                )
-                tp_count = tp_qs.count()
-
-                last_week_tp = incidents_qs.filter(
-                    itsm_sync_status__iexact="Ready",
-                    status=1,
-                    created__date__range=[last_week, today - timedelta(days=1)],
+                tp_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters,
+                    status=1
                 ).count()
-
-                percent_change = self._calculate_percentage_change(
-                    tp_count, last_week_tp
-                )
-
+                
+                last_week_tp = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters,
+                    status=1,
+                    created__date__range=[last_week, yesterday]
+                ).count()
+                
+                percent_change = self._calculate_percentage_change(tp_count, last_week_tp)
+                
                 dashboard_data["truePositives"] = {
                     "count": tp_count,
-                    "change": percent_change,
+                    "change": percent_change
                 }
 
             # False Positives
             if not filter_list or "falsePositives" in filter_list:
-                fp_filters = (
-                    ~Q(owner__isnull=True)
-                    & ~Q(owner__exact="")
-                    & Q(incident_tta__isnull=False)
-                    & Q(incident_ttn__isnull=False)
-                    & Q(incident_ttdn__isnull=False)
-                    & Q(itsm_sync_status__isnull=False)
-                    & Q(itsm_sync_status__iexact="Done")
-                    & Q(status=1)  # Open incidents
-                )
-
-                fp_qs = incidents_qs.filter(fp_filters)
-                fp_count = fp_qs.count()
-
-                last_week_fp = incidents_qs.filter(
+                fp_filters = base_filters & Q(itsm_sync_status__iexact="Done") & Q(status=1)
+                
+                fp_count = DUCortexSOARIncidentFinalModel.objects.filter(fp_filters).count()
+                
+                last_week_fp = DUCortexSOARIncidentFinalModel.objects.filter(
                     fp_filters,
-                    created__date__range=[last_week, today - timedelta(days=1)],
+                    created__date__range=[last_week, yesterday]
                 ).count()
-
-                percent_change = self._calculate_percentage_change(
-                    fp_count, last_week_fp
-                )
-
+                
+                percent_change = self._calculate_percentage_change(fp_count, last_week_fp)
+                
                 dashboard_data["falsePositives"] = {
                     "count": fp_count,
-                    "change": percent_change,
-                    "review": fp_qs.filter(incident_phase="Review Needed").count(),
+                    "change": percent_change
                 }
-
-            # Top Closers
-            if not filter_list or "topClosers" in filter_list:
-                top_closers_qs = (
-                    incidents_qs.filter(
-                        status=2, closing_user_id__isnull=False  # Closed incidents
-                    )
-                    .values("closing_user_id")
-                    .annotate(count=Count("id"))
-                    .order_by("-count")[:5]
-                )
-                dashboard_data["topClosers"] = [
-                    {"name": row["closing_user_id"], "count": row["count"]}
-                    for row in top_closers_qs
-                ]
-
-            # Recent Activities
-            if not filter_list or "recentActivities" in filter_list:
-                recent_qs = incidents_qs.order_by("-modified")[:5].values(
-                    "id", "name", "modified", "owner", "status"
-                )
-
-                dashboard_data["recentActivities"] = [
-                    {
-                        "time": row["modified"].strftime("%I:%M %p"),
-                        "event": "Status update",
-                        "user": row["owner"] or "System",
-                        "details": f"INC-{row['id']} - {row['name']} ({'Open' if row['status'] == 1 else 'Closed'})",
-                    }
-                    for row in recent_qs
-                ]
 
             return Response(dashboard_data, status=status.HTTP_200_OK)
 
@@ -1325,14 +1285,12 @@ class DashboardView(APIView):
             )
 
     def _calculate_percentage_change(self, current, previous):
-        """Calculate percentage change safely"""
+        """Calculate simple percentage change with bounds"""
         if previous == 0:
-            return "0%"  # or "N/A" if you prefer
-
+            return "0%"
+            
         change = ((current - previous) / previous) * 100
-        # Cap at 100% if it goes beyond
-        change = min(100, max(-100, change))
-
+        change = max(-100, min(100, change))  # Bound between -100% and 100%
         direction = "↑" if change >= 0 else "↓"
         return f"{direction} {abs(round(change, 1))}%"
 
