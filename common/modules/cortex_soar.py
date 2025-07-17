@@ -440,7 +440,9 @@ class CortexSOAR:
         data = response.json()
         return data
 
-    def _transform_notes_data(self, entries: list, incident_id, integration_id) -> list:
+    def _transform_notes_data(
+        self, entries: list, incident_id, integration_id, account
+    ) -> list:
         """
         Transforms raw note entries into a list of DUSoarNotes model instances.
         Skips entries with empty user.
@@ -467,6 +469,7 @@ class CortexSOAR:
                     user=rec.get("user"),
                     incident_id=incident_id,
                     integration_id=integration_id,
+                    account=account,
                 )
             )
 

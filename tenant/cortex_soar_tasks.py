@@ -94,6 +94,7 @@ def sync_notes_child(token: str, ip_address: str, port: int, integration_id: int
                     entries=notes,
                     incident_id=incident_id,
                     integration_id=integration_id,
+                    account=account,
                 )
                 soar._insert_notes(records=transformed_data)
 
@@ -157,7 +158,6 @@ def sync_notes_for_incident(
     token: str, ip_address: str, port: int, integration_id: int, incident_id: int
 ):
     start = time.time()
-
     # Get the specific incident with no notes
     incident_data = (
         DUCortexSOARIncidentFinalModel.objects.filter(
@@ -177,7 +177,6 @@ def sync_notes_for_incident(
         with CortexSOAR(ip_address=ip_address, port=port, token=token) as soar:
             db_id = incident_data["db_id"]
             account = f"acc_{incident_data['account']}"
-
             logger.info(
                 f"Syncing notes for incident_id={incident_id}, account={account}"
             )
@@ -191,6 +190,7 @@ def sync_notes_for_incident(
                 entries=notes,
                 incident_id=incident_id,
                 integration_id=integration_id,
+                account=account,
             )
             soar._insert_notes(records=transformed_data)
 
@@ -239,4 +239,4 @@ def sync_soar_data():
             integration_id=result.integration.id,
         )
     sync_requests_for_soar.delay()
-    sync_notes.delay()
+    # sync_notes.delay()
