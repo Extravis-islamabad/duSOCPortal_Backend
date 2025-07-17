@@ -237,7 +237,10 @@ class TestView(APIView):
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
-        sync_notes.delay()
+
+        # This will delete the tenants and cascade delete related incidents
+
+        sync_notes()
         # sync_ibm.delay()
         # sync_itsm_tickets_soar_ids.delay()
         # sync_daily_closure_reason_counts.delay()
