@@ -1191,10 +1191,10 @@ class DUSoarNotes(models.Model):
     user = models.CharField(max_length=255, null=True, blank=True)
 
     # Foreign key or reference fields
-    incident_id = models.ForeignKey(
+    incident = models.ForeignKey(
         DUCortexSOARIncidentFinalModel, on_delete=models.CASCADE, null=True, blank=True
     )
-    integration_id = models.ForeignKey(
+    integration = models.ForeignKey(
         Integration, on_delete=models.CASCADE, null=True, blank=True
     )
 
