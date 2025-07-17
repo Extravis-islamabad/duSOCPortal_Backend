@@ -10,7 +10,7 @@ from integration.models import (
     IntegrationTypes,
     SoarSubTypes,
 )
-from tenant.models import DuCortexSOARTenants
+from tenant.models import DUCortexSOARIncidentFinalModel, DuCortexSOARTenants
 
 
 @shared_task
@@ -53,6 +53,45 @@ def sync_cortex_soar_tenants(
             )
     except Exception as e:
         logger.error(f"Unexpected error in sync_itsm_tenants: {str(e)}")
+
+
+@shared_task
+def sync_notes_child(token: str, ip_address: str, port: int, integration_id: int):
+    data = DUCortexSOARIncidentFinalModel.objects.filter(
+        integration_id=integration_id
+    ).values("id", "db_id", "account")
+
+    start = time.time()
+    try:
+        with CortexSOAR(ip_address=ip_address, port=port, token=token) as soar:
+            for item in data:
+                incident_id = item["id"]
+                db_id = item["db_id"]
+                account = item["account"]
+                notes = soar._get_notes(account_name=account, incident_id=db_id)
+            if notes is None:
+                logger.error(
+                    "No data returned from CortexSOAR sync_notes_child() endpoint"
+                )
+                return
+
+            transformed_data = soar._transform_notes_data(
+                entries=notes, incident_id=incident_id, integration_id=integration_id
+            )
+            if not isinstance(transformed_data, list):
+                logger.error("Invalid data format: Expected a list")
+                return
+
+            soar._insert_notes(records=transformed_data)
+
+            logger.info(
+                f"Successfully synced {len(transformed_data)} CortexSOAR tenants"
+            )
+            logger.info(
+                f"CortexSOAR.sync_notes_child() task took {time.time() - start} seconds"
+            )
+    except Exception as e:
+        logger.error(f"Unexpected error in sync_notes_child: {str(e)}")
 
 
 @shared_task
@@ -117,3 +156,20 @@ def sync_soar_data():
             integration_id=result.integration.id,
         )
     sync_requests_for_soar.delay()
+
+
+@shared_task
+def sync_notes():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
+        integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
+        credential_type=CredentialTypes.API_KEY,
+    )
+
+    for result in results:
+        sync_notes_child(
+            token=result.api_key,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
