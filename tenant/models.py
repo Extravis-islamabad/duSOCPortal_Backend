@@ -1181,3 +1181,28 @@ class SourceIPGeoLocation(models.Model):
 
     def __str__(self):
         return f"{self.source_ip} - ({self.latitude}, {self.longitude})"
+
+
+class DUSoarNotes(models.Model):
+    db_id = models.IntegerField(unique=True)
+    category = models.CharField(max_length=255, null=True, blank=True)
+    content = models.TextField(null=True, blank=True)
+    created = models.DateTimeField(null=True, blank=True)
+    user = models.CharField(max_length=255, null=True, blank=True)
+
+    # Foreign key or reference fields
+    incident_id = models.ForeignKey(
+        DUCortexSOARIncidentFinalModel, on_delete=models.CASCADE, null=True, blank=True
+    )
+    integration_id = models.ForeignKey(
+        Integration, on_delete=models.CASCADE, null=True, blank=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "notes"
+
+    def __str__(self):
+        return f"{self.user} - {self.category} ({self.created})"
