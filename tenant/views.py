@@ -1,6 +1,6 @@
 import json
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -2259,31 +2259,26 @@ class IncidentDetailView(APIView):
                 notes = DUSoarNotes.objects.filter(
                     incident_id=incident["id"], integration_id=result.id
                 ).order_by("-created")
-                notes_data = [
+
+            notes_by_user_dict = defaultdict(list)
+            for note in notes:
+                user = note.user or "Unknown"
+                notes_by_user_dict[user].append(
                     {
                         "id": note.id,
-                        "user": note.user or " ",
                         "category": note.category or "General",
                         "content": note.content or "",
                         "created": note.created.strftime("%Y-%m-%d %I:%M %p")
                         if note.created
                         else "",
                     }
-                    for note in notes
-                ]
-            else:
-                notes_data = [
-                    {
-                        "id": note.id,
-                        "user": note.user or " ",
-                        "category": note.category or "General",
-                        "content": note.content or "",
-                        "created": note.created.strftime("%Y-%m-%d %I:%M %p")
-                        if note.created
-                        else "",
-                    }
-                    for note in notes
-                ]
+                )
+
+            # Convert to list of dicts
+            notes_by_user = [
+                {"user": user, "notes": notes_list}
+                for user, notes_list in notes_by_user_dict.items()
+            ]
 
             # Format response
             response = {
@@ -2332,7 +2327,7 @@ class IncidentDetailView(APIView):
                     "tta": incident["incident_tta"],
                     "ttn": incident["incident_ttn"],
                     "ttdn": incident["incident_ttdn"],
-                    "notes": notes_data,
+                    "notes": notes_by_user,
                 }
             }
 
