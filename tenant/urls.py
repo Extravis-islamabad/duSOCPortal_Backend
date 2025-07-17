@@ -43,7 +43,7 @@ from tenant.views import (
     TotalTicketsByTenantAPIView,
     TypeDistributionView,
 )
-
+# test
 urlpatterns = [
     path("permissions/", PermissionChoicesAPIView.as_view(), name="permission_choices"),
     path("tenant-permissions/", TenantAPIView.as_view(), name="tenant-permissions"),

@@ -383,7 +383,7 @@ class GetTenantAssetsList(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Average EPS filter
+            # Average EPS filters
             average_eps = request.query_params.get("average_eps")
             if average_eps:
                 try:
