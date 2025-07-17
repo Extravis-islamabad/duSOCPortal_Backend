@@ -354,6 +354,7 @@ class CortexSOAR:
                         "low_level_categories_events",
                         "source_ips",
                         "qradar_category",
+                        "itsm_sync_status",
                         "qradar_sub_category",
                         "tta_calculation",
                         "integration",
