@@ -329,12 +329,24 @@ class CortexSOAR:
         for entry in data:
             custom = entry.get("CustomFields", {})
             investigation_id = entry.get("investigationId")
-            if (
-                investigation_id == ""
-                or investigation_id is None
-                or investigation_id == " "
-            ):
+            
+            # Skip if investigation_id is invalid
+            if not investigation_id or investigation_id.strip() == "":
                 continue
+
+            # Handle itsmsyncstatus - ensure proper extraction
+            itsmsyncstatus = custom.get("itsmsyncstatus")
+            if itsmsyncstatus in ("", " ", None):  # Explicit check for empty values
+                itsmsyncstatus = None
+            else:
+                itsmsyncstatus = str(itsmsyncstatus).strip()  # Ensure it's a clean string
+
+            # Parse time fields
+            incident_tta = self.safe_parse_datetime(custom.get("incidenttta"))
+            incident_ttdn = self.safe_parse_datetime(custom.get("incidentttdn"))
+            incident_ttn = self.safe_parse_datetime(custom.get("incidentttn"))
+
+            # Create the record
             record = DUCortexSOARIncidentFinalModel(
                 db_id=self.extract_digits(entry.get("id")),
                 created=self.safe_parse_datetime(entry.get("created")),
