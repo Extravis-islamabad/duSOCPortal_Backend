@@ -153,6 +153,23 @@ def sync_requests_for_soar():
 
 
 @shared_task
+def sync_notes():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
+        integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
+        credential_type=CredentialTypes.API_KEY,
+    )
+
+    for result in results:
+        sync_notes_child.delay(
+            token=result.api_key,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+
+@shared_task
 def sync_soar_data():
     logger.info("Running sync_soar_data() task")
     results = IntegrationCredentials.objects.filter(
@@ -169,20 +186,4 @@ def sync_soar_data():
             integration_id=result.integration.id,
         )
     sync_requests_for_soar.delay()
-
-
-@shared_task
-def sync_notes():
-    results = IntegrationCredentials.objects.filter(
-        integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
-        integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
-        credential_type=CredentialTypes.API_KEY,
-    )
-
-    for result in results:
-        sync_notes_child.delay(
-            token=result.api_key,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
+    sync_notes.delay()
