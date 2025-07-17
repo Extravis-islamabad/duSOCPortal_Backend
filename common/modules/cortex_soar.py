@@ -498,7 +498,7 @@ class CortexSOAR:
                         "integration_id",
                         "updated_at",
                     ],
-                    unique_fields=["db_id"],
+                    unique_fields=["db_id", "account", "user"],
                 )
             logger.success(
                 f"CortexSOAR._insert_notes() took: {time.time() - start:.2f} seconds"
