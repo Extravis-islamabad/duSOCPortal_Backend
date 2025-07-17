@@ -270,7 +270,7 @@ class CortexSOAR:
             if owner is None or owner.strip() == "":
                 continue
 
-            # Parse time fields and validate them
+            # Parse time fields and validate thems
             incident_tta = self.safe_parse_datetime(custom.get("incidenttta"))
             incident_ttdn = self.safe_parse_datetime(custom.get("incidentttdn"))
             incident_ttn = self.safe_parse_datetime(custom.get("incidentttn"))
