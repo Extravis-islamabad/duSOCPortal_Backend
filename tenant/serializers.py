@@ -1110,6 +1110,7 @@ class RecentIncidentsSerializer(serializers.ModelSerializer):
     class Meta:
         model = DUCortexSOARIncidentFinalModel
         fields = "__all__"
+        exclude = ["created_at"]
 
 
 class CywareCustomFieldSerializer(serializers.ModelSerializer):
