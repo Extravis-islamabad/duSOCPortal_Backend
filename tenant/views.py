@@ -1161,7 +1161,6 @@ class DashboardView(APIView):
             today = timezone.now().date()
             yesterday = today - timedelta(days=1)
             last_week = today - timedelta(days=7)
-            last_month = today - timedelta(days=30)
 
             dashboard_data = {}
 
