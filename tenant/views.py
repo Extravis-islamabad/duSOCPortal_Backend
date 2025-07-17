@@ -1780,6 +1780,8 @@ class IncidentsView(APIView):
             & Q(incident_tta__isnull=False)
             & Q(incident_ttn__isnull=False)
             & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(itsm_sync_status__iexact="Ready")
         )
 
         # Step 6: Apply non-date filters
