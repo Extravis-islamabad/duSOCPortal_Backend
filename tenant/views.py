@@ -4593,6 +4593,7 @@ class SLAComplianceView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
+
 class SLASeverityIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4639,19 +4640,30 @@ class SLASeverityIncidentsView(APIView):
                 try:
                     filter_type = FilterType(int(filter_type))
                     if filter_type == FilterType.TODAY:
-                        filters &= Q(created__date=now.date())
+                        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                        end_date = now
+                        filters &= Q(created__range=[start_date, end_date])
                     elif filter_type == FilterType.WEEK:
-                        filters &= Q(created__gte=now - timedelta(days=7))
+                        start_date = now - timedelta(days=now.weekday())
+                        start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                        end_date = now
+                        filters &= Q(created__range=[start_date, end_date])
                     elif filter_type == FilterType.MONTH:
-                        start_date = now.replace(
-                            day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
+                        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
                         end_date = now
                         filters &= Q(created__range=[start_date, end_date])
                     elif filter_type == FilterType.QUARTER:
-                        filters &= Q(created__gte=now - timedelta(days=90))
+                        current_quarter = (now.month - 1) // 3 + 1
+                        quarter_start_month = 3 * current_quarter - 2
+                        start_date = now.replace(month=quarter_start_month, day=1, 
+                                                 hour=0, minute=0, second=0, microsecond=0)
+                        end_date = now
+                        filters &= Q(created__range=[start_date, end_date])
                     elif filter_type == FilterType.YEAR:
-                        filters &= Q(created__gte=now - timedelta(days=365))
+                        start_date = now.replace(month=1, day=1, 
+                                               hour=0, minute=0, second=0, microsecond=0)
+                        end_date = now
+                        filters &= Q(created__range=[start_date, end_date])
                 except Exception:
                     return Response({"error": "Invalid filter_type."}, status=400)
 
