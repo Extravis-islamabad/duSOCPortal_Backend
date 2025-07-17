@@ -369,6 +369,7 @@ class DUCortexSOARIncidentFinalModel(models.Model):
     incident_ttdn = models.DateTimeField(blank=True, null=True)
     incident_ttn = models.DateTimeField(blank=True, null=True)
     initial_notification = models.BooleanField(null=True)
+    itsmsyncstatus = models.CharField(max_length=50, null=True, blank=True)  # New field
 
     # JSON Fields
     list_of_rules_offense = models.JSONField(blank=True, null=True)
