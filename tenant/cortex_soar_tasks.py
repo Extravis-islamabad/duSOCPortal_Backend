@@ -86,10 +86,6 @@ def sync_notes_child(token: str, ip_address: str, port: int, integration_id: int
             transformed_data = soar._transform_notes_data(
                 entries=notes, incident_id=incident_id, integration_id=integration_id
             )
-            if not isinstance(transformed_data, list):
-                logger.error("Invalid data format: Expected a list")
-                return
-
             soar._insert_notes(records=transformed_data)
 
             logger.info(
