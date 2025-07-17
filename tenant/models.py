@@ -1193,8 +1193,13 @@ class DUSoarNotes(models.Model):
 
     # Foreign key or reference fields
     incident = models.ForeignKey(
-        DUCortexSOARIncidentFinalModel, on_delete=models.CASCADE, null=True, blank=True
+        DUCortexSOARIncidentFinalModel,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="notes",
     )
+
     integration = models.ForeignKey(
         Integration, on_delete=models.CASCADE, null=True, blank=True
     )
