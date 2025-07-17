@@ -41,7 +41,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_soar_data
+from tenant.cortex_soar_tasks import sync_notes
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -239,7 +239,7 @@ class TestView(APIView):
         # sync_dos_event_counts()
 
         # This will delete the tenants and cascade delete related incidents
-        sync_soar_data.delay()
+        sync_notes.delay()
         # sync_notes()
         # sync_ibm.delay()
         # sync_itsm_tickets_soar_ids.delay()
