@@ -12,7 +12,11 @@ DUBAI_TZ = pytz.timezone("Asia/Dubai")
 from loguru import logger
 
 from common.constants import CortexSOARConstants, SSLConstants
-from tenant.models import DUCortexSOARIncidentFinalModel, DuCortexSOARTenants
+from tenant.models import (
+    DUCortexSOARIncidentFinalModel,
+    DuCortexSOARTenants,
+    DUSoarNotes,
+)
 
 
 class CortexSOAR:
@@ -354,3 +358,119 @@ class CortexSOAR:
                 f"An error occurred in CortexSOAR._insert_incidents(): {str(e)}"
             )
             transaction.rollback()
+
+    # def fetch_investigation_details():
+    #     endpoint = "https://10.225.148.130/acc_CDC-Mey-Tabreed/investigation/8208"
+    #     headers = {
+    #         "Accept": "application/json",
+    #         "Authorization": "177EED5CCA3878582CEFCA88F7DC9759",
+    #         "Content-Type": "application/json"
+    #     }
+    #     payload = {
+    #         "userFilter": False
+    #     }
+
+    #     try:
+    #         response = requests.post(endpoint, headers=headers, json=payload, verify=False)
+    #         response.raise_for_status()
+    #         return response.json()
+    #     except requests.exceptions.RequestException as e:
+    #         print("Error during request:", str(e))
+    #         return None
+
+    def _get_notes(self, account_name, incident_id, timeout=SSLConstants.TIMEOUT):
+        """
+        Fetches the list of notes from the CortexSOAR instance for a given incident.
+
+        :param account_name: The name of the account.
+        :param incident_id: The ID of the incident.
+        :param timeout: The timeout for the request in seconds.
+        :return: A list of notes if the request is successful, otherwise an empty list.
+        :raises: Logs any exceptions that occur during the request.
+        """
+        start = time.time()
+        logger.info(f"CortexSOAR._get_notes() started : {start}")
+        payload = {"userFilter": False}
+        endpoint = f"{self.base_url}/{account_name}/{CortexSOARConstants.NOTES_ENDPOINT}/{incident_id}"
+        try:
+            response = requests.post(
+                endpoint,
+                headers=self.headers,
+                json=payload,
+                verify=SSLConstants.VERIFY,
+                timeout=timeout,
+            )
+        except Exception as e:
+            logger.error(f"CortexSOAR._get_notes() failed with exception : {str(e)}")
+            return
+        if response.status_code != 200:
+            logger.warning(
+                f"CortexSOAR._get_notes() return the status code {response.status_code}"
+            )
+            return
+
+        data = response.json()
+        return data
+
+    def _transform_notes_data(entries: list, incident_id, integration_id) -> list:
+        """
+        Transforms raw note entries into a list of DUSoarNotes model instances.
+        Skips entries with empty user.
+        """
+        records = []
+
+        for rec in entries:
+            if not rec.get("user"):
+                continue
+
+            try:
+                db_id_str = rec.get("id", "").split("@")[0]
+                db_id = int(db_id_str)
+            except (IndexError, ValueError):
+                continue  # Skip malformed db_id
+
+            records.append(
+                DUSoarNotes(
+                    db_id=db_id,
+                    category=rec.get("category"),
+                    content=rec.get("contents"),
+                    created=parse_datetime(rec.get("created")),
+                    user=rec.get("user"),
+                    incident_id=incident_id,
+                    integration_id=integration_id,
+                )
+            )
+
+        return records
+
+    def _insert_notes(self, records: list):
+        """
+        Inserts or updates notes records in the DUSoarNotes table.
+
+        :param records: A list of DUSoarNotes model instances.
+        """
+        start = time.time()
+        logger.info(f"CortexSOAR._insert_notes() started : {start}")
+
+        try:
+            with transaction.atomic():
+                DUSoarNotes.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=[
+                        "category",
+                        "content",
+                        "created",
+                        "user",
+                        "incident_id",
+                        "integration_id",
+                        "updated_at",
+                    ],
+                    unique_fields=["db_id"],
+                )
+            logger.success(
+                f"CortexSOAR._insert_notes() took: {time.time() - start:.2f} seconds"
+            )
+        except Exception as e:
+            logger.error(f"An error occurred in CortexSOAR._insert_notes(): {str(e)}")
+            transaction.set_rollback(True)
