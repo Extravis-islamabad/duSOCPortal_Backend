@@ -322,7 +322,7 @@ class CortexSOAR:
         for entry in data:
             custom = entry.get("CustomFields", {})
             investigation_id = entry.get("investigationId")
-            
+
             # Skip if investigation_id is invalid
             if not investigation_id or investigation_id.strip() == "":
                 continue
@@ -332,7 +332,9 @@ class CortexSOAR:
             if itsmsyncstatus in ("", " ", None):  # Explicit check for empty values
                 itsmsyncstatus = None
             else:
-                itsmsyncstatus = str(itsmsyncstatus).strip()  # Ensure it's a clean string
+                itsmsyncstatus = str(
+                    itsmsyncstatus
+                ).strip()  # Ensure it's a clean string
 
             # Parse time fields
             incident_tta = self.safe_parse_datetime(custom.get("incidenttta"))
