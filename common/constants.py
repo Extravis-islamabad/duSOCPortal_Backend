@@ -38,6 +38,7 @@ class DjangoConstants:
 
 class EnvConstants:
     ENV = os.getenv("ENV", None)
+    LOCAL = os.getenv("LOCAL", None)
 
 
 class SSLConstants:
@@ -326,7 +327,7 @@ class ITSMConstants:
 class CortexSOARConstants:
     TENANT_ENDPOINT = "accounts"
     INCIDENT_ENDPOINT = "incidents/search"
-    NOTES_ENDPOINT = "investigation/"
+    NOTES_ENDPOINT = "investigation"
     BATCH_SIZE = 10000
 
 
