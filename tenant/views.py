@@ -33,6 +33,7 @@ from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import SEVERITY_LABELS, FilterType, PaginationConstants
 from common.modules.cyware import Cyware
 from integration.models import (
+    CredentialTypes,
     Integration,
     IntegrationCredentials,
     IntegrationTypes,
@@ -41,7 +42,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_notes
+from tenant.cortex_soar_tasks import sync_notes, sync_notes_for_incident
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -58,6 +59,7 @@ from tenant.models import (
     DuIbmQradarTenants,
     DuITSMFinalTickets,
     DuITSMTenants,
+    DUSoarNotes,
     EventCountLog,
     IBMQradarAssests,
     IBMQradarEPS,
@@ -2032,8 +2034,8 @@ class IncidentDetailView(APIView):
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
-        )
-        if not soar_integrations.exists():
+        ).first()
+        if not soar_integrations:
             return Response(
                 {"error": "No active SOAR integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -2236,6 +2238,53 @@ class IncidentDetailView(APIView):
                 ", ".join(log_source_types) if log_source_types else "Unknown"
             )
 
+            # Fetch related notes for the incident
+            notes = DUSoarNotes.objects.filter(
+                incident_id=incident["id"], integration_id=soar_integrations.id
+            ).order_by("-created")
+            if not notes.exists():
+                result = IntegrationCredentials.objects.filter(
+                    integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                    integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
+                    credential_type=CredentialTypes.API_KEY,
+                    integration__id=soar_integrations.id,
+                ).first()
+                sync_notes_for_incident(
+                    token=result.api_key,
+                    ip_address=result.ip_address,
+                    port=result.port,
+                    integration_id=result.id,
+                    incident_id=incident["id"],
+                )
+                notes = DUSoarNotes.objects.filter(
+                    incident_id=incident["id"], integration_id=result.id
+                ).order_by("-created")
+                notes_data = [
+                    {
+                        "id": note.id,
+                        "user": note.user or " ",
+                        "category": note.category or "General",
+                        "content": note.content or "",
+                        "created": note.created.strftime("%Y-%m-%d %I:%M %p")
+                        if note.created
+                        else "",
+                    }
+                    for note in notes
+                ]
+            else:
+                notes_data = [
+                    {
+                        "id": note.id,
+                        "user": note.user or " ",
+                        "category": note.category or "General",
+                        "content": note.content or "",
+                        "created": note.created.strftime("%Y-%m-%d %I:%M %p")
+                        if note.created
+                        else "",
+                    }
+                    for note in notes
+                ]
+
             # Format response
             response = {
                 "incident": {
@@ -2283,6 +2332,7 @@ class IncidentDetailView(APIView):
                     "tta": incident["incident_tta"],
                     "ttn": incident["incident_ttn"],
                     "ttdn": incident["incident_ttdn"],
+                    "notes": notes_data,
                 }
             }
 

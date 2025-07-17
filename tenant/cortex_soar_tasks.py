@@ -153,6 +153,59 @@ def sync_requests_for_soar():
 
 
 @shared_task
+def sync_notes_for_incident(
+    token: str, ip_address: str, port: int, integration_id: int, incident_id: int
+):
+    start = time.time()
+
+    # Get the specific incident with no notes
+    incident_data = (
+        DUCortexSOARIncidentFinalModel.objects.filter(
+            id=incident_id, integration_id=integration_id
+        )
+        .annotate(note_count=Count("notes"))
+        .filter(note_count=0)
+        .values("id", "db_id", "account")
+        .first()
+    )
+
+    if not incident_data:
+        logger.info(f"Incident {incident_id} already has notes or doesn't exist.")
+        return
+
+    try:
+        with CortexSOAR(ip_address=ip_address, port=port, token=token) as soar:
+            db_id = incident_data["db_id"]
+            account = f"acc_{incident_data['account']}"
+
+            logger.info(
+                f"Syncing notes for incident_id={incident_id}, account={account}"
+            )
+            notes = soar._get_notes(account_name=account, incident_id=db_id)
+
+            if not notes:
+                logger.warning(f"No notes returned for incident_id={incident_id}")
+                return
+
+            transformed_data = soar._transform_notes_data(
+                entries=notes,
+                incident_id=incident_id,
+                integration_id=integration_id,
+            )
+            soar._insert_notes(records=transformed_data)
+
+            logger.success(
+                f"Synced {len(transformed_data)} notes for incident_id={incident_id}"
+            )
+            logger.info(
+                f"sync_notes_for_incident() took {time.time() - start:.2f} seconds"
+            )
+
+    except Exception as e:
+        logger.error(f"Error syncing notes for incident_id={incident_id}: {str(e)}")
+
+
+@shared_task
 def sync_notes():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
@@ -161,7 +214,7 @@ def sync_notes():
     )
 
     for result in results:
-        sync_notes_child.delay(
+        sync_notes_child(
             token=result.api_key,
             ip_address=result.ip_address,
             port=result.port,
