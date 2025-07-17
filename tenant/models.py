@@ -1190,7 +1190,7 @@ class DUSoarNotes(models.Model):
     content = models.TextField(null=True, blank=True)
     created = models.DateTimeField(null=True, blank=True)
     user = models.CharField(max_length=255, null=True, blank=True)
-
+    account = models.CharField(max_length=255, null=True, blank=True)
     # Foreign key or reference fields
     incident = models.ForeignKey(
         DUCortexSOARIncidentFinalModel,
@@ -1209,6 +1209,7 @@ class DUSoarNotes(models.Model):
 
     class Meta:
         db_table = "notes"
+        unique_together = ("db_id", "account", "user")
 
     def __str__(self):
         return f"{self.user} - {self.category} ({self.created})"
