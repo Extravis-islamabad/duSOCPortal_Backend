@@ -4383,6 +4383,7 @@ class SLASeverityIncidentsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
+
 class SLASeverityMetricsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4405,7 +4406,8 @@ class SLASeverityMetricsView(APIView):
                 )
             soar_ids = [t.id for t in soar_tenants]
 
-            if tenant.company.is_default_sla:
+            is_default = tenant.company.is_default_sla
+            if is_default:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
                 sla_metrics = SoarTenantSlaMetric.objects.filter(
@@ -4507,10 +4509,13 @@ class SLASeverityMetricsView(APIView):
                 else:
                     response_data[level.label]["ttdn_breached_incidents"] += 1
 
-            # Convert to list format for response
-            response_list = list(response_data.values())
+            # Create the final response structure
+            response = {
+                "metrics": list(response_data.values()),
+                "is_default": is_default
+            }
 
-            return Response(response_list)
+            return Response(response)
 
         except Exception as e:
             logger.error(f"Error in SLASeverityMetricsView: {str(e)}")
