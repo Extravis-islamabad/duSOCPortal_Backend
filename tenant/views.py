@@ -4599,21 +4599,12 @@ class SLAOverviewCardsView(APIView):
                     compliance_count = 0
 
                     for inc in level_incidents:
-                        created = inc.created
+                        occured = inc.occured
                         any_breach = False
 
-                        # Check TTA
-                        tta_delta = (inc.incident_tta - created).total_seconds() / 60
-                        if tta_delta > sla_metric.tta_minutes:
-                            any_breach = True
-
-                        # Check TTN
-                        ttn_delta = (inc.incident_ttn - created).total_seconds() / 60
-                        if ttn_delta > sla_metric.ttn_minutes:
-                            any_breach = True
 
                         # Check TTDN
-                        ttdn_delta = (inc.incident_ttdn - created).total_seconds() / 60
+                        ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
                         if ttdn_delta > sla_metric.ttdn_minutes:
                             any_breach = True
 
