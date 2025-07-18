@@ -4383,7 +4383,6 @@ class SLASeverityIncidentsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-
 class SLASeverityMetricsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4512,7 +4511,7 @@ class SLASeverityMetricsView(APIView):
             # Create the final response structure
             response = {
                 "metrics": list(response_data.values()),
-                "is_default": is_default
+                "is_default": is_default,
             }
 
             return Response(response)
@@ -4602,7 +4601,6 @@ class SLAOverviewCardsView(APIView):
                         occured = inc.occured
                         any_breach = False
 
-
                         # Check TTDN
                         ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
                         if ttdn_delta > sla_metric.ttdn_minutes:
@@ -4616,7 +4614,11 @@ class SLAOverviewCardsView(APIView):
                         (compliance_count / total_incidents) * 100, 2
                     )
                     breached_percent = round(100 - compliance_percent, 2)
-                    total_percentage = round((total_incidents / total_all_incidents) * 100, 2) if total_all_incidents > 0 else 0.0
+                    total_percentage = (
+                        round((total_incidents / total_all_incidents) * 100, 2)
+                        if total_all_incidents > 0
+                        else 0.0
+                    )
 
                 results.append(
                     {
