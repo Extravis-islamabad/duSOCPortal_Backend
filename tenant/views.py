@@ -1139,6 +1139,7 @@ class OwnerDistributionView(APIView):
             )
 
 
+
 class DashboardView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1171,8 +1172,8 @@ class DashboardView(APIView):
         )
 
         try:
-            # Base filters for True Positives
-            base_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+            # Base filters for True Positives (Ready incidents with all fields)
+            true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
                 & Q(incident_tta__isnull=False)
@@ -1182,6 +1183,11 @@ class DashboardView(APIView):
                 & Q(itsm_sync_status__iexact="Ready")
             )
 
+            # Base filters for all incidents (Ready and Done)
+            total_incident_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                Q(itsm_sync_status__iexact="Ready") | Q(itsm_sync_status__iexact="Done")
+            )
+
             # Date calculations
             today = timezone.now().date()
             yesterday = today - timedelta(days=1)
@@ -1189,18 +1195,18 @@ class DashboardView(APIView):
 
             dashboard_data = {}
 
-            # Total Incidents
+            # Total Incidents (Ready + Done)
             if not filter_list or "totalIncidents" in filter_list:
                 total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters
+                    total_incident_filters
                 ).count()
 
                 last_week_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters, created__date__range=[last_week, yesterday]
+                    total_incident_filters, created__date__range=[last_week, yesterday]
                 ).count()
 
                 current_week_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters,
+                    total_incident_filters,
                     created__date__range=[today - timedelta(days=6), today],
                 ).count()
 
@@ -1212,22 +1218,22 @@ class DashboardView(APIView):
                     "count": total_incidents,
                     "change": percent_change,
                     "new": DUCortexSOARIncidentFinalModel.objects.filter(
-                        base_filters, created__date=today
+                        total_incident_filters, created__date=today
                     ).count(),
                 }
 
-            # Open Incidents (status=1)
+            # Open Incidents (status=1) - KEEPING ORIGINAL LOGIC
             if not filter_list or "open" in filter_list:
                 open_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters, status=1
+                    true_positive_filters, status=1
                 ).count()
 
                 yesterday_open = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters, status=1, created__date=yesterday
+                    true_positive_filters, status=1, created__date=yesterday
                 ).count()
 
                 today_open = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters, status=1, created__date=today
+                    true_positive_filters, status=1, created__date=today
                 ).count()
 
                 percent_change = self._calculate_percentage_change(
@@ -1236,18 +1242,18 @@ class DashboardView(APIView):
 
                 dashboard_data["open"] = {"count": open_count, "change": percent_change}
 
-            # Closed Incidents (status=2)
+            # Closed Incidents (status=2) - KEEPING ORIGINAL LOGIC
             if not filter_list or "closed" in filter_list:
                 closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters, status=2
+                    true_positive_filters, status=2
                 ).count()
 
                 yesterday_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters, status=2, closed__date=yesterday
+                    true_positive_filters, status=2, closed__date=yesterday
                 ).count()
 
                 today_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters, status=2, closed__date=today
+                    true_positive_filters, status=2, closed__date=today
                 ).count()
 
                 percent_change = self._calculate_percentage_change(
@@ -1259,19 +1265,18 @@ class DashboardView(APIView):
                     "change": percent_change,
                 }
 
-            # True Positives
+            # True Positives (Ready incidents with all required fields)
             if not filter_list or "truePositives" in filter_list:
                 tp_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters, status=1
+                    true_positive_filters
                 ).count()
 
                 last_week_tp = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters, status=1, created__date__range=[last_week, yesterday]
+                    true_positive_filters, created__date__range=[last_week, yesterday]
                 ).count()
 
                 current_week_tp = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters,
-                    status=1,
+                    true_positive_filters,
                     created__date__range=[today - timedelta(days=6), today],
                 ).count()
 
@@ -1284,11 +1289,9 @@ class DashboardView(APIView):
                     "change": percent_change,
                 }
 
-            # False Positives
+            # False Positives (Done incidents)
             if not filter_list or "falsePositives" in filter_list:
-                fp_filters = (
-                    base_filters & Q(itsm_sync_status__iexact="Done") & Q(status=1)
-                )
+                fp_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(itsm_sync_status__iexact="Done")
 
                 fp_count = DUCortexSOARIncidentFinalModel.objects.filter(
                     fp_filters
@@ -1321,14 +1324,7 @@ class DashboardView(APIView):
             )
 
     def _calculate_percentage_change(self, current, previous, period="day"):
-        """Calculate percentage change with time period indication
-        Args:
-            current: Current period count
-            previous: Previous period count
-            period: Time period being compared ('day' or 'week')
-        Returns:
-            Formatted string with change percentage and period
-        """
+        """Calculate percentage change with time period indication"""
         if previous == 0:
             return f"0% from previous {period}"
         
@@ -1336,7 +1332,7 @@ class DashboardView(APIView):
         change = max(-100, min(100, change))  # Bound between -100% and 100%
         direction = "↑" if change >= 0 else "↓"
         return f"{direction} {abs(round(change, 1))}% from previous {period}"
-
+    
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
