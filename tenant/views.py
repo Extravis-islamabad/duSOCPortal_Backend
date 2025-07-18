@@ -270,8 +270,6 @@ class TestView(APIView):
         return Response({"message": "Hello, world!"})
 
 
-
-
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -342,7 +340,7 @@ class GetTenantAssetsList(APIView):
                 if not asset.enabled:
                     total_inactive += 1
                     continue
-                    
+
                 actual_status = self._get_asset_status(asset, now)
                 if actual_status == "SUCCESS":
                     total_active += 1
@@ -469,7 +467,8 @@ class GetTenantAssetsList(APIView):
                 filtered_assets = [
                     asset
                     for asset in filtered_assets
-                    if asset.enabled and self._get_asset_status(asset, now) == status_filter
+                    if asset.enabled
+                    and self._get_asset_status(asset, now) == status_filter
                 ]
 
             # Sort assets by creation date (newest first)
@@ -488,9 +487,9 @@ class GetTenantAssetsList(APIView):
             for asset in result_page:
                 asset_data = IBMQradarAssestsSerializer(asset).data
                 if asset.enabled:
-                    asset_data['status'] = self._get_asset_status(asset, now)
+                    asset_data["status"] = self._get_asset_status(asset, now)
                 else:
-                    asset_data['status'] = "ERROR"  # Or you can omit this if you prefer
+                    asset_data["status"] = "ERROR"  # Or you can omit this if you prefer
                 serialized_data.append(asset_data)
 
             # Prepare response
@@ -538,7 +537,8 @@ class GetTenantAssetsList(APIView):
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
             raise ValueError("Invalid date format")
-        
+
+
 class GetTenantAssetsStats(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
