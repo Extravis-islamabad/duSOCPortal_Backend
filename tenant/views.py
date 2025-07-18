@@ -20,7 +20,7 @@ from django.db.models import (
 )
 from django.db.models.functions import ExtractSecond, TruncDate, TruncDay, TruncHour
 from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.dateparse import parse_datetime
 from django.utils.timezone import make_aware
 from loguru import logger
 from rest_framework import status
@@ -278,7 +278,7 @@ class GetTenantAssetsList(APIView):
         """
         Retrieve IBM QRadar assets with status counts and pagination
         Returns overall active/inactive counts regardless of filters
-        
+
         Returns:
             {
                 "count": filtered_count,
@@ -325,20 +325,20 @@ class GetTenantAssetsList(APIView):
 
             # Base filter for tenant's assets
             base_filter = Q(event_collector_id__in=collector_ids)
-            
+
             # Step 4: Get ALL assets first for total counts (unfiltered)
             all_assets = IBMQradarAssests.objects.filter(base_filter).select_related(
                 "event_collector", "log_source_type"
             )
-            
+
             # Calculate TOTAL active/inactive counts (unfiltered)
             total_active = 0
             total_inactive = 0
             now = timezone.now()
-            
+
             for asset in all_assets:
-                status = self._get_asset_status(asset, now)
-                if status == "SUCCESS":
+                actual_status = self._get_asset_status(asset, now)
+                if actual_status == "SUCCESS":
                     total_active += 1
                 else:
                     total_inactive += 1
@@ -398,16 +398,19 @@ class GetTenantAssetsList(APIView):
                     )
 
             # Get filtered assets
-            filtered_assets = list(IBMQradarAssests.objects.filter(filters).select_related(
-                "event_collector", "log_source_type"
-            ))
+            filtered_assets = list(
+                IBMQradarAssests.objects.filter(filters).select_related(
+                    "event_collector", "log_source_type"
+                )
+            )
 
             # Apply last event date filter if provided
             if last_event_filter:
                 try:
                     filter_date = self._parse_date(last_event_filter)
                     filtered_assets = [
-                        asset for asset in filtered_assets
+                        asset
+                        for asset in filtered_assets
                         if asset.last_event_date_converted == filter_date
                     ]
                 except ValueError:
@@ -419,7 +422,7 @@ class GetTenantAssetsList(APIView):
             # Apply date range filters if provided
             start_date = self._parse_date(request.query_params.get("start_date"))
             end_date = self._parse_date(request.query_params.get("end_date"))
-            
+
             if start_date and end_date and start_date > end_date:
                 return Response(
                     {"error": "start_date cannot be greater than end_date."},
@@ -428,9 +431,22 @@ class GetTenantAssetsList(APIView):
 
             if start_date or end_date:
                 filtered_assets = [
-                    asset for asset in filtered_assets
-                    if (not start_date or (asset.creation_date_converted and asset.creation_date_converted >= start_date))
-                    and (not end_date or (asset.creation_date_converted and asset.creation_date_converted <= end_date))
+                    asset
+                    for asset in filtered_assets
+                    if (
+                        not start_date
+                        or (
+                            asset.creation_date_converted
+                            and asset.creation_date_converted >= start_date
+                        )
+                    )
+                    and (
+                        not end_date
+                        or (
+                            asset.creation_date_converted
+                            and asset.creation_date_converted <= end_date
+                        )
+                    )
                 ]
 
             # Apply status filter if provided
@@ -438,19 +454,22 @@ class GetTenantAssetsList(APIView):
                 status_filter = status_filter.upper()
                 if status_filter not in ["SUCCESS", "ERROR"]:
                     return Response(
-                        {"error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."},
+                        {
+                            "error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                
+
                 filtered_assets = [
-                    asset for asset in filtered_assets
+                    asset
+                    for asset in filtered_assets
                     if self._get_asset_status(asset, now) == status_filter
                 ]
 
             # Sort assets by creation date (newest first)
             filtered_assets.sort(
                 key=lambda x: x.creation_date_converted or datetime.min.date(),
-                reverse=True
+                reverse=True,
             )
 
             # Pagination
@@ -465,8 +484,8 @@ class GetTenantAssetsList(APIView):
             response_data = {
                 "count": len(filtered_assets),  # Count of filtered assets
                 "total_assets": len(all_assets),  # Total unfiltered count
-                "active_assets": total_active,    # Unfiltered active count
-                "inactive_assets": total_inactive, # Unfiltered inactive count
+                "active_assets": total_active,  # Unfiltered active count
+                "inactive_assets": total_inactive,  # Unfiltered inactive count
                 "results": serializer.data,
             }
 
@@ -493,7 +512,7 @@ class GetTenantAssetsList(APIView):
             last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
             last_event_time = timezone.make_aware(last_event_time)
             time_diff = (now - last_event_time).total_seconds() / 60
-            
+
             return "ERROR" if time_diff > 15 else "SUCCESS"
         except (ValueError, TypeError):
             return "ERROR"
@@ -506,6 +525,7 @@ class GetTenantAssetsList(APIView):
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
             raise ValueError("Invalid date format")
+
 
 class GetTenantAssetsStats(APIView):
     authentication_classes = [JWTAuthentication]
@@ -1128,7 +1148,7 @@ class DashboardView(APIView):
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
-            
+
         soar_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
@@ -1146,18 +1166,20 @@ class DashboardView(APIView):
 
         soar_ids = [t.id for t in soar_tenants]
         filters = request.query_params.get("filters", "")
-        filter_list = [f.strip() for f in filters.split(",") if f.strip()] if filters else []
+        filter_list = (
+            [f.strip() for f in filters.split(",") if f.strip()] if filters else []
+        )
 
         try:
             # Base filters for True Positives
             base_filters = Q(cortex_soar_tenant__in=soar_ids) & (
-                ~Q(owner__isnull=True) &
-                ~Q(owner__exact="") &
-                Q(incident_tta__isnull=False) &
-                Q(incident_ttn__isnull=False) &
-                Q(incident_ttdn__isnull=False) &
-                Q(itsm_sync_status__isnull=False) &
-                Q(itsm_sync_status__iexact="Ready")
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
             )
 
             # Date calculations
@@ -1169,111 +1191,110 @@ class DashboardView(APIView):
 
             # Total Incidents
             if not filter_list or "totalIncidents" in filter_list:
-                total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(base_filters).count()
-                
-                last_week_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters,
-                    created__date__range=[last_week, yesterday]
+                total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters
                 ).count()
-                
+
+                last_week_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters, created__date__range=[last_week, yesterday]
+                ).count()
+
                 current_week_count = DUCortexSOARIncidentFinalModel.objects.filter(
                     base_filters,
-                    created__date__range=[today - timedelta(days=6), today]
+                    created__date__range=[today - timedelta(days=6), today],
                 ).count()
-                
-                percent_change = self._calculate_percentage_change(current_week_count, last_week_count)
-                
+
+                percent_change = self._calculate_percentage_change(
+                    current_week_count, last_week_count
+                )
+
                 dashboard_data["totalIncidents"] = {
                     "count": total_incidents,
                     "change": percent_change,
                     "new": DUCortexSOARIncidentFinalModel.objects.filter(
-                        base_filters,
-                        created__date=today
-                    ).count()
+                        base_filters, created__date=today
+                    ).count(),
                 }
 
             # Open Incidents (status=1)
             if not filter_list or "open" in filter_list:
                 open_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters,
-                    status=1
+                    base_filters, status=1
                 ).count()
-                
+
                 yesterday_open = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters,
-                    status=1,
-                    created__date=yesterday
+                    base_filters, status=1, created__date=yesterday
                 ).count()
-                
-                percent_change = self._calculate_percentage_change(open_count, yesterday_open)
-                
-                dashboard_data["open"] = {
-                    "count": open_count,
-                    "change": percent_change
-                }
+
+                percent_change = self._calculate_percentage_change(
+                    open_count, yesterday_open
+                )
+
+                dashboard_data["open"] = {"count": open_count, "change": percent_change}
 
             # Closed Incidents (status=2)
             if not filter_list or "closed" in filter_list:
                 closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters,
-                    status=2
+                    base_filters, status=2
                 ).count()
-                
+
                 yesterday_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters,
-                    status=2,
-                    closed__date=yesterday
+                    base_filters, status=2, closed__date=yesterday
                 ).count()
-                
+
                 today_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters,
-                    status=2,
-                    closed__date=today
+                    base_filters, status=2, closed__date=today
                 ).count()
-                
-                percent_change = self._calculate_percentage_change(today_closed, yesterday_closed)
-                
+
+                percent_change = self._calculate_percentage_change(
+                    today_closed, yesterday_closed
+                )
+
                 dashboard_data["closed"] = {
                     "count": closed_count,
-                    "change": percent_change
+                    "change": percent_change,
                 }
 
             # True Positives
             if not filter_list or "truePositives" in filter_list:
                 tp_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters,
-                    status=1
+                    base_filters, status=1
                 ).count()
-                
+
                 last_week_tp = DUCortexSOARIncidentFinalModel.objects.filter(
-                    base_filters,
-                    status=1,
-                    created__date__range=[last_week, yesterday]
+                    base_filters, status=1, created__date__range=[last_week, yesterday]
                 ).count()
-                
-                percent_change = self._calculate_percentage_change(tp_count, last_week_tp)
-                
+
+                percent_change = self._calculate_percentage_change(
+                    tp_count, last_week_tp
+                )
+
                 dashboard_data["truePositives"] = {
                     "count": tp_count,
-                    "change": percent_change
+                    "change": percent_change,
                 }
 
             # False Positives
             if not filter_list or "falsePositives" in filter_list:
-                fp_filters = base_filters & Q(itsm_sync_status__iexact="Done") & Q(status=1)
-                
-                fp_count = DUCortexSOARIncidentFinalModel.objects.filter(fp_filters).count()
-                
-                last_week_fp = DUCortexSOARIncidentFinalModel.objects.filter(
-                    fp_filters,
-                    created__date__range=[last_week, yesterday]
+                fp_filters = (
+                    base_filters & Q(itsm_sync_status__iexact="Done") & Q(status=1)
+                )
+
+                fp_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    fp_filters
                 ).count()
-                
-                percent_change = self._calculate_percentage_change(fp_count, last_week_fp)
-                
+
+                last_week_fp = DUCortexSOARIncidentFinalModel.objects.filter(
+                    fp_filters, created__date__range=[last_week, yesterday]
+                ).count()
+
+                percent_change = self._calculate_percentage_change(
+                    fp_count, last_week_fp
+                )
+
                 dashboard_data["falsePositives"] = {
                     "count": fp_count,
-                    "change": percent_change
+                    "change": percent_change,
                 }
 
             return Response(dashboard_data, status=status.HTTP_200_OK)
@@ -1288,7 +1309,7 @@ class DashboardView(APIView):
         """Calculate simple percentage change with bounds"""
         if previous == 0:
             return "0%"
-            
+
         change = ((current - previous) / previous) * 100
         change = max(-100, min(100, change))  # Bound between -100% and 100%
         direction = "↑" if change >= 0 else "↓"
@@ -4860,7 +4881,6 @@ class SLASeverityMetricsView(APIView):
             )
 
 
-
 class SLAOverviewCardsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4988,6 +5008,7 @@ class SLAOverviewCardsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class IncidentReportView(APIView):
     authentication_classes = [JWTAuthentication]
