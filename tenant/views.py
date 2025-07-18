@@ -1330,12 +1330,12 @@ class DashboardView(APIView):
             Formatted string with change percentage and period
         """
         if previous == 0:
-            return f"0% from previous {period})"
+            return f"0% from previous {period}"
         
         change = ((current - previous) / previous) * 100
         change = max(-100, min(100, change))  # Bound between -100% and 100%
         direction = "↑" if change >= 0 else "↓"
-        return f"{direction} {abs(round(change, 1))}% from previous {period})"
+        return f"{direction} {abs(round(change, 1))}% from previous {period}"
 
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
