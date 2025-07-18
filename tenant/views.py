@@ -4573,6 +4573,9 @@ class SLAOverviewCardsView(APIView):
                 incident_priority__in=[choice.label for choice in SlaLevelChoices],
             ).select_related()
 
+            # Calculate total incidents across all levels
+            total_all_incidents = len(incidents)
+
             # Initialize results
             results = []
 
@@ -4591,6 +4594,7 @@ class SLAOverviewCardsView(APIView):
                     breached_percent = 0.0
                     compliance_count = 0
                     breach_count = 0
+                    total_percentage = 0.0
                 else:
                     compliance_count = 0
 
@@ -4620,15 +4624,15 @@ class SLAOverviewCardsView(APIView):
                     compliance_percent = round(
                         (compliance_count / total_incidents) * 100, 2
                     )
-                    breached_percent = round(
-                        100 - compliance_percent, 2
-                    )  # Ensure exactly 2 decimal places
+                    breached_percent = round(100 - compliance_percent, 2)
+                    total_percentage = round((total_incidents / total_all_incidents) * 100, 2) if total_all_incidents > 0 else 0.0
 
                 results.append(
                     {
                         "priority_level": level.label,
                         "priority_value": level.value,
                         "total_incidents": total_incidents,
+                        "total_percentage": total_percentage,
                         "compliance_count": compliance_count,
                         "breach_count": breach_count,
                         "compliance_percentage": compliance_percent,
