@@ -270,6 +270,8 @@ class TestView(APIView):
         return Response({"message": "Hello, world!"})
 
 
+
+
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -337,6 +339,10 @@ class GetTenantAssetsList(APIView):
             now = timezone.now()
 
             for asset in all_assets:
+                if not asset.enabled:
+                    total_inactive += 1
+                    continue
+                    
                 actual_status = self._get_asset_status(asset, now)
                 if actual_status == "SUCCESS":
                     total_active += 1
@@ -463,7 +469,7 @@ class GetTenantAssetsList(APIView):
                 filtered_assets = [
                     asset
                     for asset in filtered_assets
-                    if self._get_asset_status(asset, now) == status_filter
+                    if asset.enabled and self._get_asset_status(asset, now) == status_filter
                 ]
 
             # Sort assets by creation date (newest first)
@@ -477,8 +483,15 @@ class GetTenantAssetsList(APIView):
             paginator.page_size = PaginationConstants.PAGE_SIZE
             result_page = paginator.paginate_queryset(filtered_assets, request)
 
-            # Serialize results
-            serializer = IBMQradarAssestsSerializer(result_page, many=True)
+            # Serialize results with only SUCCESS/ERROR status
+            serialized_data = []
+            for asset in result_page:
+                asset_data = IBMQradarAssestsSerializer(asset).data
+                if asset.enabled:
+                    asset_data['status'] = self._get_asset_status(asset, now)
+                else:
+                    asset_data['status'] = "ERROR"  # Or you can omit this if you prefer
+                serialized_data.append(asset_data)
 
             # Prepare response
             response_data = {
@@ -486,7 +499,7 @@ class GetTenantAssetsList(APIView):
                 "total_assets": len(all_assets),  # Total unfiltered count
                 "active_assets": total_active,  # Unfiltered active count
                 "inactive_assets": total_inactive,  # Unfiltered inactive count
-                "results": serializer.data,
+                "results": serialized_data,
             }
 
             # Add pagination links if needed
@@ -525,8 +538,7 @@ class GetTenantAssetsList(APIView):
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
             raise ValueError("Invalid date format")
-
-
+        
 class GetTenantAssetsStats(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
