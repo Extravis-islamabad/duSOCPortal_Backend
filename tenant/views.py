@@ -1205,7 +1205,7 @@ class DashboardView(APIView):
                 ).count()
 
                 percent_change = self._calculate_percentage_change(
-                    current_week_count, last_week_count
+                    current_week_count, last_week_count, "week"
                 )
 
                 dashboard_data["totalIncidents"] = {
@@ -1226,8 +1226,12 @@ class DashboardView(APIView):
                     base_filters, status=1, created__date=yesterday
                 ).count()
 
+                today_open = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters, status=1, created__date=today
+                ).count()
+
                 percent_change = self._calculate_percentage_change(
-                    open_count, yesterday_open
+                    today_open, yesterday_open, "day"
                 )
 
                 dashboard_data["open"] = {"count": open_count, "change": percent_change}
@@ -1247,7 +1251,7 @@ class DashboardView(APIView):
                 ).count()
 
                 percent_change = self._calculate_percentage_change(
-                    today_closed, yesterday_closed
+                    today_closed, yesterday_closed, "day"
                 )
 
                 dashboard_data["closed"] = {
@@ -1265,8 +1269,14 @@ class DashboardView(APIView):
                     base_filters, status=1, created__date__range=[last_week, yesterday]
                 ).count()
 
+                current_week_tp = DUCortexSOARIncidentFinalModel.objects.filter(
+                    base_filters,
+                    status=1,
+                    created__date__range=[today - timedelta(days=6), today],
+                ).count()
+
                 percent_change = self._calculate_percentage_change(
-                    tp_count, last_week_tp
+                    current_week_tp, last_week_tp, "week"
                 )
 
                 dashboard_data["truePositives"] = {
@@ -1288,8 +1298,13 @@ class DashboardView(APIView):
                     fp_filters, created__date__range=[last_week, yesterday]
                 ).count()
 
+                current_week_fp = DUCortexSOARIncidentFinalModel.objects.filter(
+                    fp_filters,
+                    created__date__range=[today - timedelta(days=6), today],
+                ).count()
+
                 percent_change = self._calculate_percentage_change(
-                    fp_count, last_week_fp
+                    current_week_fp, last_week_fp, "week"
                 )
 
                 dashboard_data["falsePositives"] = {
@@ -1305,16 +1320,22 @@ class DashboardView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    def _calculate_percentage_change(self, current, previous):
-        """Calculate simple percentage change with bounds"""
+    def _calculate_percentage_change(self, current, previous, period="day"):
+        """Calculate percentage change with time period indication
+        Args:
+            current: Current period count
+            previous: Previous period count
+            period: Time period being compared ('day' or 'week')
+        Returns:
+            Formatted string with change percentage and period
+        """
         if previous == 0:
-            return "0%"
-
+            return f"0% from previous {period})"
+        
         change = ((current - previous) / previous) * 100
         change = max(-100, min(100, change))  # Bound between -100% and 100%
         direction = "↑" if change >= 0 else "↓"
-        return f"{direction} {abs(round(change, 1))}%"
-
+        return f"{direction} {abs(round(change, 1))}% from previous {period})"
 
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
