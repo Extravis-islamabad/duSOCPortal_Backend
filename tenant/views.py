@@ -4824,25 +4824,25 @@ class SLASeverityMetricsView(APIView):
                     continue
 
                 sla = sla_metrics_dict[level]
-                created = inc.created
+                occured = inc.occured
                 response_data[level.label]["total_incidents"] += 1
 
                 # Calculate TTA metrics
-                tta_delta = (inc.incident_tta - created).total_seconds() / 60
+                tta_delta = (inc.incident_tta - occured).total_seconds() / 60
                 if tta_delta <= sla.tta_minutes:
                     response_data[level.label]["tta_successful_incidents"] += 1
                 else:
                     response_data[level.label]["tta_breached_incidents"] += 1
 
                 # Calculate TTN metrics
-                ttn_delta = (inc.incident_ttn - created).total_seconds() / 60
+                ttn_delta = (inc.incident_ttn - occured).total_seconds() / 60
                 if ttn_delta <= sla.ttn_minutes:
                     response_data[level.label]["ttn_successful_incidents"] += 1
                 else:
                     response_data[level.label]["ttn_breached_incidents"] += 1
 
                 # Calculate TTDN metrics
-                ttdn_delta = (inc.incident_ttdn - created).total_seconds() / 60
+                ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
                 if ttdn_delta <= sla.ttdn_minutes:
                     response_data[level.label]["ttdn_successful_incidents"] += 1
                 else:
@@ -4858,6 +4858,7 @@ class SLASeverityMetricsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 
 class SLAOverviewCardsView(APIView):
@@ -4925,8 +4926,10 @@ class SLAOverviewCardsView(APIView):
                 if total_incidents == 0:
                     compliance_percent = 0.0
                     breached_percent = 0.0
+                    compliance_count = 0
+                    breach_count = 0
                 else:
-                    met_sla_count = 0
+                    compliance_count = 0
 
                     for inc in level_incidents:
                         created = inc.created
@@ -4948,10 +4951,11 @@ class SLAOverviewCardsView(APIView):
                             any_breach = True
 
                         if not any_breach:
-                            met_sla_count += 1
+                            compliance_count += 1
 
+                    breach_count = total_incidents - compliance_count
                     compliance_percent = round(
-                        (met_sla_count / total_incidents) * 100, 2
+                        (compliance_count / total_incidents) * 100, 2
                     )
                     breached_percent = round(
                         100 - compliance_percent, 2
@@ -4962,6 +4966,8 @@ class SLAOverviewCardsView(APIView):
                         "priority_level": level.label,
                         "priority_value": level.value,
                         "total_incidents": total_incidents,
+                        "compliance_count": compliance_count,
+                        "breach_count": breach_count,
                         "compliance_percentage": compliance_percent,
                         "breached_percentage": breached_percent,
                         "status": "compliant"
@@ -4982,7 +4988,6 @@ class SLAOverviewCardsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class IncidentReportView(APIView):
     authentication_classes = [JWTAuthentication]
