@@ -1139,7 +1139,6 @@ class OwnerDistributionView(APIView):
             )
 
 
-
 class DashboardView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1291,7 +1290,9 @@ class DashboardView(APIView):
 
             # False Positives (Done incidents)
             if not filter_list or "falsePositives" in filter_list:
-                fp_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(itsm_sync_status__iexact="Done")
+                fp_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+                    itsm_sync_status__iexact="Done"
+                )
 
                 fp_count = DUCortexSOARIncidentFinalModel.objects.filter(
                     fp_filters
@@ -1327,12 +1328,13 @@ class DashboardView(APIView):
         """Calculate percentage change with time period indication"""
         if previous == 0:
             return f"0% from previous {period}"
-        
+
         change = ((current - previous) / previous) * 100
         change = max(-100, min(100, change))  # Bound between -100% and 100%
         direction = "↑" if change >= 0 else "↓"
         return f"{direction} {abs(round(change, 1))}% from previous {period}"
-    
+
+
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
