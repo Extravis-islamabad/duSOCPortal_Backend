@@ -132,11 +132,6 @@ class IBMQradarAssests(models.Model):
 
 
 class IBMQradarEPS(models.Model):
-    log_source = models.ForeignKey(
-        IBMQradarAssests,
-        on_delete=models.CASCADE,
-        related_name="du_ibm_qradar_eps",
-    )
     domain = models.ForeignKey(
         DuIbmQradarTenants,
         on_delete=models.CASCADE,
@@ -149,7 +144,9 @@ class IBMQradarEPS(models.Model):
         null=True,
         blank=True,
     )
-    eps = models.FloatField(default=0)
+    average_eps = models.FloatField(default=0)
+    peak_eps = models.FloatField(default=0)
+    qradar_start_time = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
