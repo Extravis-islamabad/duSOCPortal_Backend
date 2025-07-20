@@ -207,29 +207,28 @@ def sync_event_log_sources_types():
 def sync_eps_for_domain(
     username: str, password: str, ip_address: str, port: int, integration_id: int
 ):
-    db_ids = DuIbmQradarTenants.objects.values_list("db_id", flat=True)
-
     with IBMQradar(
         username=username, password=password, ip_address=ip_address, port=port
     ) as ibm_qradar:
         logger.info("Running QRadarTasks.sync_eps_for_domain() task")
-        for domain_id in db_ids:
-            logger.info(f"Syncing EPS for domain {domain_id}")
-            search_id = ibm_qradar._get_eps_domain(domain_id=domain_id)
-            flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
-            if not flag:
-                logger.warning(
-                    f"IBM QRadar EPS sync failed for domain {domain_id} for integration {integration_id}"
-                )
-                continue
-            data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
-            transformed_data = ibm_qradar._transform_eps_data(
-                data_list=data, integration=integration_id
+        search_id = ibm_qradar._get_do_aql_query(
+            query=IBMQradarConstants.AQL_EPS_UPDATED_QUERY
+        )
+        flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
+        if not flag:
+            logger.warning(
+                f"IBM QRadar EPS sync failed for integration {integration_id}"
             )
-            if transformed_data:
-                ibm_qradar._insert_eps(transformed_data)
+            return
+        data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+        print(data)
+        transformed_data = ibm_qradar._transform_eps_data_from_named_fields(
+            data_list=data, integration=integration_id
+        )
+        if transformed_data:
+            ibm_qradar._insert_eps(transformed_data)
 
-                logger.info("Completed QRadarTasks.sync_eps_for_domain() task")
+            logger.info("Completed QRadarTasks.sync_eps_for_domain() task")
 
 
 @shared_task
