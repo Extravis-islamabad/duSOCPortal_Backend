@@ -9,7 +9,7 @@ from django.db.models import Q
 from loguru import logger
 from requests.auth import HTTPBasicAuth
 
-from common.constants import IBMQradarConstants, SSLConstants
+from common.constants import EnvConstants, IBMQradarConstants, SSLConstants
 from common.utils import DBMappings
 from tenant.models import (
     CorrelatedEventLog,
@@ -913,16 +913,33 @@ class IBMQradar:
         """
         endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_EPS_ENDPOINT}"
         try:
-            response = requests.post(
-                endpoint,
-                auth=HTTPBasicAuth(
-                    self.username,
-                    self.password,
-                ),
-                data={"query_expression": query},
-                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=SSLConstants.TIMEOUT,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.post(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    proxies=proxies,
+                    data={"query_expression": query},
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                )
+            else:
+                response = requests.post(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    data={"query_expression": query},
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                )
         except Exception as e:
             logger.error(f"An error occurred in IBMQRadar._get_eps_domain(): {str(e)}")
             return
@@ -941,33 +958,45 @@ class IBMQradar:
         Returns the results for a given search ID.
 
         :param search_id: The ID of the search.
-        :return: The results.
+        :return: True if completed, None otherwise.
         """
         while True:
             endpoint = (
                 f"{self.base_url}/{IBMQradarConstants.IBM_EPS_ENDPOINT}/{search_id}"
             )
             try:
-                response = requests.get(
-                    endpoint,
-                    auth=HTTPBasicAuth(
-                        self.username,
-                        self.password,
-                    ),
-                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                    timeout=SSLConstants.TIMEOUT,
-                )
+                if EnvConstants.LOCAL:
+                    proxies = {
+                        "http": "http://127.0.0.1:8080",
+                        "https": "http://127.0.0.1:8080",
+                    }
+                    response = requests.get(
+                        endpoint,
+                        auth=HTTPBasicAuth(self.username, self.password),
+                        verify=SSLConstants.VERIFY,
+                        timeout=SSLConstants.TIMEOUT,
+                        proxies=proxies,
+                    )
+                else:
+                    response = requests.get(
+                        endpoint,
+                        auth=HTTPBasicAuth(self.username, self.password),
+                        verify=SSLConstants.VERIFY,
+                        timeout=SSLConstants.TIMEOUT,
+                    )
+
             except Exception as e:
                 logger.error(
                     f"An error occurred in IBMQRadar._check_eps_results_by_search_id(): {str(e)}"
                 )
-                return
+                return None  # <-- Ensure function exits if request fails
 
+            # response will always be defined here if no exception was raised
             if response.status_code != 200:
                 logger.warning(
-                    f"IBMQRadar._check_eps_results_by_search_id() return the status code {response.status_code}"
+                    f"IBMQRadar._check_eps_results_by_search_id() returned status code {response.status_code}"
                 )
-                return
+                return None
 
             status = response.json().get("status")
 
@@ -977,8 +1006,10 @@ class IBMQradar:
                 logger.info(
                     f"IBMQRadar._check_eps_results_by_search_id() status: {status}"
                 )
+                return None  # Exit if job failed or was cancelled
 
             time.sleep(2)
+
         return True
 
     def _get_eps_results_by_search_id(self, search_id: int):
@@ -992,19 +1023,36 @@ class IBMQradar:
             f"{self.base_url}/{IBMQradarConstants.IBM_EPS_ENDPOINT}/{search_id}/results"
         )
         try:
-            response = requests.get(
-                endpoint,
-                auth=HTTPBasicAuth(
-                    self.username,
-                    self.password,
-                ),
-                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=SSLConstants.TIMEOUT,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                    proxies=proxies,
+                )
+            else:
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                )
         except Exception as e:
             logger.error(
                 f"An error occurred in IBMQRadar._get_eps_results_by_search_id(): {str(e)}"
             )
+            return
         if response.status_code != 200:
             logger.warning(
                 f"IBMQRadar._get_eps_results_by_search_id() return the status code {response.status_code}"
@@ -1013,55 +1061,87 @@ class IBMQradar:
         results = response.json().get("events", [])
         return results
 
-    def _transform_eps_data(self, data_list, integration):
+    def _transform_eps_data_from_named_fields(self, data_list, integration):
         """
-        Transforms the list of eps data from the IBM QRadar endpoint into a list of IBMQradarEPS objects.
+        Transforms EPS data using client name and hostname to model foreign keys.
+        """
+        df = pd.DataFrame(data_list)
+        eps_summary = (
+            df.groupby("client")
+            .agg(
+                {
+                    "Peak EPS": "sum",
+                    "Average EPS": "sum",
+                    "Start Time": "min",  # or 'max' depending on desired logic
+                    "Current Timestamp (ms)": "max",  # or 'min' as needed
+                }
+            )
+            .reset_index()
+        )
 
-        :param data_list: A list of dictionaries containing eps data.
-        :param integration: The integration object associated with the data.
-        :return: A list of IBMQradarEPS objects.
-        """
-        domain_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-        log_source_map = DBMappings.get_db_id_to_id_mapping(IBMQradarAssests)
-        eps_objects = []
-        for data in data_list:
-            domain = domain_map.get(data["domainid"])
-            log_source = log_source_map.get(data["logsourceid"])
-            if domain is None or log_source is None:
-                logger.warning(
-                    f"Skipping eps with invalid domain or log_source: {data.get('id')}"
-                )
-                continue
-            try:
-                eps_obj = IBMQradarEPS(
-                    domain_id=domain,
-                    log_source_id=log_source,
-                    eps=data["eps"],
-                    integration_id=integration,
-                )
-                eps_objects.append(eps_obj)
-            except Exception as e:
-                logger.error(
-                    f"An error occurred in IBMQRadar._transform_eps_data(): {str(e)}"
-                )
-        return eps_objects
+        domain_map = DBMappings.get_name_to_id_mapping(DuIbmQradarTenants)
+
+        eps_summary["tenant_id"] = eps_summary["client"].map(domain_map)
+        eps_summary.dropna(subset=["tenant_id"], inplace=True)
+        eps_summary.drop(columns=["Current Timestamp (ms)", "client"], inplace=True)
+        eps_summary["integration_id"] = integration
+
+        eps_summary["qradar_start_time"] = eps_summary["Start Time"].apply(
+            lambda t: datetime.strptime(t, "%Y-%m-%d %H:%M")
+        )
+
+        # return eps_objects
+
+        eps_summary.rename(
+            columns={
+                "Peak EPS": "peak_eps",
+                "Average EPS": "average_eps",
+                "tenant_id": "domain_id",
+                "Start Time": "qradar_start_time",
+            },
+            inplace=True,
+        )
+        eps_summary["domain_id"] = eps_summary["domain_id"].astype(int)
+
+        eps_dict = eps_summary.to_dict(orient="records")
+
+        return eps_dict
 
     def _insert_eps(self, data):
         """
-        Inserts or updates EPS records in the IBMQradarEPS table.
+        Inserts EPS records into the IBMQradarEPS table.
 
-        :param data: A list of IBMQradarEPS objects.
+        :param data: A list of IBMQradarEPS objects or dicts.
         """
         start = time.time()
-        logger.info(f"IBMQRadar._insert_eps() started : {start}")
+        logger.info(f"IBMQRadar._insert_eps() started at: {start}")
+
         try:
             with transaction.atomic():
                 IBMQradarEPS.objects.bulk_create(
-                    data,
+                    [IBMQradarEPS(**item) for item in data],  # make model instances
+                    batch_size=1000,  # optional for performance
                 )
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._insert_eps(): {str(e)}")
             transaction.rollback()
+
+    # def _insert_eps(self, data):
+    #     """
+    #     Inserts or updates EPS records in the IBMQradarEPS table.
+
+    #     :param data: A list of IBMQradarEPS objects.
+    #     """
+    #     start = time.time()
+    #     logger.info(f"IBMQRadar._insert_eps() started : {start}")
+    #     try:
+    #         with transaction.atomic():
+    #             IBMQradarEPS.objects.bulk_create(
+    #                 data,
+    #             )
+    #     except Exception as e:
+    #         logger.error(f"An error occurred in IBMQradar._insert_eps(): {str(e)}")
+    #         transaction.rollback()
 
     def _transform_customer_eps_data(self, data_list, integration):
         """
