@@ -221,7 +221,6 @@ def sync_eps_for_domain(
             )
             return
         data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
-        print(data)
         transformed_data = ibm_qradar._transform_eps_data_from_named_fields(
             data_list=data, integration=integration_id
         )
