@@ -4871,9 +4871,7 @@ class SLABreachedIncidentsView(APIView):
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
             # Step 4: Get filter parameters
-            sla_type = request.query_params.get(
-                "sla_type", ""
-            ).lower()  # tta, ttn, or ttdn
+            sla_type = request.query_params.get("sla_type", "").lower()
             if sla_type not in ["tta", "ttn", "ttdn"]:
                 return Response(
                     {
@@ -4882,12 +4880,28 @@ class SLABreachedIncidentsView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            id_filter = request.query_params.get("id")
+            db_id_filter = request.query_params.get("db_id")
+            account_filter = request.query_params.get("account")
+            name_filter = request.query_params.get("name")
+            description_filter = request.query_params.get("description")
+            status_filter = request.query_params.get("status")
+            severity_filter = request.query_params.get("severity")
             priority_filter = request.query_params.get("priority")
+            phase_filter = request.query_params.get("phase")
+            assignee_filter = request.query_params.get("assignee")
+            playbook_filter = request.query_params.get("playbook")
+            sla_filter = request.query_params.get("sla")
             mitre_tactic_filter = request.query_params.get("mitre_tactic")
             mitre_technique_filter = request.query_params.get("mitre_technique")
             config_item_filter = request.query_params.get("configuration_item")
+            filter_type = request.query_params.get("filter", "all")
             start_date_str = request.query_params.get("start_date")
             end_date_str = request.query_params.get("end_date")
+            occurred_start_str = request.query_params.get("occurred_start")
+            occurred_end_str = request.query_params.get("occurred_end")
+
+            date_format = "%Y-%m-%d"
 
             # Step 5: Build base query filters
             filters = Q(cortex_soar_tenant_id__in=soar_ids)
@@ -4899,7 +4913,42 @@ class SLABreachedIncidentsView(APIView):
                 & Q(incident_ttdn__isnull=False)
             )
 
-            # Apply priority filter if provided
+            # Step 6: Apply non-date filters
+            if id_filter:
+                filters &= Q(id=id_filter)
+
+            if db_id_filter:
+                try:
+                    db_id_value = int(db_id_filter)
+                    filters &= Q(db_id=db_id_value)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid db_id format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            if account_filter:
+                filters &= Q(account__icontains=account_filter)
+
+            if name_filter:
+                filters &= Q(name__icontains=name_filter)
+
+            if description_filter:
+                filters &= Q(name__icontains=description_filter)
+
+            if status_filter:
+                filters &= Q(status__iexact=status_filter)
+
+            if severity_filter:
+                try:
+                    severity_value = int(severity_filter)
+                    filters &= Q(severity=severity_value)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid severity format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
             if priority_filter:
                 valid_priorities = [p.label for p in SlaLevelChoices]
                 if priority_filter not in valid_priorities:
@@ -4911,7 +4960,25 @@ class SLABreachedIncidentsView(APIView):
                     )
                 filters &= Q(incident_priority=priority_filter)
 
-            # Apply MITRE and configuration item filters
+            if phase_filter:
+                filters &= Q(incident_phase__iexact=phase_filter)
+
+            if assignee_filter:
+                filters &= Q(owner__iexact=assignee_filter)
+
+            if playbook_filter:
+                filters &= Q(playbook_id=playbook_filter)
+
+            if sla_filter:
+                try:
+                    sla_value = int(sla_filter)
+                    filters &= Q(sla=sla_value)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid sla format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
             if mitre_tactic_filter:
                 filters &= Q(mitre_tactic__icontains=mitre_tactic_filter)
 
@@ -4921,18 +4988,35 @@ class SLABreachedIncidentsView(APIView):
             if config_item_filter:
                 filters &= Q(configuration_item__icontains=config_item_filter)
 
-            # Apply date filters if provided
-            date_format = "%Y-%m-%d"
+            # Apply filter_type only if status_filter and assignee_filter are not provided
+            if filter_type != "all" and not (status_filter or assignee_filter):
+                if filter_type == "unassigned":
+                    filters &= Q(owner__isnull=True)
+                elif filter_type == "pending":
+                    filters &= Q(status="Pending")
+                elif filter_type == "false-positive":
+                    filters &= Q(status="False Positive")
+                elif filter_type == "closed":
+                    filters &= Q(status="Closed")
+                elif filter_type == "error":
+                    filters &= Q(status="Error")
+
+            # Step 7: Apply date filters with validation
+            start_date = None
+            end_date = None
+            occurred_start = None
+            occurred_end = None
+
             if start_date_str:
                 try:
                     start_date = make_aware(
                         datetime.strptime(start_date_str, date_format)
                     ).date()
-                    filters &= Q(occured__date__gte=start_date)
+                    filters &= Q(created__date__gte=start_date)
                 except ValueError:
                     return Response(
                         {"error": "Invalid start_date format. Use YYYY-MM-DD."},
-                        status=400,
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
             if end_date_str:
@@ -4940,20 +5024,69 @@ class SLABreachedIncidentsView(APIView):
                     end_date = make_aware(
                         datetime.strptime(end_date_str, date_format)
                     ).date()
-                    filters &= Q(occured__date__lte=end_date)
+                    filters &= Q(created__date__lte=end_date)
                 except ValueError:
                     return Response(
                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
-                        status=400,
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Step 6: Get all relevant incidents
+            if occurred_start_str:
+                try:
+                    occurred_start = make_aware(
+                        datetime.strptime(occurred_start_str, date_format)
+                    ).date()
+                    filters &= Q(occured__date__gte=occurred_start)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid occurred_start format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            if occurred_end_str:
+                try:
+                    occurred_end = make_aware(
+                        datetime.strptime(occurred_end_str, date_format)
+                    ).date()
+                    filters &= Q(occured__date__lte=occurred_end)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid occurred_end format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Validate date ranges
+            if start_date and end_date and start_date > end_date:
+                return Response(
+                    {"error": "start_date cannot be greater than end_date."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if occurred_start and occurred_end and occurred_start > occurred_end:
+                return Response(
+                    {"error": "occurred_start cannot be greater than occurred_end."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Step 8: Get all relevant incidents
             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
                 filters
             ).select_related()
 
-            # Step 7: Process incidents to find breached ones
+            # Step 9: Process incidents to find breached ones
             breached_incidents = []
+            offense_db_ids = {
+                int(part)
+                for inc in incidents
+                if inc.name
+                for part in [inc.name.split()[0]]
+                if part.isdigit()
+            }
+
+            # Bulk fetch related offenses
+            offenses = IBMQradarOffense.objects.filter(db_id__in=offense_db_ids)
+            offense_map = {str(o.db_id): o.id for o in offenses}
+
             for inc in incidents:
                 # Find matching SLA level
                 level = None
@@ -4986,20 +5119,13 @@ class SLABreachedIncidentsView(APIView):
                     is_breached = ttdn_delta > sla.ttdn_minutes
 
                 if is_breached:
-                    # Get offense details if available
                     offense_db_id = None
                     offense_id = None
                     if inc.name:
                         parts = inc.name.split()
                         if parts and parts[0].isdigit():
                             offense_db_id = parts[0]
-                            try:
-                                offense = IBMQradarOffense.objects.get(
-                                    db_id=offense_db_id
-                                )
-                                offense_id = offense.id
-                            except IBMQradarOffense.DoesNotExist:
-                                pass
+                            offense_id = offense_map.get(offense_db_id)
 
                     description = (
                         inc.name.strip().split(" ", 1)[1]
@@ -5050,14 +5176,14 @@ class SLABreachedIncidentsView(APIView):
                         }
                     )
 
-            # Step 8: Pagination
+            # Step 10: Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
             paginated_incidents = paginator.paginate_queryset(
                 breached_incidents, request
             )
 
-            # Step 9: Return response
+            # Step 11: Return response
             return paginator.get_paginated_response(
                 {
                     "sla_type": sla_type.upper(),
@@ -5071,8 +5197,6 @@ class SLABreachedIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
 class SLAOverviewCardsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
