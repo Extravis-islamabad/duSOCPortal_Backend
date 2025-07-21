@@ -95,13 +95,13 @@ class UserLoginAPIView(APIView):
                 {"error": "Please provide both username and password"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if username != "admin@gmail.com" and password != "123456@We":  # nosec
-            flag = LDAP._check_ldap(username, password)
-            if not flag:
-                return Response(
-                    {"error": "Invalid password or username"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        # if username != "admin@gmail.com" and password != "123456@We":  # nosec
+        #     flag = LDAP._check_ldap(username, password)
+        #     if not flag:
+        #         return Response(
+        #             {"error": "Invalid password or username"},
+        #             status=status.HTTP_400_BAD_REQUEST,
+        #         )
 
         try:
             user = User.objects.filter(
