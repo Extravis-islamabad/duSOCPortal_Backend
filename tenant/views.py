@@ -1651,7 +1651,7 @@ class IncidentsView(APIView):
                     }
                 )
 
-            # Step 12: Pagination
+            # Step 12: Paginations
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
             paginated_incidents = paginator.paginate_queryset(incidents, request)
