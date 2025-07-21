@@ -19,7 +19,7 @@ cryptography==45.0.4
 debugpy==1.8.14
 decorator==5.2.1
 distlib==0.3.9
-Django==5.2
+Django==4.2.9
 django-auth-ldap==5.2.0
 django-cors-headers==4.7.0
 django-redis==5.4.0
@@ -32,7 +32,7 @@ httptools==0.6.4
 identify==2.6.9
 idna==3.10
 ipykernel==6.29.5
-ipython==9.2.0
+ipython==8.14.0
 ipython_pygments_lexers==1.1.1
 jedi==0.19.2
 jupyter_client==8.6.3
@@ -43,7 +43,7 @@ matplotlib-inline==0.1.7
 msgpack==1.1.0
 nest-asyncio==1.6.0
 nodeenv==1.9.1
-numpy==2.2.5
+numpy==1.25.1
 packaging==25.0
 pandas==2.2.3
 parso==0.8.4
@@ -80,7 +80,7 @@ typing_extensions==4.13.1
 tzdata==2025.2
 urllib3==2.4.0
 uvicorn==0.34.2
-uvloop==0.21.0
+# uvloop==0.21.0
 vine==5.1.0
 virtualenv==20.30.0
 watchfiles==1.0.5
