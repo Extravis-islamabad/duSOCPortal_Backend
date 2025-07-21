@@ -3718,24 +3718,22 @@ class AllIncidentsView(APIView):
         """
         Retrieve up to 10 incidents filtered by:
         - SOAR tenant
-        - optional filter_type (1–4)
-        - optional severity (0–6)
+        - True positive logic (ready incidents with proper fields)
+        - optional filter_type (1–4) using created column
+        - optional incident_priority (P1, P2, P3, P4)
 
         Query Parameters:
             filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year
-            severity (int): Severity level between 0 and 6
+            priority (int): 1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical
 
         Returns:
             {
                 "data": [...],
                 "summary": {
-                    "Unknown": 0,
-                    "Low": 0,
-                    "Medium": 0,
-                    "High": 0,
-                    "Critical": 0,
-                    "Major": 0,
-                    "Minor": 0
+                    "P1": 0,
+                    "P2": 0,
+                    "P3": 0,
+                    "P4": 0
                 }
             }
         """
@@ -3747,10 +3745,19 @@ class AllIncidentsView(APIView):
             if not soar_ids:
                 return Response({"error": "No SOAR tenants found."}, status=404)
 
-            # Step 2: Build filters
+            # Step 2: Apply true positive logic filters
             filters = Q(cortex_soar_tenant__in=soar_ids)
+            filters &= (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+            )
 
-            # Handle filter_type
+            # Step 3: Handle filter_type using created column
             filter_type = request.query_params.get("filter_type")
             if filter_type:
                 try:
@@ -3775,41 +3782,55 @@ class AllIncidentsView(APIView):
                         status=400,
                     )
 
-            # Handle severity
-            severity = request.query_params.get("severity")
-            if severity is not None:
+            # Step 4: Handle incident_priority filter using SlaLevelChoices values
+            priority = request.query_params.get("priority")
+            if priority:
                 try:
-                    severity_int = int(severity)
-                    if severity_int not in range(0, 7):
+                    priority_int = int(priority)
+                    # Map to SlaLevelChoices: 1=P4, 2=P3, 3=P2, 4=P1
+                    if priority_int not in [1, 2, 3, 4]:
                         raise ValueError
-                    filters &= Q(severity=severity_int)
+                    
+                    # Map integer to priority string for filtering
+                    priority_mapping = {
+                        4: "P1",  # P1 Critical
+                        3: "P2",  # P2 High  
+                        2: "P3",  # P3 Medium
+                        1: "P4"   # P4 Low
+                    }
+                    priority_string = priority_mapping[priority_int]
+                    filters &= Q(incident_priority__icontains=priority_string)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid severity. Must be between 0 and 6."},
+                        {"error": "Invalid priority. Use 1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical."},
                         status=400,
                     )
 
-            # Step 3: Apply filters
+            # Step 5: Apply filters
             incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
 
-            # Step 4: Prepare summary counts
-            severity_counts = incidents_qs.values("severity").annotate(
-                count=Count("severity")
+            # Step 6: Prepare summary counts based on incident_priority
+            priority_counts = incidents_qs.values("incident_priority").annotate(
+                count=Count("incident_priority")
             )
-            # Initialize summary with all severity labels set to 0
-            summary = {label: 0 for label in SEVERITY_LABELS.values()}
-            # Update counts for severities present in the data
-            for item in severity_counts:
-                severity_value = item["severity"]
-                label = SEVERITY_LABELS.get(
-                    severity_value, f"Unknown ({severity_value})"
-                )
-                summary[label] = item["count"]
+            
+            # Initialize summary with all priority levels set to 0
+            summary = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
+            
+            # Update counts for priorities present in the data
+            for item in priority_counts:
+                priority_value = item["incident_priority"]
+                if priority_value:
+                    # Extract priority level (P1, P2, P3, P4) from strings like "P1 Critical", "P4 Low"
+                    for priority in ["P1", "P2", "P3", "P4"]:
+                        if priority in priority_value:
+                            summary[priority] = item["count"]
+                            break
 
-            # Step 5: Limit to top 10 incidents
+            # Step 7: Limit to top 10 incidents
             incidents = incidents_qs.order_by("-created")[:10]
 
-            # Step 6: Serialize and return response
+            # Step 8: Serialize and return response
             serializer = RecentIncidentsSerializer(incidents, many=True)
             return Response({"data": serializer.data, "summary": summary}, status=200)
 
@@ -3818,7 +3839,8 @@ class AllIncidentsView(APIView):
         except Exception as e:
             logger.error("Error in AllIncidentsView: %s", str(e))
             return Response({"error": str(e)}, status=500)
-
+        
+        
 class IncidentSummaryView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
