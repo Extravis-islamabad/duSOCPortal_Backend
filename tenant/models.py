@@ -1184,7 +1184,7 @@ class SourceIPGeoLocation(models.Model):
 
 
 class DUSoarNotes(models.Model):
-    db_id = models.IntegerField(unique=True)
+    db_id = models.CharField(unique=True)
     category = models.CharField(max_length=255, null=True, blank=True)
     content = models.TextField(null=True, blank=True)
     created = models.DateTimeField(null=True, blank=True)

@@ -855,7 +855,7 @@ class SeverityDistributionView(APIView):
         """
         Retrieve severity distribution (P1-P4) for the authenticated tenant.
         No filtering parameters accepted.
-        
+
         Returns:
             {
                 "severityDistribution": [
@@ -875,32 +875,28 @@ class SeverityDistributionView(APIView):
                 return Response({"error": "No SOAR tenants found."}, status=404)
 
             # Step 2: Define our severity levels (P1-P4 only)
-            SEVERITY_LEVELS = {
-                1: "P1",
-                2: "P2", 
-                3: "P3",
-                4: "P4"
-            }
+            SEVERITY_LEVELS = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
 
             # Step 3: Get counts for each severity level
             severity_counts = (
-                DUCortexSOARIncidentFinalModel.objects
-                .filter(
+                DUCortexSOARIncidentFinalModel.objects.filter(
                     cortex_soar_tenant__in=soar_ids,
-                    severity__in=SEVERITY_LEVELS.keys()  # Only P1-P4
+                    severity__in=SEVERITY_LEVELS.keys(),  # Only P1-P4
                 )
-                .values('severity')
-                .annotate(count=Count('id'))
+                .values("severity")
+                .annotate(count=Count("id"))
             )
 
             # Convert to dictionary for easier lookup
-            count_dict = {item['severity']: item['count'] for item in severity_counts}
+            count_dict = {item["severity"]: item["count"] for item in severity_counts}
 
             # Step 4: Build result ensuring all severity levels are includedd
             result = [
                 {
                     "name": severity_name,
-                    "value": count_dict.get(severity_value, 0)  # Default to 0 if not found
+                    "value": count_dict.get(
+                        severity_value, 0
+                    ),  # Default to 0 if not found
                 }
                 for severity_value, severity_name in SEVERITY_LEVELS.items()
             ]
@@ -912,6 +908,7 @@ class SeverityDistributionView(APIView):
         except Exception as e:
             logger.error("Error in SeverityDistributionView: %s", str(e))
             return Response({"error": str(e)}, status=500)
+
 
 class TypeDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -4559,7 +4556,6 @@ class SLASeverityIncidentsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-
 class SLASeverityMetricsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5074,6 +5070,8 @@ class SLABreachedIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 class SLAOverviewCardsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
