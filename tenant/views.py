@@ -3848,6 +3848,7 @@ class AllIncidentsView(APIView):
             logger.error("Error in AllIncidentsView: %s", str(e))
             return Response({"error": str(e)}, status=500)
         
+
 class IncidentSummaryView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -3857,6 +3858,7 @@ class IncidentSummaryView(APIView):
         Retrieve summary of incident counts by severity for the authenticated tenant.
         Filtered by:
         - SOAR tenant
+        - True positive logic (ready incidents with proper fields)
         - optional filter_type (1–4)
         - optional severity (0–6)
         - optional priority (P1-P4)
@@ -3876,6 +3878,12 @@ class IncidentSummaryView(APIView):
                     "Critical": 0,
                     "Major": 0,
                     "Minor": 0
+                },
+                "priority_summary": {
+                    "P1 Critical": 0,
+                    "P2 High": 0,
+                    "P3 Medium": 0,
+                    "P4 Low": 0
                 }
             }
         """
@@ -3887,11 +3895,9 @@ class IncidentSummaryView(APIView):
             if not soar_ids:
                 return Response({"error": "No SOAR tenants found."}, status=404)
 
-            # Step 2: Build base filters
+            # Step 2: Apply true positive logic filters (same as AllIncidentsView)
             filters = Q(cortex_soar_tenant__in=soar_ids)
-
-            # True Positive filters (Ready incidents with all required fields)
-            true_positive_filters = filters & (
+            filters &= (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
                 & Q(incident_tta__isnull=False)
@@ -3901,7 +3907,7 @@ class IncidentSummaryView(APIView):
                 & Q(itsm_sync_status__iexact="Ready")
             )
 
-            # Handle filter_type
+            # Handle filter_type (same as AllIncidentsView)
             filter_type = request.query_params.get("filter_type")
             if filter_type:
                 try:
@@ -3918,7 +3924,6 @@ class IncidentSummaryView(APIView):
                     elif filter_enum == FilterType.YEAR:
                         start_date = now - timedelta(days=365)
                     filters &= Q(created__gte=start_date)
-                    true_positive_filters &= Q(created__gte=start_date)
                 except Exception:
                     return Response(
                         {
@@ -3935,35 +3940,43 @@ class IncidentSummaryView(APIView):
                     if severity_int not in range(0, 7):
                         raise ValueError
                     filters &= Q(severity=severity_int)
-                    true_positive_filters &= Q(severity=severity_int)
                 except ValueError:
                     return Response(
                         {"error": "Invalid severity. Must be between 0 and 6."},
                         status=400,
                     )
 
-            # Handle priority
+            # Handle priority (using same priority mapping as AllIncidentsView)
             priority = request.query_params.get("priority")
             if priority:
                 try:
-                    priority_enum = SlaLevelChoices[priority.upper()]
-                    filters &= Q(priority=priority_enum.value)
-                    true_positive_filters &= Q(priority=priority_enum.value)
-                except KeyError:
+                    # Map priority strings to filter values
+                    priority_mapping = {
+                        "P1": "P1",  # P1 Critical
+                        "P2": "P2",  # P2 High
+                        "P3": "P3",  # P3 Medium
+                        "P4": "P4"   # P4 Low
+                    }
+                    priority_value = priority_mapping.get(priority.upper())
+                    if not priority_value:
+                        raise ValueError
+                    filters &= Q(incident_priority__icontains=priority_value)
+                except (KeyError, ValueError):
                     return Response(
                         {"error": "Invalid priority. Must be P1, P2, P3, or P4."},
                         status=400,
                     )
 
             # Step 3: Apply filters and calculate summary counts
-            # Use true_positive_filters instead of filters for the query
-            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(true_positive_filters)
+            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+
+            # Severity summary (same as original)
             severity_counts = incidents_qs.values("severity").annotate(
                 count=Count("severity")
             )
 
-            # Initialize summary with all severity labels set to 0
-            summary = {label: 0 for label in SEVERITY_LABELS.values()}
+            # Initialize severity summary with all severity labels set to 0
+            severity_summary = {label: 0 for label in SEVERITY_LABELS.values()}
 
             # Update counts for severities present in the data
             for item in severity_counts:
@@ -3971,16 +3984,47 @@ class IncidentSummaryView(APIView):
                 label = SEVERITY_LABELS.get(
                     severity_value, f"Unknown ({severity_value})"
                 )
-                summary[label] = item["count"]
+                severity_summary[label] = item["count"]
 
-            # Step 4: Return summary
-            return Response({"summary": summary}, status=200)
+            # Priority summary (same as AllIncidentsView)
+            priority_counts = incidents_qs.values("incident_priority").annotate(
+                count=Count("incident_priority")
+            )
+            
+            # Initialize priority summary with priority labels set to 0
+            priority_summary = {
+                "P1 Critical": 0, 
+                "P2 High": 0, 
+                "P3 Medium": 0, 
+                "P4 Low": 0
+            }
+            
+            # Update counts for priorities present in the data
+            for item in priority_counts:
+                priority_value = item["incident_priority"]
+                if priority_value:
+                    # Map priority strings to summary labels
+                    if "P1" in priority_value:
+                        priority_summary["P1 Critical"] = item["count"]
+                    elif "P2" in priority_value:
+                        priority_summary["P2 High"] = item["count"]
+                    elif "P3" in priority_value:
+                        priority_summary["P3 Medium"] = item["count"]
+                    elif "P4" in priority_value:
+                        priority_summary["P4 Low"] = item["count"]
+
+            # Step 4: Return both summaries
+            return Response({
+                "summary": severity_summary,
+                "priority_summary": priority_summary
+            }, status=200)
 
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
         except Exception as e:
             logger.error("Error in IncidentSummaryView: %s", str(e))
             return Response({"error": str(e)}, status=500)
+        
         
 class SLAIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
