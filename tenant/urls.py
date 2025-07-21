@@ -172,7 +172,7 @@ urlpatterns = [
     path(
         "api/sla-compliance-widgets-dashboard/",
         SLAComplianceView.as_view(),
-        name="sla-compliance",  # Name for the new route
+        name="sla-compliance",  # Name for the new routes
     ),
     path(
         "api/sla-severity-incidents-graph/",
