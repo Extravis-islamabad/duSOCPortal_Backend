@@ -1398,8 +1398,6 @@ class IncidentsView(APIView):
         date_format = "%Y-%m-%d"  # Expected format for date inputs
 
         # Step 5: Initialize filters with Q object
-
-        # Include ITSMSYNC staus = Ready ---> T.P
         filters = Q(cortex_soar_tenant__in=soar_ids)
         filters &= (
             ~Q(owner__isnull=True)
@@ -1431,9 +1429,7 @@ class IncidentsView(APIView):
             filters &= Q(name__icontains=name_filter)
 
         if description_filter:
-            filters &= Q(
-                name__icontains=description_filter
-            )  # Description derived from name
+            filters &= Q(name__icontains=description_filter)
 
         if status_filter:
             filters &= Q(status__iexact=status_filter)
@@ -1551,7 +1547,7 @@ class IncidentsView(APIView):
                     status=400,
                 )
 
-            # Step 10: Query incidents
+            # Step 10: Query incidents with MITRE fields
             queryset = queryset.values(
                 "id",
                 "db_id",
@@ -1567,6 +1563,9 @@ class IncidentsView(APIView):
                 "playbook_id",
                 "occured",
                 "sla",
+                "mitre_tactic",
+                "mitre_technique",
+                "configuration_item",
             ).order_by("-created")
 
             # Step 11: Process incidents
@@ -1622,6 +1621,9 @@ class IncidentsView(APIView):
                         "playbook": row["playbook_id"],
                         "occurred": occurred_date,
                         "sla": row["sla"],
+                        "mitre_tactic": row["mitre_tactic"],
+                        "mitre_technique": row["mitre_technique"],
+                        "configuration_item": row["configuration_item"],
                         "offense_id": offense_id,
                         "offense_db_id": offense_db_id,
                         "offense_link": request.build_absolute_uri(
@@ -1643,7 +1645,6 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -5017,6 +5018,9 @@ class SLABreachedIncidentsView(APIView):
                                 if sla_type == "ttn"
                                 else (ttdn_delta - sla.ttdn_minutes),
                             ),
+                            "mitre_tactic": inc.mitre_tactic,
+                            "mitre_technique": inc.mitre_technique,
+                            "configuration_item": inc.configuration_item,
                         }
                     )
 
@@ -5041,7 +5045,6 @@ class SLABreachedIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class SLAOverviewCardsView(APIView):
     authentication_classes = [JWTAuthentication]
