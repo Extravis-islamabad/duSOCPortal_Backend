@@ -471,12 +471,12 @@ class CortexSOAR:
         records = []
         entries = entries.get("entries")
         for rec in entries:
-            if not rec.get("user"):
-                continue
+            # if not rec.get("user"):
+            #     continue
 
             try:
-                db_id_str = rec.get("id", "").split("@")[0]
-                db_id = int(db_id_str)
+                db_id_str = rec.get("id")  # , "").split("@")[0]
+                db_id = db_id_str
             except (IndexError, ValueError):
                 continue  # Skip malformed db_id
 
