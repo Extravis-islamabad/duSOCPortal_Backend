@@ -896,7 +896,7 @@ class SeverityDistributionView(APIView):
             # Convert to dictionary for easier lookup
             count_dict = {item['severity']: item['count'] for item in severity_counts}
 
-            # Step 4: Build result ensuring all severity levels are included
+            # Step 4: Build result ensuring all severity levels are includedd
             result = [
                 {
                     "name": severity_name,
@@ -918,7 +918,7 @@ class TypeDistributionView(APIView):
     permission_classes = [IsTenant]
 
     def get(self, request):
-        # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreed'
+        # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreeds'
         try:
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
