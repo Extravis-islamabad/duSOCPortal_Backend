@@ -377,7 +377,9 @@ class DUCortexSOARIncidentFinalModel(models.Model):
     qradar_category = models.CharField(max_length=100, blank=True, null=True)
     qradar_sub_category = models.CharField(max_length=100, blank=True, null=True)
     tta_calculation = models.CharField(max_length=50, blank=True, null=True)
-
+    mitre_tactic = models.CharField(max_length=100, blank=True, null=True)
+    mitre_technique = models.CharField(max_length=100, blank=True, null=True)
+    configuration_item = models.CharField(max_length=100, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1206,7 +1208,7 @@ class DUSoarNotes(models.Model):
 
     class Meta:
         db_table = "notes"
-        unique_together = ("db_id", "account", "user")
+        unique_together = ("db_id", "account", "user", "incident")
 
     def __str__(self):
         return f"{self.user} - {self.category} ({self.created})"
