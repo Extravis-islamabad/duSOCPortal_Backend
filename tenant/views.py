@@ -1390,6 +1390,9 @@ class IncidentsView(APIView):
         assignee_filter = request.query_params.get("assignee")
         playbook_filter = request.query_params.get("playbook")
         sla_filter = request.query_params.get("sla")
+        mitre_tactic_filter = request.query_params.get("mitre_tactic")
+        mitre_technique_filter = request.query_params.get("mitre_technique")
+        config_item_filter = request.query_params.get("configuration_item")
         filter_type = request.query_params.get("filter", "all")
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
@@ -1465,6 +1468,16 @@ class IncidentsView(APIView):
                 return Response(
                     {"error": "Invalid sla format. Must be an integer."}, status=400
                 )
+
+        # Add MITRE and configuration item filters
+        if mitre_tactic_filter:
+            filters &= Q(mitre_tactic__icontains=mitre_tactic_filter)
+
+        if mitre_technique_filter:
+            filters &= Q(mitre_technique__icontains=mitre_technique_filter)
+
+        if config_item_filter:
+            filters &= Q(configuration_item__icontains=config_item_filter)
 
         # Step 7: Apply filter_type only if status_filter and assignee_filter are not provided
         if filter_type != "all" and not (status_filter or assignee_filter):
@@ -1646,7 +1659,6 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -4823,7 +4835,6 @@ class SLASeverityMetricsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class SLABreachedIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4859,7 +4870,7 @@ class SLABreachedIncidentsView(APIView):
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
-            # Step 4: Get filter parameter
+            # Step 4: Get filter parameters
             sla_type = request.query_params.get(
                 "sla_type", ""
             ).lower()  # tta, ttn, or ttdn
@@ -4872,6 +4883,9 @@ class SLABreachedIncidentsView(APIView):
                 )
 
             priority_filter = request.query_params.get("priority")
+            mitre_tactic_filter = request.query_params.get("mitre_tactic")
+            mitre_technique_filter = request.query_params.get("mitre_technique")
+            config_item_filter = request.query_params.get("configuration_item")
             start_date_str = request.query_params.get("start_date")
             end_date_str = request.query_params.get("end_date")
 
@@ -4896,6 +4910,16 @@ class SLABreachedIncidentsView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 filters &= Q(incident_priority=priority_filter)
+
+            # Apply MITRE and configuration item filters
+            if mitre_tactic_filter:
+                filters &= Q(mitre_tactic__icontains=mitre_tactic_filter)
+
+            if mitre_technique_filter:
+                filters &= Q(mitre_technique__icontains=mitre_technique_filter)
+
+            if config_item_filter:
+                filters &= Q(configuration_item__icontains=config_item_filter)
 
             # Apply date filters if provided
             date_format = "%Y-%m-%d"
