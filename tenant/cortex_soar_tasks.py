@@ -141,6 +141,11 @@ def sync_requests_for_soar():
                             f"No data returned for the CortexSOAR tenant : {cortex_tenant.name}"
                         )
                         continue
+                    if data["data"] is None:
+                        logger.warning(
+                            f"No data returned for the CortexSOAR tenant : {cortex_tenant.name}"
+                        )
+                        continue
 
                     records = soar._transform_incidents(
                         data=data,
