@@ -342,7 +342,9 @@ class PaginationConstants:
 
 class LDAPConstants:
     LDAP_PORT = 389
-    BASE_DN = "OU=Wipro_CSOC,OU=ICT Managed Services Platform,DC=mscloudinfra,DC=com"
+    BASE_DN = (
+        "OU=ICT Managed Services Platform,DC=mscloudinfra,DC=com"  # OU=Wipro_CSOC,
+    )
     BIND_DOMAIN = "mscloudinfra.com"
     LDAP_SERVERS = ["10.225.128.135", "10.225.128.136"]
     LDAP_BIND_USER = "svc.soc.portal"  # nosec
