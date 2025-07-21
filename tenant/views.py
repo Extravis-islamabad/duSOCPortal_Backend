@@ -1668,7 +1668,6 @@ class IncidentsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1733,6 +1732,9 @@ class IncidentDetailView(APIView):
                     "source_ips",
                     "log_source_type",
                     "list_of_rules_offense",
+                    "mitre_tactic",
+                    "mitre_technique",
+                    "configuration_item",
                 )
                 .first()
             )
@@ -1964,6 +1966,9 @@ class IncidentDetailView(APIView):
                         "logSourceType": log_source_type_str,
                         "category": incident["qradar_category"] or None,
                         "sub_category": incident["qradar_sub_category"] or None,
+                        "mitre_tactic": incident["mitre_tactic"],
+                        "mitre_technique": incident["mitre_technique"],
+                        "configuration_item": incident["configuration_item"],
                     },
                     "timeline": timeline,
                     "relatedItems": related_items,
