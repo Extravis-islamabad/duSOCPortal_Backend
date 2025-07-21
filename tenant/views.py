@@ -3719,23 +3719,20 @@ class AllIncidentsView(APIView):
         Retrieve up to 10 incidents filtered by:
         - SOAR tenant
         - optional filter_type (1–4)
-        - optional severity (0–6)
+        - optional priority (1-4, where 4=P1 Critical, 1=P4 Low)
 
         Query Parameters:
             filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year
-            severity (int): Severity level between 0 and 6
+            priority (int): Priority level (4=P1, 3=P2, 2=P3, 1=P4)
 
         Returns:
             {
                 "data": [...],
                 "summary": {
-                    "Unknown": 0,
-                    "Low": 0,
-                    "Medium": 0,
-                    "High": 0,
-                    "Critical": 0,
-                    "Major": 0,
-                    "Minor": 0
+                    "P1": 0,
+                    "P2": 0,
+                    "P3": 0,
+                    "P4": 0
                 }
             }
         """
@@ -3750,7 +3747,7 @@ class AllIncidentsView(APIView):
             # Step 2: Build filters
             filters = Q(cortex_soar_tenant__in=soar_ids)
 
-            # Handle filter_type
+            # Handle filter_type (time-based filtering)
             filter_type = request.query_params.get("filter_type")
             if filter_type:
                 try:
@@ -3775,39 +3772,53 @@ class AllIncidentsView(APIView):
                         status=400,
                     )
 
-            # Handle severity
-            severity = request.query_params.get("severity")
-            if severity is not None:
+            # Handle PRIORITY filter (now using numerical values 1-4)
+            priority = request.query_params.get("priority")
+            if priority:
                 try:
-                    severity_int = int(severity)
-                    if severity_int not in range(0, 7):
+                    priority_value = int(priority)
+                    if priority_value not in [1, 2, 3, 4]:
                         raise ValueError
-                    filters &= Q(severity=severity_int)
+                    # Map to the actual values stored in DB (4=P1, 3=P2, etc.)
+                    filters &= Q(incident_priority=priority_value)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid severity. Must be between 0 and 6."},
+                        {"error": "Invalid priority. Must be 1 (P4), 2 (P3), 3 (P2), or 4 (P1)."},
                         status=400,
                     )
 
-            # Step 3: Apply filters
-            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
-
-            # Step 4: Prepare summary counts
-            severity_counts = incidents_qs.values("severity").annotate(
-                count=Count("severity")
+            # Step 3: Apply filters and order by priority (highest first)
+            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters).order_by(
+                '-incident_priority'  # Descending order (4=P1 first, 1=P4 last)
             )
-            # Initialize summary with all severity labels set to 0
-            summary = {label: 0 for label in SEVERITY_LABELS.values()}
-            # Update counts for severities present in the data
-            for item in severity_counts:
-                severity_value = item["severity"]
-                label = SEVERITY_LABELS.get(
-                    severity_value, f"Unknown ({severity_value})"
-                )
-                summary[label] = item["count"]
 
-            # Step 5: Limit to top 10 incidents
-            incidents = incidents_qs.order_by("-created")[:10]
+            # Step 4: Prepare PRIORITY summary counts
+            priority_counts = incidents_qs.values("incident_priority").annotate(
+                count=Count("incident_priority")
+            )
+            
+            # Initialize priority summary
+            summary = {
+                "P1": 0,  # corresponds to 4
+                "P2": 0,  # corresponds to 3
+                "P3": 0,  # corresponds to 2
+                "P4": 0   # corresponds to 1
+            }
+            
+            # Update counts for priorities present in the data
+            for item in priority_counts:
+                priority_value = item["incident_priority"]
+                if priority_value == 4:
+                    summary["P1"] = item["count"]
+                elif priority_value == 3:
+                    summary["P2"] = item["count"]
+                elif priority_value == 2:
+                    summary["P3"] = item["count"]
+                elif priority_value == 1:
+                    summary["P4"] = item["count"]
+
+            # Step 5: Limit to top 10 incidents (already ordered by priority)
+            incidents = incidents_qs[:10]
 
             # Step 6: Serialize and return response
             serializer = RecentIncidentsSerializer(incidents, many=True)
@@ -3818,6 +3829,7 @@ class AllIncidentsView(APIView):
         except Exception as e:
             logger.error("Error in AllIncidentsView: %s", str(e))
             return Response({"error": str(e)}, status=500)
+
 
 
 class IncidentSummaryView(APIView):
@@ -3831,10 +3843,12 @@ class IncidentSummaryView(APIView):
         - SOAR tenant
         - optional filter_type (1–4)
         - optional severity (0–6)
+        - optional priority (P1-P4)
 
         Query Parameters:
             filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year
             severity (int): Severity level between 0 and 6
+            priority (str): Priority level (P1, P2, P3, P4)
 
         Returns:
             {
@@ -3857,8 +3871,19 @@ class IncidentSummaryView(APIView):
             if not soar_ids:
                 return Response({"error": "No SOAR tenants found."}, status=404)
 
-            # Step 2: Build filters
+            # Step 2: Build base filters
             filters = Q(cortex_soar_tenant__in=soar_ids)
+
+            # True Positive filters (Ready incidents with all required fields)
+            true_positive_filters = filters & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+            )
 
             # Handle filter_type
             filter_type = request.query_params.get("filter_type")
@@ -3877,6 +3902,7 @@ class IncidentSummaryView(APIView):
                     elif filter_enum == FilterType.YEAR:
                         start_date = now - timedelta(days=365)
                     filters &= Q(created__gte=start_date)
+                    true_positive_filters &= Q(created__gte=start_date)
                 except Exception:
                     return Response(
                         {
@@ -3893,14 +3919,29 @@ class IncidentSummaryView(APIView):
                     if severity_int not in range(0, 7):
                         raise ValueError
                     filters &= Q(severity=severity_int)
+                    true_positive_filters &= Q(severity=severity_int)
                 except ValueError:
                     return Response(
                         {"error": "Invalid severity. Must be between 0 and 6."},
                         status=400,
                     )
 
+            # Handle priority
+            priority = request.query_params.get("priority")
+            if priority:
+                try:
+                    priority_enum = SlaLevelChoices[priority.upper()]
+                    filters &= Q(priority=priority_enum.value)
+                    true_positive_filters &= Q(priority=priority_enum.value)
+                except KeyError:
+                    return Response(
+                        {"error": "Invalid priority. Must be P1, P2, P3, or P4."},
+                        status=400,
+                    )
+
             # Step 3: Apply filters and calculate summary counts
-            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+            # Use true_positive_filters instead of filters for the query
+            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(true_positive_filters)
             severity_counts = incidents_qs.values("severity").annotate(
                 count=Count("severity")
             )
@@ -3924,8 +3965,7 @@ class IncidentSummaryView(APIView):
         except Exception as e:
             logger.error("Error in IncidentSummaryView: %s", str(e))
             return Response({"error": str(e)}, status=500)
-
-
+        
 class SLAIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
