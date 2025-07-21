@@ -13,6 +13,7 @@ from django.db.models import (
     F,
     FloatField,
     IntegerField,
+    Max,
     Min,
     Q,
     Sum,
@@ -3152,7 +3153,7 @@ class EPSGraphAPIView(APIView):
             IBMQradarEPS.objects.filter(**filter_kwargs)
             .annotate(interval=time_trunc)
             .values("interval")
-            .annotate(average_eps=Avg("average_eps"), peak_eps=Avg("peak_eps"))
+            .annotate(average_eps=Avg("average_eps"), peak_eps=Max("peak_eps"))
             .order_by("interval")
         )
 
