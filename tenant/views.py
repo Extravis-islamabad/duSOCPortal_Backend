@@ -4663,6 +4663,7 @@ class SLASeverityIncidentsView(APIView):
 
 #             return Response(response)
 
+
 #         except Exception as e:
 #             logger.error(f"Error in SLASeverityMetricsView: {str(e)}")
 #             return Response(
@@ -4781,10 +4782,9 @@ class SLASeverityMetricsView(APIView):
                     response_data[level.label]["tta_successful_incidents"] += 1
                 else:
                     response_data[level.label]["tta_breached_incidents"] += 1
-                    response_data[level.label]["tta_breached_incidents_list"].append({
-                        "db_id": inc.db_id,
-                        "id": inc.id
-                    })
+                    response_data[level.label]["tta_breached_incidents_list"].append(
+                        {"db_id": inc.db_id, "id": inc.id}
+                    )
 
                 # Calculate TTN metrics
                 ttn_delta = (inc.incident_ttn - occured).total_seconds() / 60
@@ -4792,10 +4792,9 @@ class SLASeverityMetricsView(APIView):
                     response_data[level.label]["ttn_successful_incidents"] += 1
                 else:
                     response_data[level.label]["ttn_breached_incidents"] += 1
-                    response_data[level.label]["ttn_breached_incidents_list"].append({
-                        "db_id": inc.db_id,
-                        "id": inc.id
-                    })
+                    response_data[level.label]["ttn_breached_incidents_list"].append(
+                        {"db_id": inc.db_id, "id": inc.id}
+                    )
 
                 # Calculate TTDN metrics
                 ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
@@ -4803,10 +4802,9 @@ class SLASeverityMetricsView(APIView):
                     response_data[level.label]["ttdn_successful_incidents"] += 1
                 else:
                     response_data[level.label]["ttdn_breached_incidents"] += 1
-                    response_data[level.label]["ttdn_breached_incidents_list"].append({
-                        "db_id": inc.db_id,
-                        "id": inc.id
-                    })
+                    response_data[level.label]["ttdn_breached_incidents_list"].append(
+                        {"db_id": inc.db_id, "id": inc.id}
+                    )
 
             # Create the final response structure
             response = {
@@ -4823,7 +4821,6 @@ class SLASeverityMetricsView(APIView):
             )
 
 
-
 class SLABreachedIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4834,7 +4831,9 @@ class SLABreachedIncidentsView(APIView):
             tenant = Tenant.objects.get(tenant=request.user)
             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
         except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
         try:
             # Step 2: Get SOAR tenants
@@ -4858,14 +4857,18 @@ class SLABreachedIncidentsView(APIView):
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
             # Step 4: Get filter parameter
-            sla_type = request.query_params.get('sla_type', '').lower()  # tta, ttn, or ttdn
-            if sla_type not in ['tta', 'ttn', 'ttdn']:
+            sla_type = request.query_params.get(
+                "sla_type", ""
+            ).lower()  # tta, ttn, or ttdn
+            if sla_type not in ["tta", "ttn", "ttdn"]:
                 return Response(
-                    {"error": "Invalid sla_type parameter. Must be one of: tta, ttn, ttdn"},
-                    status=status.HTTP_400_BAD_REQUEST
+                    {
+                        "error": "Invalid sla_type parameter. Must be one of: tta, ttn, ttdn"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            priority_filter = request.query_params.get('priority')
+            priority_filter = request.query_params.get("priority")
             start_date_str = request.query_params.get("start_date")
             end_date_str = request.query_params.get("end_date")
 
@@ -4884,8 +4887,10 @@ class SLABreachedIncidentsView(APIView):
                 valid_priorities = [p.label for p in SlaLevelChoices]
                 if priority_filter not in valid_priorities:
                     return Response(
-                        {"error": f"Invalid priority. Must be one of: {', '.join(valid_priorities)}"},
-                        status=status.HTTP_400_BAD_REQUEST
+                        {
+                            "error": f"Invalid priority. Must be one of: {', '.join(valid_priorities)}"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
                 filters &= Q(incident_priority=priority_filter)
 
@@ -4893,7 +4898,9 @@ class SLABreachedIncidentsView(APIView):
             date_format = "%Y-%m-%d"
             if start_date_str:
                 try:
-                    start_date = make_aware(datetime.strptime(start_date_str, date_format)).date()
+                    start_date = make_aware(
+                        datetime.strptime(start_date_str, date_format)
+                    ).date()
                     filters &= Q(occured__date__gte=start_date)
                 except ValueError:
                     return Response(
@@ -4903,7 +4910,9 @@ class SLABreachedIncidentsView(APIView):
 
             if end_date_str:
                 try:
-                    end_date = make_aware(datetime.strptime(end_date_str, date_format)).date()
+                    end_date = make_aware(
+                        datetime.strptime(end_date_str, date_format)
+                    ).date()
                     filters &= Q(occured__date__lte=end_date)
                 except ValueError:
                     return Response(
@@ -4912,7 +4921,9 @@ class SLABreachedIncidentsView(APIView):
                     )
 
             # Step 6: Get all relevant incidents
-            incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters).select_related()
+            incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                filters
+            ).select_related()
 
             # Step 7: Process incidents to find breached ones
             breached_incidents = []
@@ -4937,13 +4948,13 @@ class SLABreachedIncidentsView(APIView):
                 is_breached = False
 
                 # Check which SLA type is breached
-                if sla_type == 'tta':
+                if sla_type == "tta":
                     tta_delta = (inc.incident_tta - occured).total_seconds() / 60
                     is_breached = tta_delta > sla.tta_minutes
-                elif sla_type == 'ttn':
+                elif sla_type == "ttn":
                     ttn_delta = (inc.incident_ttn - occured).total_seconds() / 60
                     is_breached = ttn_delta > sla.ttn_minutes
-                elif sla_type == 'ttdn':
+                elif sla_type == "ttdn":
                     ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
                     is_breached = ttdn_delta > sla.ttdn_minutes
 
@@ -4956,7 +4967,9 @@ class SLABreachedIncidentsView(APIView):
                         if parts and parts[0].isdigit():
                             offense_db_id = parts[0]
                             try:
-                                offense = IBMQradarOffense.objects.get(db_id=offense_db_id)
+                                offense = IBMQradarOffense.objects.get(
+                                    db_id=offense_db_id
+                                )
                                 offense_id = offense.id
                             except IBMQradarOffense.DoesNotExist:
                                 pass
@@ -4967,52 +4980,69 @@ class SLABreachedIncidentsView(APIView):
                         else inc.name
                     )
 
-                    breached_incidents.append({
-                        "id": str(inc.id),
-                        "db_id": inc.db_id,
-                        "account": inc.account,
-                        "name": inc.name,
-                        "description": description,
-                        "status": inc.status,
-                        "severity": inc.severity,
-                        "priority": inc.incident_priority,
-                        "phase": inc.incident_phase,
-                        "assignee": inc.owner,
-                        "playbook": inc.playbook_id,
-                        "occurred": inc.occured.isoformat() if inc.occured else "N/A",
-                        "sla": inc.sla,
-                        "offense_id": offense_id,
-                        "offense_db_id": offense_db_id,
-                        "offense_link": request.build_absolute_uri(
-                            f"/tenant/api/offense-details/{offense_id}/"
-                        ) if offense_id else None,
-                        "sla_type": sla_type.upper(),
-                        "sla_minutes": getattr(sla, f"{sla_type}_minutes"),
-                        "actual_minutes": tta_delta if sla_type == 'tta' else (ttn_delta if sla_type == 'ttn' else ttdn_delta),
-                        "breach_duration_minutes": max(0, (tta_delta - sla.tta_minutes) if sla_type == 'tta' else 
-                                                    (ttn_delta - sla.ttn_minutes) if sla_type == 'ttn' else 
-                                                    (ttdn_delta - sla.ttdn_minutes))
-                    })
+                    breached_incidents.append(
+                        {
+                            "id": str(inc.id),
+                            "db_id": inc.db_id,
+                            "account": inc.account,
+                            "name": inc.name,
+                            "description": description,
+                            "status": inc.status,
+                            "severity": inc.severity,
+                            "priority": inc.incident_priority,
+                            "phase": inc.incident_phase,
+                            "assignee": inc.owner,
+                            "playbook": inc.playbook_id,
+                            "occurred": inc.occured.isoformat()
+                            if inc.occured
+                            else "N/A",
+                            "sla": inc.sla,
+                            "offense_id": offense_id,
+                            "offense_db_id": offense_db_id,
+                            "offense_link": request.build_absolute_uri(
+                                f"/tenant/api/offense-details/{offense_id}/"
+                            )
+                            if offense_id
+                            else None,
+                            "sla_type": sla_type.upper(),
+                            "sla_minutes": getattr(sla, f"{sla_type}_minutes"),
+                            "actual_minutes": tta_delta
+                            if sla_type == "tta"
+                            else (ttn_delta if sla_type == "ttn" else ttdn_delta),
+                            "breach_duration_minutes": max(
+                                0,
+                                (tta_delta - sla.tta_minutes)
+                                if sla_type == "tta"
+                                else (ttn_delta - sla.ttn_minutes)
+                                if sla_type == "ttn"
+                                else (ttdn_delta - sla.ttdn_minutes),
+                            ),
+                        }
+                    )
 
             # Step 8: Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
-            paginated_incidents = paginator.paginate_queryset(breached_incidents, request)
+            paginated_incidents = paginator.paginate_queryset(
+                breached_incidents, request
+            )
 
             # Step 9: Return response
-            return paginator.get_paginated_response({
-                "sla_type": sla_type.upper(),
-                "total_breached_incidents": len(breached_incidents),
-                "breached_incidents": paginated_incidents
-            })
+            return paginator.get_paginated_response(
+                {
+                    "sla_type": sla_type.upper(),
+                    "total_breached_incidents": len(breached_incidents),
+                    "breached_incidents": paginated_incidents,
+                }
+            )
 
         except Exception as e:
             logger.error(f"Error in SLABreachedIncidentsView: {str(e)}")
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-            
-            
+
+
 class SLAOverviewCardsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
