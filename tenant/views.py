@@ -4723,7 +4723,7 @@ class SLABreachedIncidentsView(APIView):
                 )
             soar_ids = [t.id for t in soar_tenants]
 
-            # Step 3: Get SLA metrics configuration
+            # Step 3: Get SLA metrics configurations
             is_default = tenant.company.is_default_sla
             if is_default:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
