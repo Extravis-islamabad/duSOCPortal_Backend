@@ -194,13 +194,27 @@ class CortexSOAR:
         #     },
         # }
         try:
-            response = requests.post(
-                endpoint,
-                headers=self.headers,
-                json=body,
-                verify=SSLConstants.VERIFY,
-                timeout=SSLConstants.TIMEOUT,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.post(
+                    endpoint,
+                    headers=self.headers,
+                    json=body,
+                    verify=SSLConstants.VERIFY,
+                    proxies=proxies,
+                    timeout=SSLConstants.TIMEOUT,
+                )
+            else:
+                response = requests.post(
+                    endpoint,
+                    headers=self.headers,
+                    json=body,
+                    verify=SSLConstants.VERIFY,
+                    timeout=SSLConstants.TIMEOUT,
+                )
         except Exception as e:
             logger.error(
                 f"CortexSOAR._get_incidents() failed with exception : {str(e)}"
@@ -304,11 +318,14 @@ class CortexSOAR:
                 low_level_categories_events=custom.get("lowlevelcategoriesevents"),
                 qradar_category=custom.get("qradarcategory"),
                 qradar_sub_category=custom.get("qradarsubcategory"),
-                source_ips=custom.get("sourceips"),
+                source_ips=custom.get("sourceips") or custom.get("sourceipoffense"),
                 tta_calculation=custom.get("ttacalculation"),
                 integration=integration_id,
                 cortex_soar_tenant=cortex_tenant,
                 itsm_sync_status=itsmsyncstatus,
+                mitre_tactic=custom.get("mitretactics"),
+                mitre_technique=custom.get("mitretechnique"),
+                configuration_item=custom.get("configurationitem"),
             )
             records.append(record)
         return records
@@ -359,6 +376,9 @@ class CortexSOAR:
                         "tta_calculation",
                         "integration",
                         "cortex_soar_tenant",
+                        "mitre_tactic",
+                        "mitre_technique",
+                        "configuration_item",
                     ],
                     unique_fields=["account", "db_id"],
                 )
@@ -494,11 +514,9 @@ class CortexSOAR:
                         "content",
                         "created",
                         "user",
-                        "incident_id",
-                        "integration_id",
                         "updated_at",
                     ],
-                    unique_fields=["db_id", "account", "user"],
+                    unique_fields=["db_id", "account", "user", "incident_id"],
                 )
             logger.success(
                 f"CortexSOAR._insert_notes() took: {time.time() - start:.2f} seconds"
