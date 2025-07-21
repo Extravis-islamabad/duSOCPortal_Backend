@@ -42,7 +42,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_notes_for_incident
+from tenant.cortex_soar_tasks import sync_notes_for_incident, sync_requests_for_soar
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -239,7 +239,7 @@ class TestView(APIView):
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
-
+        sync_requests_for_soar()
         # This will delete the tenants and cascade delete related incidents
         # sync_notes()
         # sync_ibm.delay()
@@ -1649,7 +1649,7 @@ class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
-    def get(self, request, incident_id):
+    def get(self, request, incident_db_id):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
@@ -1679,7 +1679,7 @@ class IncidentDetailView(APIView):
             # Fetch incident using numeric incident_id
             incident = (
                 DUCortexSOARIncidentFinalModel.objects.filter(
-                    db_id=incident_id, cortex_soar_tenant__in=soar_ids
+                    db_id=incident_db_id, cortex_soar_tenant__in=soar_ids
                 )
                 .values(
                     "id",
@@ -1913,7 +1913,7 @@ class IncidentDetailView(APIView):
             # Format response
             response = {
                 "incident": {
-                    "id": incident_id,
+                    "id": incident["db_id"],
                     "db_id": incident["db_id"],
                     "account": incident["account"],
                     "name": incident["name"],

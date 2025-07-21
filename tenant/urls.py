@@ -99,7 +99,7 @@ urlpatterns = [
     path("api/dashboard/", DashboardView.as_view(), name="dashboard"),
     path("api/incidents/", IncidentsView.as_view(), name="incidents"),
     path(
-        "api/incidents/<int:incident_id>/",
+        "api/incidents/<int:incident_db_id>/",
         IncidentDetailView.as_view(),
         name="incident-detail",
     ),
