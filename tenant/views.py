@@ -1660,6 +1660,7 @@ class IncidentsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4834,6 +4835,7 @@ class SLASeverityMetricsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class SLABreachedIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
