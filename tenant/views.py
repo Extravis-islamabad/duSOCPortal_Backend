@@ -3709,7 +3709,6 @@ class RecentIncidentsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class AllIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -3730,10 +3729,10 @@ class AllIncidentsView(APIView):
             {
                 "data": [...],
                 "summary": {
-                    "P1": 0,
-                    "P2": 0,
-                    "P3": 0,
-                    "P4": 0
+                    "P1 Critical": 0,
+                    "P2 High": 0,
+                    "P3 Medium": 0,
+                    "P4 Low": 0
                 }
             }
         """
@@ -3814,18 +3813,27 @@ class AllIncidentsView(APIView):
                 count=Count("incident_priority")
             )
             
-            # Initialize summary with all priority levels set to 0
-            summary = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
+            # Initialize summary with priority labels set to 0
+            summary = {
+                "P1 Critical": 0, 
+                "P2 High": 0, 
+                "P3 Medium": 0, 
+                "P4 Low": 0
+            }
             
             # Update counts for priorities present in the data
             for item in priority_counts:
                 priority_value = item["incident_priority"]
                 if priority_value:
-                    # Extract priority level (P1, P2, P3, P4) from strings like "P1 Critical", "P4 Low"
-                    for priority in ["P1", "P2", "P3", "P4"]:
-                        if priority in priority_value:
-                            summary[priority] = item["count"]
-                            break
+                    # Map priority strings to summary labels
+                    if "P1" in priority_value:
+                        summary["P1 Critical"] = item["count"]
+                    elif "P2" in priority_value:
+                        summary["P2 High"] = item["count"]
+                    elif "P3" in priority_value:
+                        summary["P3 Medium"] = item["count"]
+                    elif "P4" in priority_value:
+                        summary["P4 Low"] = item["count"]
 
             # Step 7: Limit to top 10 incidents
             incidents = incidents_qs.order_by("-created")[:10]
@@ -3839,7 +3847,6 @@ class AllIncidentsView(APIView):
         except Exception as e:
             logger.error("Error in AllIncidentsView: %s", str(e))
             return Response({"error": str(e)}, status=500)
-        
         
 class IncidentSummaryView(APIView):
     authentication_classes = [JWTAuthentication]
