@@ -4986,6 +4986,37 @@ class SLABreachedIncidentsView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Add SLA level filter parameter
+            sla_level_filter = request.query_params.get("sla_level")
+            valid_sla_levels = []
+            if sla_level_filter:
+                try:
+                    sla_level_value = int(sla_level_filter)
+                    # Validate against SlaLevelChoices
+                    valid_sla_level = None
+                    for level in SlaLevelChoices:
+                        if level.value == sla_level_value:
+                            valid_sla_level = level
+                            break
+                    
+                    if not valid_sla_level:
+                        valid_values = [f"{level.value} ({level.label})" for level in SlaLevelChoices]
+                        return Response(
+                            {
+                                "error": f"Invalid sla_level. Must be one of: {', '.join(valid_values)}"
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    valid_sla_levels = [valid_sla_level]
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid sla_level format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            else:
+                # If no specific level is requested, include all levels
+                valid_sla_levels = list(SlaLevelChoices)
+
             id_filter = request.query_params.get("id")
             db_id_filter = request.query_params.get("db_id")
             account_filter = request.query_params.get("account")
@@ -5196,12 +5227,7 @@ class SLABreachedIncidentsView(APIView):
             for inc in incidents:
                 # Find matching SLA level
                 level = None
-                for slevel in [
-                    SlaLevelChoices.P1,
-                    SlaLevelChoices.P2,
-                    SlaLevelChoices.P3,
-                    SlaLevelChoices.P4,
-                ]:
+                for slevel in valid_sla_levels:  # Only check the requested SLA levels
                     if inc.incident_priority == slevel.label:
                         level = slevel
                         break
@@ -5239,6 +5265,17 @@ class SLABreachedIncidentsView(APIView):
                         else inc.name
                     )
 
+                    # Calculate the appropriate delta based on sla_type
+                    if sla_type == "tta":
+                        actual_minutes = (inc.incident_tta - occured).total_seconds() / 60
+                        breach_duration = max(0, actual_minutes - sla.tta_minutes)
+                    elif sla_type == "ttn":
+                        actual_minutes = (inc.incident_ttn - occured).total_seconds() / 60
+                        breach_duration = max(0, actual_minutes - sla.ttn_minutes)
+                    else:  # ttdn
+                        actual_minutes = (inc.incident_ttdn - occured).total_seconds() / 60
+                        breach_duration = max(0, actual_minutes - sla.ttdn_minutes)
+
                     breached_incidents.append(
                         {
                             "id": str(inc.id),
@@ -5265,17 +5302,8 @@ class SLABreachedIncidentsView(APIView):
                             else None,
                             "sla_type": sla_type.upper(),
                             "sla_minutes": getattr(sla, f"{sla_type}_minutes"),
-                            "actual_minutes": tta_delta
-                            if sla_type == "tta"
-                            else (ttn_delta if sla_type == "ttn" else ttdn_delta),
-                            "breach_duration_minutes": max(
-                                0,
-                                (tta_delta - sla.tta_minutes)
-                                if sla_type == "tta"
-                                else (ttn_delta - sla.ttn_minutes)
-                                if sla_type == "ttn"
-                                else (ttdn_delta - sla.ttdn_minutes),
-                            ),
+                            "actual_minutes": actual_minutes,
+                            "breach_duration_minutes": breach_duration,
                             "mitre_tactic": inc.mitre_tactic,
                             "mitre_technique": inc.mitre_technique,
                             "configuration_item": inc.configuration_item,
@@ -5303,7 +5331,6 @@ class SLABreachedIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class SLAOverviewCardsView(APIView):
     authentication_classes = [JWTAuthentication]
