@@ -903,14 +903,14 @@ class SeverityDistributionView(APIView):
                 .values("severity")
                 .annotate(count=Count("id"))
             )
-            
+
             # Convert to dictionary and handle all severity values
             count_dict = {}
-            
+
             for item in severity_counts:
                 severity_val = item["severity"]
                 count = item["count"]
-                
+
                 if severity_val in SEVERITY_LEVELS:
                     # Direct mapping for P1-P4 (severity 1-4)
                     count_dict[severity_val] = count_dict.get(severity_val, 0) + count
@@ -940,7 +940,8 @@ class SeverityDistributionView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-            
+
+
 class TypeDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1229,7 +1230,7 @@ class DashboardView(APIView):
                 & Q(itsm_sync_status__isnull=False)
                 & Q(itsm_sync_status__iexact="Ready")
                 & Q(incident_priority__isnull=False)
-                & ~Q(incident_priority__exact="")   
+                & ~Q(incident_priority__exact="")
             )
 
             # Base filters for all incidents (Ready and Done)
@@ -1450,7 +1451,7 @@ class IncidentsView(APIView):
             & Q(itsm_sync_status__isnull=False)
             & Q(itsm_sync_status__iexact="Ready")
             & Q(incident_priority__isnull=False)
-            & ~Q(incident_priority__exact="")   
+            & ~Q(incident_priority__exact="")
         )
 
         # Step 6: Apply non-date filters
@@ -1699,6 +1700,7 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -2571,6 +2573,8 @@ class OffenseDetailsWithFlowsAndAssetsDBIDAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
 class OffenseCategoriesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2619,8 +2623,10 @@ class OffenseCategoriesAPIView(APIView):
                 )
 
             # Initialize filters
-            filters = Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
-            
+            filters = Q(assests__id__in=assets) & Q(
+                qradar_tenant_domain__id__in=tenant_ids
+            )
+
             # Handle date filtering
             filter_type = request.query_params.get("filter_type")
             start_date = request.query_params.get("start_date")
@@ -2629,7 +2635,9 @@ class OffenseCategoriesAPIView(APIView):
             now = timezone.now().astimezone(db_timezone)
 
             def datetime_to_unix(dt):
-                return int(time.mktime(dt.timetuple())) * 1000  # Convert to milliseconds
+                return (
+                    int(time.mktime(dt.timetuple())) * 1000
+                )  # Convert to milliseconds
 
             if start_date and end_date:
                 try:
@@ -2639,9 +2647,10 @@ class OffenseCategoriesAPIView(APIView):
                     end_date = timezone.make_aware(
                         datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
                     ).replace(hour=23, minute=59, second=59, microsecond=999999)
-                    
-                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & \
-                              Q(start_time__lte=datetime_to_unix(end_date))
+
+                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & Q(
+                        start_time__lte=datetime_to_unix(end_date)
+                    )
                 except ValueError:
                     return Response(
                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
@@ -2719,11 +2728,14 @@ class OffenseCategoriesAPIView(APIView):
                         end_date = last_day_last_month.replace(
                             hour=23, minute=59, second=59, microsecond=999999
                         )
-                    
-                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & \
-                              Q(start_time__lte=datetime_to_unix(end_date))
+
+                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & Q(
+                        start_time__lte=datetime_to_unix(end_date)
+                    )
                 except Exception as e:
-                    return Response({"error": f"Invalid filter_type: {str(e)}"}, status=400)
+                    return Response(
+                        {"error": f"Invalid filter_type: {str(e)}"}, status=400
+                    )
 
             # Step 3: Retrieve offenses with categories field
             offenses = IBMQradarOffense.objects.filter(filters).values("categories")
@@ -2759,6 +2771,8 @@ class OffenseCategoriesAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
 class TopLogSourcesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -3841,6 +3855,7 @@ class RecentIncidentsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class AllIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -3921,19 +3936,21 @@ class AllIncidentsView(APIView):
                     # Map to SlaLevelChoices: 1=P4, 2=P3, 3=P2, 4=P1
                     if priority_int not in [1, 2, 3, 4]:
                         raise ValueError
-                    
+
                     # Map integer to priority string for filtering
                     priority_mapping = {
                         4: "P1",  # P1 Critical
-                        3: "P2",  # P2 High  
+                        3: "P2",  # P2 High
                         2: "P3",  # P3 Medium
-                        1: "P4"   # P4 Low
+                        1: "P4",  # P4 Low
                     }
                     priority_string = priority_mapping[priority_int]
                     filters &= Q(incident_priority__icontains=priority_string)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid priority. Use 1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical."},
+                        {
+                            "error": "Invalid priority. Use 1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical."
+                        },
                         status=400,
                     )
 
@@ -3944,15 +3961,10 @@ class AllIncidentsView(APIView):
             priority_counts = incidents_qs.values("incident_priority").annotate(
                 count=Count("incident_priority")
             )
-            
+
             # Initialize summary with priority labels set to 0
-            summary = {
-                "P1 Critical": 0, 
-                "P2 High": 0, 
-                "P3 Medium": 0, 
-                "P4 Low": 0
-            }
-            
+            summary = {"P1 Critical": 0, "P2 High": 0, "P3 Medium": 0, "P4 Low": 0}
+
             # Update counts for priorities present in the data
             for item in priority_counts:
                 priority_value = item["incident_priority"]
@@ -3979,7 +3991,7 @@ class AllIncidentsView(APIView):
         except Exception as e:
             logger.error("Error in AllIncidentsView: %s", str(e))
             return Response({"error": str(e)}, status=500)
-        
+
 
 class IncidentSummaryView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -4088,7 +4100,7 @@ class IncidentSummaryView(APIView):
                         "P1": "P1",  # P1 Critical
                         "P2": "P2",  # P2 High
                         "P3": "P3",  # P3 Medium
-                        "P4": "P4"   # P4 Low
+                        "P4": "P4",  # P4 Low
                     }
                     priority_value = priority_mapping.get(priority.upper())
                     if not priority_value:
@@ -4123,15 +4135,15 @@ class IncidentSummaryView(APIView):
             priority_counts = incidents_qs.values("incident_priority").annotate(
                 count=Count("incident_priority")
             )
-            
+
             # Initialize priority summary with priority labels set to 0
             priority_summary = {
-                "P1 Critical": 0, 
-                "P2 High": 0, 
-                "P3 Medium": 0, 
-                "P4 Low": 0
+                "P1 Critical": 0,
+                "P2 High": 0,
+                "P3 Medium": 0,
+                "P4 Low": 0,
             }
-            
+
             # Update counts for priorities present in the data
             for item in priority_counts:
                 priority_value = item["incident_priority"]
@@ -4147,18 +4159,18 @@ class IncidentSummaryView(APIView):
                         priority_summary["P4 Low"] = item["count"]
 
             # Step 4: Return both summaries
-            return Response({
-                "summary": severity_summary,
-                "priority_summary": priority_summary
-            }, status=200)
+            return Response(
+                {"summary": severity_summary, "priority_summary": priority_summary},
+                status=200,
+            )
 
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
         except Exception as e:
             logger.error("Error in IncidentSummaryView: %s", str(e))
             return Response({"error": str(e)}, status=500)
-        
-        
+
+
 class SLAIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4998,9 +5010,12 @@ class SLABreachedIncidentsView(APIView):
                         if level.value == sla_level_value:
                             valid_sla_level = level
                             break
-                    
+
                     if not valid_sla_level:
-                        valid_values = [f"{level.value} ({level.label})" for level in SlaLevelChoices]
+                        valid_values = [
+                            f"{level.value} ({level.label})"
+                            for level in SlaLevelChoices
+                        ]
                         return Response(
                             {
                                 "error": f"Invalid sla_level. Must be one of: {', '.join(valid_values)}"
@@ -5267,13 +5282,19 @@ class SLABreachedIncidentsView(APIView):
 
                     # Calculate the appropriate delta based on sla_type
                     if sla_type == "tta":
-                        actual_minutes = (inc.incident_tta - occured).total_seconds() / 60
+                        actual_minutes = (
+                            inc.incident_tta - occured
+                        ).total_seconds() / 60
                         breach_duration = max(0, actual_minutes - sla.tta_minutes)
                     elif sla_type == "ttn":
-                        actual_minutes = (inc.incident_ttn - occured).total_seconds() / 60
+                        actual_minutes = (
+                            inc.incident_ttn - occured
+                        ).total_seconds() / 60
                         breach_duration = max(0, actual_minutes - sla.ttn_minutes)
                     else:  # ttdn
-                        actual_minutes = (inc.incident_ttdn - occured).total_seconds() / 60
+                        actual_minutes = (
+                            inc.incident_ttdn - occured
+                        ).total_seconds() / 60
                         breach_duration = max(0, actual_minutes - sla.ttdn_minutes)
 
                     breached_incidents.append(
@@ -5331,6 +5352,7 @@ class SLABreachedIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class SLAOverviewCardsView(APIView):
     authentication_classes = [JWTAuthentication]
