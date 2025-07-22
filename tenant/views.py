@@ -2571,8 +2571,6 @@ class OffenseDetailsWithFlowsAndAssetsDBIDAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
 class OffenseCategoriesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2593,6 +2591,7 @@ class OffenseCategoriesAPIView(APIView):
                 {"error": "No active SEIM integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
         try:
             # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
             mappings = TenantQradarMapping.objects.filter(
@@ -2619,10 +2618,115 @@ class OffenseCategoriesAPIView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
+            # Initialize filters
+            filters = Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
+            
+            # Handle date filtering
+            filter_type = request.query_params.get("filter_type")
+            start_date = request.query_params.get("start_date")
+            end_date = request.query_params.get("end_date")
+            db_timezone = timezone.get_fixed_timezone(240)
+            now = timezone.now().astimezone(db_timezone)
+
+            def datetime_to_unix(dt):
+                return int(time.mktime(dt.timetuple())) * 1000  # Convert to milliseconds
+
+            if start_date and end_date:
+                try:
+                    start_date = timezone.make_aware(
+                        datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
+                    ).replace(hour=0, minute=0, second=0, microsecond=0)
+                    end_date = timezone.make_aware(
+                        datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
+                    ).replace(hour=23, minute=59, second=59, microsecond=999999)
+                    
+                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & \
+                              Q(start_time__lte=datetime_to_unix(end_date))
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
+                    )
+
+            elif filter_type:
+                try:
+                    filter_type = FilterType(int(filter_type))
+                    if filter_type == FilterType.TODAY:
+                        start_date = now.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.WEEK:
+                        start_date = now - timedelta(days=now.weekday())
+                        start_date = start_date.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.MONTH:
+                        start_date = now.replace(
+                            day=1, hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.QUARTER:
+                        current_quarter = (now.month - 1) // 3 + 1
+                        quarter_start_month = 3 * current_quarter - 2
+                        start_date = now.replace(
+                            month=quarter_start_month,
+                            day=1,
+                            hour=0,
+                            minute=0,
+                            second=0,
+                            microsecond=0,
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.YEAR:
+                        start_date = now.replace(
+                            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.LAST_6_MONTHS:
+                        start_date = now - timedelta(days=180)
+                        start_date = start_date.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.LAST_3_WEEKS:
+                        start_date = now - timedelta(weeks=3)
+                        start_date = start_date.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.LAST_MONTH:
+                        # Get first day of last month
+                        first_day_this_month = now.replace(day=1)
+                        last_day_last_month = first_day_this_month - timedelta(days=1)
+                        start_date = last_day_last_month.replace(
+                            day=1, hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = last_day_last_month.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    
+                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & \
+                              Q(start_time__lte=datetime_to_unix(end_date))
+                except Exception as e:
+                    return Response({"error": f"Invalid filter_type: {str(e)}"}, status=400)
+
             # Step 3: Retrieve offenses with categories field
-            offenses = IBMQradarOffense.objects.filter(
-                Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
-            ).values("categories")
+            offenses = IBMQradarOffense.objects.filter(filters).values("categories")
 
             # Step 4: Aggregate category counts
             category_counts = Counter()
@@ -2650,18 +2754,11 @@ class OffenseCategoriesAPIView(APIView):
 
             return Response({"categories": response_data}, status=status.HTTP_200_OK)
 
-        except Exception:
-            return Response(
-                {"error": "Invalid tenant or related data not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
         except Exception as e:
             return Response(
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
 class TopLogSourcesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -3903,6 +4000,7 @@ class IncidentSummaryView(APIView):
             severity (int): Severity level between 0 and 6
             priority (str): Priority level (P1, P2, P3, P4)
 
+
         Returns:
             {
                 "summary": {
@@ -4888,6 +4986,37 @@ class SLABreachedIncidentsView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            # Add SLA level filter parameter
+            sla_level_filter = request.query_params.get("sla_level")
+            valid_sla_levels = []
+            if sla_level_filter:
+                try:
+                    sla_level_value = int(sla_level_filter)
+                    # Validate against SlaLevelChoices
+                    valid_sla_level = None
+                    for level in SlaLevelChoices:
+                        if level.value == sla_level_value:
+                            valid_sla_level = level
+                            break
+                    
+                    if not valid_sla_level:
+                        valid_values = [f"{level.value} ({level.label})" for level in SlaLevelChoices]
+                        return Response(
+                            {
+                                "error": f"Invalid sla_level. Must be one of: {', '.join(valid_values)}"
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    valid_sla_levels = [valid_sla_level]
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid sla_level format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            else:
+                # If no specific level is requested, include all levels
+                valid_sla_levels = list(SlaLevelChoices)
+
             id_filter = request.query_params.get("id")
             db_id_filter = request.query_params.get("db_id")
             account_filter = request.query_params.get("account")
@@ -5098,12 +5227,7 @@ class SLABreachedIncidentsView(APIView):
             for inc in incidents:
                 # Find matching SLA level
                 level = None
-                for slevel in [
-                    SlaLevelChoices.P1,
-                    SlaLevelChoices.P2,
-                    SlaLevelChoices.P3,
-                    SlaLevelChoices.P4,
-                ]:
+                for slevel in valid_sla_levels:  # Only check the requested SLA levels
                     if inc.incident_priority == slevel.label:
                         level = slevel
                         break
@@ -5141,6 +5265,17 @@ class SLABreachedIncidentsView(APIView):
                         else inc.name
                     )
 
+                    # Calculate the appropriate delta based on sla_type
+                    if sla_type == "tta":
+                        actual_minutes = (inc.incident_tta - occured).total_seconds() / 60
+                        breach_duration = max(0, actual_minutes - sla.tta_minutes)
+                    elif sla_type == "ttn":
+                        actual_minutes = (inc.incident_ttn - occured).total_seconds() / 60
+                        breach_duration = max(0, actual_minutes - sla.ttn_minutes)
+                    else:  # ttdn
+                        actual_minutes = (inc.incident_ttdn - occured).total_seconds() / 60
+                        breach_duration = max(0, actual_minutes - sla.ttdn_minutes)
+
                     breached_incidents.append(
                         {
                             "id": str(inc.id),
@@ -5167,17 +5302,8 @@ class SLABreachedIncidentsView(APIView):
                             else None,
                             "sla_type": sla_type.upper(),
                             "sla_minutes": getattr(sla, f"{sla_type}_minutes"),
-                            "actual_minutes": tta_delta
-                            if sla_type == "tta"
-                            else (ttn_delta if sla_type == "ttn" else ttdn_delta),
-                            "breach_duration_minutes": max(
-                                0,
-                                (tta_delta - sla.tta_minutes)
-                                if sla_type == "tta"
-                                else (ttn_delta - sla.ttn_minutes)
-                                if sla_type == "ttn"
-                                else (ttdn_delta - sla.ttdn_minutes),
-                            ),
+                            "actual_minutes": actual_minutes,
+                            "breach_duration_minutes": breach_duration,
                             "mitre_tactic": inc.mitre_tactic,
                             "mitre_technique": inc.mitre_technique,
                             "configuration_item": inc.configuration_item,
@@ -5205,7 +5331,6 @@ class SLABreachedIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class SLAOverviewCardsView(APIView):
     authentication_classes = [JWTAuthentication]
