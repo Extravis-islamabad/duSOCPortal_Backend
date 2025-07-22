@@ -854,7 +854,7 @@ class SeverityDistributionView(APIView):
     def get(self, request):
         """
         Retrieve severity distribution (P1-P4) for the authenticated tenant.
-        No filtering parameters accepted.
+        Uses the exact same logic as DashboardView total_incident_filters to ensure counts match.
 
         Returns:
             {
@@ -867,49 +867,80 @@ class SeverityDistributionView(APIView):
             }
         """
         try:
-            # Step 1: Validate tenant and get SOAR tenants
             tenant = Tenant.objects.get(tenant=request.user)
-            soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
 
-            if not soar_ids:
-                return Response({"error": "No SOAR tenants found."}, status=404)
+        soar_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.CORTEX_SOAR,
+            status=True,
+        )
+        if not soar_integrations.exists():
+            return Response(
+                {"error": "No active SOAR integration configured for tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            # Step 2: Define our severity levels (P1-P4 only)
+        soar_tenants = tenant.company.soar_tenants.all()
+        if not soar_tenants:
+            return Response({"error": "No SOAR tenants found."}, status=404)
+
+        soar_ids = [t.id for t in soar_tenants]
+
+        try:
+            # Use the EXACT same filter logic as DashboardView total_incident_filters
+            total_incident_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                Q(itsm_sync_status__iexact="Ready") | Q(itsm_sync_status__iexact="Done")
+            )
+
+            # Define our severity levels (P1-P4)
             SEVERITY_LEVELS = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
 
-            # Step 3: Get counts for each severity level
+            # Get counts for each severity level using the exact same filters as total incidents
             severity_counts = (
-                DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids,
-                    severity__in=SEVERITY_LEVELS.keys(),  # Only P1-P4
-                )
+                DUCortexSOARIncidentFinalModel.objects.filter(total_incident_filters)
                 .values("severity")
                 .annotate(count=Count("id"))
             )
+            
+            # Convert to dictionary and handle all severity values
+            count_dict = {}
+            
+            for item in severity_counts:
+                severity_val = item["severity"]
+                count = item["count"]
+                
+                if severity_val in SEVERITY_LEVELS:
+                    # Direct mapping for P1-P4 (severity 1-4)
+                    count_dict[severity_val] = count_dict.get(severity_val, 0) + count
+                elif severity_val is None or severity_val == 0:
+                    # Map NULL/0 severity to P4 (lowest priority)
+                    count_dict[4] = count_dict.get(4, 0) + count
+                elif severity_val > 4:
+                    # Map severity > 4 to P4 (lowest priority)
+                    count_dict[4] = count_dict.get(4, 0) + count
+                else:
+                    # For any other unexpected values, map to P4
+                    count_dict[4] = count_dict.get(4, 0) + count
 
-            # Convert to dictionary for easier lookup
-            count_dict = {item["severity"]: item["count"] for item in severity_counts}
-
-            # Step 4: Build result ensuring all severity levels are includedd
+            # Build result ensuring all severity levels are included
             result = [
                 {
                     "name": severity_name,
-                    "value": count_dict.get(
-                        severity_value, 0
-                    ),  # Default to 0 if not found
+                    "value": count_dict.get(severity_value, 0),
                 }
                 for severity_value, severity_name in SEVERITY_LEVELS.items()
             ]
 
             return Response({"severityDistribution": result}, status=200)
 
-        except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found."}, status=404)
         except Exception as e:
             logger.error("Error in SeverityDistributionView: %s", str(e))
-            return Response({"error": str(e)}, status=500)
-
-
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
 class TypeDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
