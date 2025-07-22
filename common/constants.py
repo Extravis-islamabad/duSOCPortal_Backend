@@ -313,7 +313,7 @@ class IBMQradarConstants:
     """
 
     AQL_QUERY_FOR_GEOLOCATION = "SELECT sourceip, GEO::LOOKUP(sourceip, 'geo_json') AS geo FROM events group by sourceip"
-    AQL_EPS_UPDATED_QUERY = """SELECT DOMAINNAME(domainid) AS 'client',"Hostname" AS 'Hostname',MAX("Value") AS 'Peak EPS', AVG("Value") AS 'Average EPS',DATEFORMAT(starttime,'YYYY-MM-dd hh:mm') AS 'Start Time',NOW() AS 'Current Timestamp (ms)' from events where ( "Metric ID"='EventRate' AND "deviceType"='368' ) GROUP BY "Hostname" """
+    AQL_EPS_UPDATED_QUERY = """SELECT DOMAINNAME(domainid) AS 'client',"Hostname" AS 'Hostname',MAX("Value") AS 'Peak EPS', AVG("Value") AS 'Average EPS',DATEFORMAT(endtime,'YYYY-MM-dd hh:mm:ss') AS 'Time',NOW() AS 'Current Timestamp (ms)' from events where ( "Metric ID"='EventRate' AND "deviceType"='368' ) GROUP BY "Hostname" """
 
 
 class ITSMConstants:
