@@ -3982,7 +3982,6 @@ class AllIncidentsView(APIView):
             logger.error("Error in AllIncidentsView: %s", str(e))
             return Response({"error": str(e)}, status=500)
         
-
 class IncidentSummaryView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -3995,13 +3994,12 @@ class IncidentSummaryView(APIView):
         - True positive logic (ready incidents with proper fields)
         - optional filter_type (1–4)
         - optional severity (0–6)
-        - optional priority (P1-P4)
+        - optional priority (1-4)
 
         Query Parameters:
             filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year
             severity (int): Severity level between 0 and 6
-            priority (str): Priority level (P1, P2, P3, P4)
-
+            priority (int): Priority level (1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical)
 
         Returns:
             {
@@ -4081,24 +4079,23 @@ class IncidentSummaryView(APIView):
                         status=400,
                     )
 
-            # Handle priority (using same priority mapping as AllIncidentsView)
+            # Handle priority (using SlaLevelChoices)
             priority = request.query_params.get("priority")
             if priority:
                 try:
-                    # Map priority strings to filter values
-                    priority_mapping = {
-                        "P1": "P1",  # P1 Critical
-                        "P2": "P2",  # P2 High
-                        "P3": "P3",  # P3 Medium
-                        "P4": "P4"   # P4 Low
-                    }
-                    priority_value = priority_mapping.get(priority.upper())
-                    if not priority_value:
+                    priority_int = int(priority)
+                    if priority_int not in [choice.value for choice in SlaLevelChoices]:
                         raise ValueError
-                    filters &= Q(incident_priority__icontains=priority_value)
-                except (KeyError, ValueError):
+                    
+                    # Get the priority string from the choices (e.g., "P1 Critical")
+                    priority_str = SlaLevelChoices(priority_int).label
+                    # Extract the prefix (e.g., "P1" from "P1 Critical")
+                    priority_prefix = priority_str.split()[0]
+                    
+                    filters &= Q(incident_priority__icontains=priority_prefix)
+                except (ValueError, KeyError):
                     return Response(
-                        {"error": "Invalid priority. Must be P1, P2, P3, or P4."},
+                        {"error": "Invalid priority. Must be 1 (P4 Low), 2 (P3 Medium), 3 (P2 High), or 4 (P1 Critical)."},
                         status=400,
                     )
 
@@ -4121,17 +4118,14 @@ class IncidentSummaryView(APIView):
                 )
                 severity_summary[label] = item["count"]
 
-            # Priority summary (same as AllIncidentsView)
+            # Priority summary (using SlaLevelChoices)
             priority_counts = incidents_qs.values("incident_priority").annotate(
                 count=Count("incident_priority")
             )
             
             # Initialize priority summary with priority labels set to 0
             priority_summary = {
-                "P1 Critical": 0, 
-                "P2 High": 0, 
-                "P3 Medium": 0, 
-                "P4 Low": 0
+                choice.label: 0 for choice in SlaLevelChoices
             }
             
             # Update counts for priorities present in the data
@@ -4139,14 +4133,9 @@ class IncidentSummaryView(APIView):
                 priority_value = item["incident_priority"]
                 if priority_value:
                     # Map priority strings to summary labels
-                    if "P1" in priority_value:
-                        priority_summary["P1 Critical"] = item["count"]
-                    elif "P2" in priority_value:
-                        priority_summary["P2 High"] = item["count"]
-                    elif "P3" in priority_value:
-                        priority_summary["P3 Medium"] = item["count"]
-                    elif "P4" in priority_value:
-                        priority_summary["P4 Low"] = item["count"]
+                    for choice in SlaLevelChoices:
+                        if choice.name in priority_value:  # e.g., "P1" in "P1 Critical"
+                            priority_summary[choice.label] += item["count"]
 
             # Step 4: Return both summaries
             return Response({
@@ -4158,8 +4147,7 @@ class IncidentSummaryView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
         except Exception as e:
             logger.error("Error in IncidentSummaryView: %s", str(e))
-            return Response({"error": str(e)}, status=500)
-        
+            return Response({"error": str(e)}, status=500)   
         
 class SLAIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
