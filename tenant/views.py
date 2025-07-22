@@ -2571,8 +2571,6 @@ class OffenseDetailsWithFlowsAndAssetsDBIDAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
 class OffenseCategoriesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2593,6 +2591,7 @@ class OffenseCategoriesAPIView(APIView):
                 {"error": "No active SEIM integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
         try:
             # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
             mappings = TenantQradarMapping.objects.filter(
@@ -2619,10 +2618,115 @@ class OffenseCategoriesAPIView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
+            # Initialize filters
+            filters = Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
+            
+            # Handle date filtering
+            filter_type = request.query_params.get("filter_type")
+            start_date = request.query_params.get("start_date")
+            end_date = request.query_params.get("end_date")
+            db_timezone = timezone.get_fixed_timezone(240)
+            now = timezone.now().astimezone(db_timezone)
+
+            def datetime_to_unix(dt):
+                return int(time.mktime(dt.timetuple())) * 1000  # Convert to milliseconds
+
+            if start_date and end_date:
+                try:
+                    start_date = timezone.make_aware(
+                        datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
+                    ).replace(hour=0, minute=0, second=0, microsecond=0)
+                    end_date = timezone.make_aware(
+                        datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
+                    ).replace(hour=23, minute=59, second=59, microsecond=999999)
+                    
+                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & \
+                              Q(start_time__lte=datetime_to_unix(end_date))
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
+                    )
+
+            elif filter_type:
+                try:
+                    filter_type = FilterType(int(filter_type))
+                    if filter_type == FilterType.TODAY:
+                        start_date = now.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.WEEK:
+                        start_date = now - timedelta(days=now.weekday())
+                        start_date = start_date.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.MONTH:
+                        start_date = now.replace(
+                            day=1, hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.QUARTER:
+                        current_quarter = (now.month - 1) // 3 + 1
+                        quarter_start_month = 3 * current_quarter - 2
+                        start_date = now.replace(
+                            month=quarter_start_month,
+                            day=1,
+                            hour=0,
+                            minute=0,
+                            second=0,
+                            microsecond=0,
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.YEAR:
+                        start_date = now.replace(
+                            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.LAST_6_MONTHS:
+                        start_date = now - timedelta(days=180)
+                        start_date = start_date.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.LAST_3_WEEKS:
+                        start_date = now - timedelta(weeks=3)
+                        start_date = start_date.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = now.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    elif filter_type == FilterType.LAST_MONTH:
+                        # Get first day of last month
+                        first_day_this_month = now.replace(day=1)
+                        last_day_last_month = first_day_this_month - timedelta(days=1)
+                        start_date = last_day_last_month.replace(
+                            day=1, hour=0, minute=0, second=0, microsecond=0
+                        )
+                        end_date = last_day_last_month.replace(
+                            hour=23, minute=59, second=59, microsecond=999999
+                        )
+                    
+                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & \
+                              Q(start_time__lte=datetime_to_unix(end_date))
+                except Exception as e:
+                    return Response({"error": f"Invalid filter_type: {str(e)}"}, status=400)
+
             # Step 3: Retrieve offenses with categories field
-            offenses = IBMQradarOffense.objects.filter(
-                Q(assests__id__in=assets) & Q(qradar_tenant_domain__id__in=tenant_ids)
-            ).values("categories")
+            offenses = IBMQradarOffense.objects.filter(filters).values("categories")
 
             # Step 4: Aggregate category counts
             category_counts = Counter()
@@ -2650,18 +2754,11 @@ class OffenseCategoriesAPIView(APIView):
 
             return Response({"categories": response_data}, status=status.HTTP_200_OK)
 
-        except Exception:
-            return Response(
-                {"error": "Invalid tenant or related data not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
         except Exception as e:
             return Response(
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-
 class TopLogSourcesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -3902,6 +3999,7 @@ class IncidentSummaryView(APIView):
             filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year
             severity (int): Severity level between 0 and 6
             priority (str): Priority level (P1, P2, P3, P4)
+
 
         Returns:
             {
