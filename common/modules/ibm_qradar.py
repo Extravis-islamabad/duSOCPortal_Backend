@@ -1086,7 +1086,7 @@ class IBMQradar:
         eps_summary.drop(columns=["Current Timestamp (ms)", "client"], inplace=True)
         eps_summary["integration_id"] = integration
 
-        eps_summary["qradar_start_time"] = eps_summary["Time"].apply(
+        eps_summary["qradar_end_time"] = eps_summary["Time"].apply(
             lambda t: datetime.strptime(t, "%Y-%m-%d %H:%M:%S")
         )
 
@@ -1097,7 +1097,7 @@ class IBMQradar:
                 "Peak EPS": "peak_eps",
                 "Average EPS": "average_eps",
                 "tenant_id": "domain_id",
-                "Time": "qradar_start_time",
+                "Time": "qradar_end_time",
             },
             inplace=True,
         )
