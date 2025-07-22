@@ -269,7 +269,7 @@ class TestView(APIView):
         # sync_event_log_sources.delay()
         return Response({"message": "Hello, world!"})
 
-
+# TENANT ASSETS
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
