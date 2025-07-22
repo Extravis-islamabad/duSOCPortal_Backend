@@ -146,7 +146,7 @@ class IBMQradarEPS(models.Model):
     )
     average_eps = models.FloatField(default=0)
     peak_eps = models.FloatField(default=0)
-    qradar_start_time = models.DateTimeField()
+    qradar_end_time = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
