@@ -331,18 +331,15 @@ class GetTenantAssetsList(APIView):
                 "event_collector", "log_source_type"
             )
 
-            # Calculate TOTAL active/inactive counts (unfiltered)
+            # Calculate TOTAL active/inactive counts (unfiltered) - FIXED LOGIC
             total_active = 0
             total_inactive = 0
             now = timezone.now()
 
             for asset in all_assets:
-                if not asset.enabled:
-                    total_inactive += 1
-                    continue
-
-                actual_status = self._get_asset_status(asset, now)
-                if actual_status == "SUCCESS":
+                # Use consistent status determination logic
+                asset_status = self._get_asset_status(asset, now)
+                if asset_status == "SUCCESS":
                     total_active += 1
                 else:
                     total_inactive += 1
@@ -453,7 +450,7 @@ class GetTenantAssetsList(APIView):
                     )
                 ]
 
-            # Apply status filter if provided
+            # Apply status filter if provided - FIXED LOGIC
             if status_filter := request.query_params.get("status"):
                 status_filter = status_filter.upper()
                 if status_filter not in ["SUCCESS", "ERROR"]:
@@ -464,11 +461,11 @@ class GetTenantAssetsList(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
+                # Apply consistent status filtering logic
                 filtered_assets = [
                     asset
                     for asset in filtered_assets
-                    if asset.enabled
-                    and self._get_asset_status(asset, now) == status_filter
+                    if self._get_asset_status(asset, now) == status_filter
                 ]
 
             # Sort assets by creation date (newest first)
@@ -482,14 +479,12 @@ class GetTenantAssetsList(APIView):
             paginator.page_size = PaginationConstants.PAGE_SIZE
             result_page = paginator.paginate_queryset(filtered_assets, request)
 
-            # Serialize results with only SUCCESS/ERROR status
+            # Serialize results with consistent status logic
             serialized_data = []
             for asset in result_page:
                 asset_data = IBMQradarAssestsSerializer(asset).data
-                if asset.enabled:
-                    asset_data["status"] = self._get_asset_status(asset, now)
-                else:
-                    asset_data["status"] = "ERROR"  # Or you can omit this if you prefer
+                # Apply consistent status determination
+                asset_data["status"] = self._get_asset_status(asset, now)
                 serialized_data.append(asset_data)
 
             # Prepare response
@@ -515,7 +510,15 @@ class GetTenantAssetsList(APIView):
             )
 
     def _get_asset_status(self, asset, now):
-        """Determine asset status based on last event time"""
+        """
+        Determine asset status based on enabled flag and last event time
+        FIXED: Consistent logic for both counting and filtering
+        """
+        # If asset is not enabled, it's always ERROR
+        if not asset.enabled:
+            return "ERROR"
+        
+        # If no last event time, it's ERROR
         if not asset.last_event_time:
             return "ERROR"
 
@@ -537,7 +540,6 @@ class GetTenantAssetsList(APIView):
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
             raise ValueError("Invalid date format")
-
 
 class GetTenantAssetsStats(APIView):
     authentication_classes = [JWTAuthentication]
