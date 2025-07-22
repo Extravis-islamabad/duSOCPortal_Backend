@@ -1228,6 +1228,8 @@ class DashboardView(APIView):
                 & Q(incident_ttdn__isnull=False)
                 & Q(itsm_sync_status__isnull=False)
                 & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")   
             )
 
             # Base filters for all incidents (Ready and Done)
