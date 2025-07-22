@@ -1387,6 +1387,7 @@ class DashboardView(APIView):
         return f"{direction} {abs(round(change, 1))}% from previous {period}"
 
 
+
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1404,6 +1405,7 @@ class IncidentsView(APIView):
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
         )
+        
         if not soar_integrations.exists():
             return Response(
                 {"error": "No active SOAR integration configured for tenant."},
@@ -1436,24 +1438,32 @@ class IncidentsView(APIView):
         filter_type = request.query_params.get("filter", "all")
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
-        occurred_start_str = request.query_params.get("occurred_start")
+        occurred_start_str = request.query_params.get("occurred_start")  # Note: Typo in parameter name (should be 'occurred')
         occurred_end_str = request.query_params.get("occurred_end")
+        false_positives = request.query_params.get("false_positives", "").lower() == "true"
 
         date_format = "%Y-%m-%d"  # Expected format for date inputs
 
         # Step 5: Initialize filters with Q object
         filters = Q(cortex_soar_tenant__in=soar_ids)
-        filters &= (
-            ~Q(owner__isnull=True)
-            & ~Q(owner__exact="")
-            & Q(incident_tta__isnull=False)
-            & Q(incident_ttn__isnull=False)
-            & Q(incident_ttdn__isnull=False)
-            & Q(itsm_sync_status__isnull=False)
-            & Q(itsm_sync_status__iexact="Ready")
-            & Q(incident_priority__isnull=False)
-            & ~Q(incident_priority__exact="")   
-        )
+        
+        # Handle false positives filter
+        if false_positives:
+            # For false positives, we only need to check for Done status
+            filters &= Q(itsm_sync_status__iexact="Done")
+        else:
+            # Original filters for true positives
+            filters &= (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")   
+            )
 
         # Step 6: Apply non-date filters
         if id_filter:
@@ -1688,7 +1698,7 @@ class IncidentsView(APIView):
                     }
                 )
 
-            # Step 12: Paginations
+            # Step 12: Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
             paginated_incidents = paginator.paginate_queryset(incidents, request)
