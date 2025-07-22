@@ -421,13 +421,13 @@ def sync_ibm_qradar_data():
         )
         sync_event_log_sources_types.delay()
         sync_offenses.delay()
-        sync_eps_for_domain.delay(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
+        # sync_eps_for_domain.delay(
+        #     username=result.username,
+        #     password=result.password,
+        #     ip_address=result.ip_address,
+        #     port=result.port,
+        #     integration_id=result.integration.id,
+        # )
 
 
 @shared_task
