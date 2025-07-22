@@ -279,6 +279,19 @@ class GetTenantAssetsList(APIView):
         Retrieve IBM QRadar assets with status counts and pagination
         Returns overall active/inactive counts regardless of filters
 
+        Query Parameters:
+            status (optional): Filter by status ("SUCCESS" or "ERROR"). 
+                             ERROR includes both disabled assets and enabled assets that are failing.
+            name (optional): Filter by asset name (contains match, case insensitive)
+            id (optional): Filter by asset ID
+            db_id (optional): Filter by asset DB ID
+            log_source_type (optional): Filter by log source type name (contains match, case insensitive)
+            enabled (optional): Filter by enabled status (true/false)
+            last_event_date (optional): Filter by last event date (YYYY-MM-DD format)
+            average_eps (optional): Filter by average events per second
+            start_date (optional): Filter assets created after this date (YYYY-MM-DD)
+            end_date (optional): Filter assets created before this date (YYYY-MM-DD)
+
         Returns:
             {
                 "count": filtered_count,
@@ -458,17 +471,15 @@ class GetTenantAssetsList(APIView):
                 status_filter = status_filter.upper()
                 if status_filter not in ["SUCCESS", "ERROR"]:
                     return Response(
-                        {
-                            "error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."
-                        },
+                        {"error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
                 filtered_assets = [
                     asset
                     for asset in filtered_assets
-                    if asset.enabled
-                    and self._get_asset_status(asset, now) == status_filter
+                    if (status_filter == "ERROR" and (not asset.enabled or self._get_asset_status(asset, now) == "ERROR"))
+                    or (status_filter == "SUCCESS" and asset.enabled and self._get_asset_status(asset, now) == "SUCCESS")
                 ]
 
             # Sort assets by creation date (newest first)
@@ -489,7 +500,7 @@ class GetTenantAssetsList(APIView):
                 if asset.enabled:
                     asset_data["status"] = self._get_asset_status(asset, now)
                 else:
-                    asset_data["status"] = "ERROR"  # Or you can omit this if you prefer
+                    asset_data["status"] = "ERROR"
                 serialized_data.append(asset_data)
 
             # Prepare response
@@ -514,30 +525,26 @@ class GetTenantAssetsList(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    def _get_asset_status(self, asset, now):
+    def _get_asset_status(self, asset, current_time):
         """Determine asset status based on last event time"""
-        if not asset.last_event_time:
+        if not asset.last_event_time or asset.last_event_time == "0":
             return "ERROR"
-
+        
         try:
-            last_event_timestamp = int(asset.last_event_time) / 1000
-            last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
-            last_event_time = timezone.make_aware(last_event_time)
-            time_diff = (now - last_event_time).total_seconds() / 60
-
-            return "ERROR" if time_diff > 15 else "SUCCESS"
+            last_event_time = datetime.fromtimestamp(int(asset.last_event_time)/1000, timezone.utc)
+            time_diff = current_time - last_event_time
+            return "SUCCESS" if time_diff.total_seconds() <= 86400 else "ERROR"  # 24 hours threshold
         except (ValueError, TypeError):
             return "ERROR"
 
     def _parse_date(self, date_str):
-        """Safe date parsing from string"""
+        """Parse date string into date object"""
         if not date_str:
             return None
         try:
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            raise ValueError("Invalid date format")
-
+            raise ValueError("Invalid date format. Use YYYY-MM-DD.")
 
 class GetTenantAssetsStats(APIView):
     authentication_classes = [JWTAuthentication]
