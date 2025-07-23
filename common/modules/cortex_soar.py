@@ -475,6 +475,8 @@ class CortexSOAR:
             return False
         if "### " in content or stripped.startswith("|") or "Offenses List" in content:
             return False
+        if "Incident data:" in content and "CustomFields" in content:
+            return False
         return True
 
     def _transform_notes_data(
