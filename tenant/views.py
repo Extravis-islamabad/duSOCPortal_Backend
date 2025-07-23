@@ -43,7 +43,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_notes_for_incident, sync_requests_for_soar
+from tenant.cortex_soar_tasks import sync_notes, sync_notes_for_incident
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -240,7 +240,7 @@ class TestView(APIView):
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
-        sync_requests_for_soar()
+        sync_notes()
         # This will delete the tenants and cascade delete related incidents
         # sync_notes()
         # sync_ibm.delay()
@@ -850,7 +850,6 @@ class TenantCortexSOARIncidentsAPIView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
-
 class SeverityDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -893,7 +892,6 @@ class SeverityDistributionView(APIView):
         soar_ids = [t.id for t in soar_tenants]
 
         try:
-      
             true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
@@ -960,6 +958,7 @@ class SeverityDistributionView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class TypeDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -1206,6 +1205,7 @@ class OwnerDistributionView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class DashboardView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1256,7 +1256,6 @@ class DashboardView(APIView):
                 itsm_sync_status__iexact="Done"
             )
 
-           
             total_incident_filters = true_positive_filters | false_positive_filters
 
             # Date calculations
@@ -1386,16 +1385,18 @@ class DashboardView(APIView):
 
             # OPTIONAL: Add incomplete incidents count for visibility
             if not filter_list or "incompleteIncidents" in filter_list:
-                incomplete_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
-                    itsm_sync_status__iexact="Ready"
-                ) & (
-                    Q(owner__isnull=True)
-                    | Q(owner__exact="")
-                    | Q(incident_tta__isnull=True)
-                    | Q(incident_ttn__isnull=True)
-                    | Q(incident_ttdn__isnull=True)
-                    | Q(incident_priority__isnull=True)
-                    | Q(incident_priority__exact="")
+                incomplete_filters = (
+                    Q(cortex_soar_tenant__in=soar_ids)
+                    & Q(itsm_sync_status__iexact="Ready")
+                    & (
+                        Q(owner__isnull=True)
+                        | Q(owner__exact="")
+                        | Q(incident_tta__isnull=True)
+                        | Q(incident_ttn__isnull=True)
+                        | Q(incident_ttdn__isnull=True)
+                        | Q(incident_priority__isnull=True)
+                        | Q(incident_priority__exact="")
+                    )
                 )
 
                 incomplete_count = DUCortexSOARIncidentFinalModel.objects.filter(
@@ -1404,7 +1405,7 @@ class DashboardView(APIView):
 
                 dashboard_data["incompleteIncidents"] = {
                     "count": incomplete_count,
-                    "description": "Ready incidents with missing required fields"
+                    "description": "Ready incidents with missing required fields",
                 }
 
             return Response(dashboard_data, status=status.HTTP_200_OK)
@@ -1424,6 +1425,7 @@ class DashboardView(APIView):
         change = max(-100, min(100, change))  # Bound between -100% and 100%
         direction = "↑" if change >= 0 else "↓"
         return f"{direction} {abs(round(change, 1))}% from previous {period}"
+
 
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
