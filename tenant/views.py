@@ -850,6 +850,7 @@ class TenantCortexSOARIncidentsAPIView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
+
 class SeverityDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -857,7 +858,7 @@ class SeverityDistributionView(APIView):
     def get(self, request):
         """
         Retrieve severity distribution (P1-P4) for the authenticated tenant.
-        Uses the exact same logic as DashboardView total_incident_filters to ensure counts match.
+        Uses the exact same logic as DashboardView to ensure counts match.
 
         Returns:
             {
@@ -892,10 +893,26 @@ class SeverityDistributionView(APIView):
         soar_ids = [t.id for t in soar_tenants]
 
         try:
-            # Use the EXACT same filter logic as DashboardView total_incident_filters
-            total_incident_filters = Q(cortex_soar_tenant__in=soar_ids) & (
-                Q(itsm_sync_status__iexact="Ready") | Q(itsm_sync_status__iexact="Done")
+      
+            true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
             )
+
+            # False Positives (Done incidents)
+            false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+                itsm_sync_status__iexact="Done"
+            )
+
+            # Total incidents = True Positives + False Positives (matches DashboardView)
+            total_incident_filters = true_positive_filters | false_positive_filters
 
             # Define our severity levels (P1-P4)
             SEVERITY_LEVELS = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
@@ -943,7 +960,6 @@ class SeverityDistributionView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class TypeDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -1190,7 +1206,6 @@ class OwnerDistributionView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class DashboardView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1223,7 +1238,7 @@ class DashboardView(APIView):
         )
 
         try:
-            # Base filters for True Positives (Ready incidents with all fields)
+            # Base filters for True Positives (Ready incidents with all required fields)
             true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
@@ -1236,10 +1251,13 @@ class DashboardView(APIView):
                 & ~Q(incident_priority__exact="")
             )
 
-            # Base filters for all incidents (Ready and Done)
-            total_incident_filters = Q(cortex_soar_tenant__in=soar_ids) & (
-                Q(itsm_sync_status__iexact="Ready") | Q(itsm_sync_status__iexact="Done")
+            # Base filters for False Positives (Done incidents)
+            false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+                itsm_sync_status__iexact="Done"
             )
+
+           
+            total_incident_filters = true_positive_filters | false_positive_filters
 
             # Date calculations
             today = timezone.now().date()
@@ -1248,7 +1266,7 @@ class DashboardView(APIView):
 
             dashboard_data = {}
 
-            # Total Incidents (Ready + Done)
+            # Total Incidents (True Positives + False Positives only)
             if not filter_list or "totalIncidents" in filter_list:
                 total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
                     total_incident_filters
@@ -1275,7 +1293,7 @@ class DashboardView(APIView):
                     ).count(),
                 }
 
-            # Open Incidents (status=1) - KEEPING ORIGINAL LOGIC
+            # Open Incidents (status=1) - Using true positive filters
             if not filter_list or "open" in filter_list:
                 open_count = DUCortexSOARIncidentFinalModel.objects.filter(
                     true_positive_filters, status=1
@@ -1295,7 +1313,7 @@ class DashboardView(APIView):
 
                 dashboard_data["open"] = {"count": open_count, "change": percent_change}
 
-            # Closed Incidents (status=2) - KEEPING ORIGINAL LOGIC
+            # Closed Incidents (status=2) - Using true positive filters
             if not filter_list or "closed" in filter_list:
                 closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
                     true_positive_filters, status=2
@@ -1344,20 +1362,16 @@ class DashboardView(APIView):
 
             # False Positives (Done incidents)
             if not filter_list or "falsePositives" in filter_list:
-                fp_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
-                    itsm_sync_status__iexact="Done"
-                )
-
                 fp_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    fp_filters
+                    false_positive_filters
                 ).count()
 
                 last_week_fp = DUCortexSOARIncidentFinalModel.objects.filter(
-                    fp_filters, created__date__range=[last_week, yesterday]
+                    false_positive_filters, created__date__range=[last_week, yesterday]
                 ).count()
 
                 current_week_fp = DUCortexSOARIncidentFinalModel.objects.filter(
-                    fp_filters,
+                    false_positive_filters,
                     created__date__range=[today - timedelta(days=6), today],
                 ).count()
 
@@ -1368,6 +1382,29 @@ class DashboardView(APIView):
                 dashboard_data["falsePositives"] = {
                     "count": fp_count,
                     "change": percent_change,
+                }
+
+            # OPTIONAL: Add incomplete incidents count for visibility
+            if not filter_list or "incompleteIncidents" in filter_list:
+                incomplete_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+                    itsm_sync_status__iexact="Ready"
+                ) & (
+                    Q(owner__isnull=True)
+                    | Q(owner__exact="")
+                    | Q(incident_tta__isnull=True)
+                    | Q(incident_ttn__isnull=True)
+                    | Q(incident_ttdn__isnull=True)
+                    | Q(incident_priority__isnull=True)
+                    | Q(incident_priority__exact="")
+                )
+
+                incomplete_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    incomplete_filters
+                ).count()
+
+                dashboard_data["incompleteIncidents"] = {
+                    "count": incomplete_count,
+                    "description": "Ready incidents with missing required fields"
                 }
 
             return Response(dashboard_data, status=status.HTTP_200_OK)
@@ -1387,7 +1424,6 @@ class DashboardView(APIView):
         change = max(-100, min(100, change))  # Bound between -100% and 100%
         direction = "↑" if change >= 0 else "↓"
         return f"{direction} {abs(round(change, 1))}% from previous {period}"
-
 
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
