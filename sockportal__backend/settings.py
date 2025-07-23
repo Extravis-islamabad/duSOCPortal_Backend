@@ -56,6 +56,8 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "channels",
+    'rest_framework_swagger',  # Swagger
+    'drf_yasg',  # adding api documentation
 ]
 
 INSTALLED_APPS += [
@@ -64,6 +66,7 @@ INSTALLED_APPS += [
     "tenantadmin",
     "integration",
 ]
+
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -100,10 +103,12 @@ TEMPLATES = [
         },
     },
 ]
-REST_FRAMEWORK = {
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 10,  # Fixed page size, clients cannot override
-}
+# REST_FRAMEWORK = {
+#     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+#     "PAGE_SIZE": 10,  # Fixed page size, clients cannot override
+#     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema', #adding for the api documentation
+#
+# }
 WSGI_APPLICATION = "sockportal__backend.wsgi.application"
 
 # ASGI_APPLICATION = "sockportal__backend.asgi.application"
