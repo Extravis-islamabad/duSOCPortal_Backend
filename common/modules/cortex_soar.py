@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 
 import pandas as pd
@@ -470,9 +471,26 @@ class CortexSOAR:
         logger.info(f"CortexSOAR._transform_notes_data() incident_id: {incident_id}")
         records = []
         entries = entries.get("entries")
+
+        EXPECTED_FIELDS = [
+            "Rule Description",
+            "Description",
+            "Analysis",
+            "Incident Analysis",
+            "Payload",
+            "Payloads",
+            "Impact",
+            "Impacts",
+            "Recommendation",
+            "Recommendations",
+        ]
+
+        FIELD_PATTERN = re.compile(r"(?i)" + r"|".join(map(re.escape, EXPECTED_FIELDS)))
+
         for rec in entries:
-            # if not rec.get("user"):
-            #     continue
+            content = rec.get("contents", "")
+            if not FIELD_PATTERN.search(content):
+                continue  # Skip entries without target field content
 
             try:
                 db_id_str = rec.get("id")  # , "").split("@")[0]
@@ -484,7 +502,7 @@ class CortexSOAR:
                 DUSoarNotes(
                     db_id=db_id,
                     category=rec.get("category"),
-                    content=rec.get("contents"),
+                    content=content,
                     created=parse_datetime(rec.get("created")),
                     user=rec.get("user"),
                     incident_id=incident_id,
