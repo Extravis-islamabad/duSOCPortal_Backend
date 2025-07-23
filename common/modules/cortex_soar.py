@@ -38,6 +38,9 @@ class CortexSOAR:
             raise ValueError("CortexSOAR both token, ip_address and port are required")
         self.base_url = self._get_base_url()
         self.headers = {"Accept": "application/json", "Authorization": token}
+        self.field_pattern = re.compile(
+            r"(?i)" + r"|".join(map(re.escape, CortexSOARConstants.EXPECTED_FIELDS))
+        )
 
     def __enter__(self):
         """
@@ -461,6 +464,19 @@ class CortexSOAR:
         data = response.json()
         return data
 
+    def is_structured_note(self, content: str) -> bool:
+        """Heuristic to keep only clean, original notes, not echoed commands or artifacts."""
+        if not self.field_pattern.search(content):
+            return False
+        stripped = content.strip()
+        if stripped.startswith("!") or stripped.startswith("{"):
+            return False
+        if 'note_entry="' in content or '\\"' in content or '\\"' in content:
+            return False
+        if "### " in content or stripped.startswith("|") or "Offenses List" in content:
+            return False
+        return True
+
     def _transform_notes_data(
         self, entries: list, incident_id, integration_id, account
     ) -> list:
@@ -472,25 +488,10 @@ class CortexSOAR:
         records = []
         entries = entries.get("entries")
 
-        EXPECTED_FIELDS = [
-            "Rule Description",
-            "Description",
-            "Analysis",
-            "Incident Analysis",
-            "Payload",
-            "Payloads",
-            "Impact",
-            "Impacts",
-            "Recommendation",
-            "Recommendations",
-        ]
-
-        FIELD_PATTERN = re.compile(r"(?i)" + r"|".join(map(re.escape, EXPECTED_FIELDS)))
-
         for rec in entries:
             content = rec.get("contents", "")
-            if not FIELD_PATTERN.search(content):
-                continue  # Skip entries without target field content
+            if not self.is_structured_note(content):
+                continue
 
             try:
                 db_id_str = rec.get("id")  # , "").split("@")[0]
