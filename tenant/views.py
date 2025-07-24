@@ -4700,13 +4700,37 @@ class SLASeverityIncidentsView(APIView):
                 return Response({"error": "No SOAR tenants found."}, status=404)
             soar_ids = [t.id for t in soar_tenants]
 
-            filters = Q(cortex_soar_tenant_id__in=soar_ids)
+            # FIXED: Use consistent filtering logic with DashboardView
+            # Base filters for True Positives (Ready incidents with all required fields)
+            true_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
 
+            # Base filters for False Positives (Done incidents)
+            false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & Q(
+                itsm_sync_status__iexact="Done"
+            )
+
+            # Total incidents = True Positives + False Positives (matches DashboardView)
+            base_filters = true_positive_filters | false_positive_filters
+
+            # Date filtering logic (applied on top of base filters)
             filter_type = request.query_params.get("filter_type")
             start_date = request.query_params.get("start_date")
             end_date = request.query_params.get("end_date")
             db_timezone = timezone.get_fixed_timezone(240)
             now = timezone.now().astimezone(db_timezone)
+
+            # Start with base filters
+            filters = base_filters
 
             if start_date and end_date:
                 try:
@@ -4769,12 +4793,9 @@ class SLASeverityIncidentsView(APIView):
                 except Exception:
                     return Response({"error": "Invalid filter_type."}, status=400)
 
-            incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                filters,
-                incident_tta__isnull=False,
-                incident_ttdn__isnull=False,
-                incident_ttn__isnull=False,
-            )
+            # FIXED: Apply the consistent filters (no need for additional field checks)
+            # The base filters already ensure these fields are not null for true positives
+            incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
 
             if tenant.company.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
@@ -4784,14 +4805,14 @@ class SLASeverityIncidentsView(APIView):
                 )
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
-            # Map priorities to sla_level and labels
-            priority_map = {
+            # FIXED: Use exact same priority mapping as SLASeverityMetricsView
+            priority_to_sla_map = {
                 "P1 Critical": SlaLevelChoices.P1,
                 "P2 High": SlaLevelChoices.P2,
                 "P3 Medium": SlaLevelChoices.P3,
                 "P4 Low": SlaLevelChoices.P4,
             }
-            reverse_map = {
+            sla_to_label_map = {
                 SlaLevelChoices.P1: "p1_critical",
                 SlaLevelChoices.P2: "p2_high",
                 SlaLevelChoices.P3: "p3_medium",
@@ -4806,7 +4827,7 @@ class SLASeverityIncidentsView(APIView):
             }
 
             for incident in incidents:
-                sla_level = priority_map.get(incident.incident_priority)
+                sla_level = priority_to_sla_map.get(incident.incident_priority)
                 if not sla_level:
                     continue
 
@@ -4814,10 +4835,11 @@ class SLASeverityIncidentsView(APIView):
                 if not sla_metric:
                     continue
 
-                label = reverse_map[sla_level]
+                label = sla_to_label_map[sla_level]
                 created = incident.created
                 any_breach = False
 
+                # FIXED: Add null checks for safety (even though base filters should handle this)
                 if incident.incident_tta:
                     if (
                         incident.incident_tta - created
@@ -4843,8 +4865,7 @@ class SLASeverityIncidentsView(APIView):
         except Exception as e:
             logger.error(f"Error in SLASeverityIncidentsView: {str(e)}")
             return Response({"error": str(e)}, status=500)
-
-
+        
 class SLASeverityMetricsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4996,7 +5017,6 @@ class SLASeverityMetricsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class SLABreachedIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5076,6 +5096,7 @@ class SLABreachedIncidentsView(APIView):
                 # If no specific level is requested, include all levels
                 valid_sla_levels = list(SlaLevelChoices)
 
+            # Get other filter parameters
             id_filter = request.query_params.get("id")
             db_id_filter = request.query_params.get("db_id")
             account_filter = request.query_params.get("account")
@@ -5096,6 +5117,7 @@ class SLABreachedIncidentsView(APIView):
             end_date_str = request.query_params.get("end_date")
             occurred_start_str = request.query_params.get("occurred_start")
             occurred_end_str = request.query_params.get("occurred_end")
+            show_only = request.query_params.get("show_only", "all")  # 'all', 'breached', 'achieved'
 
             date_format = "%Y-%m-%d"
 
@@ -5109,7 +5131,7 @@ class SLABreachedIncidentsView(APIView):
                 & Q(incident_ttdn__isnull=False)
             )
 
-            # Step 6: Apply non-date filters
+            # Step 6: Apply non-date filters (same as original)
             if id_filter:
                 filters &= Q(id=id_filter)
 
@@ -5197,7 +5219,7 @@ class SLABreachedIncidentsView(APIView):
                 elif filter_type == "error":
                     filters &= Q(status="Error")
 
-            # Step 7: Apply date filters with validation
+            # Step 7: Apply date filters with validation (same as original)
             start_date = None
             end_date = None
             occurred_start = None
@@ -5269,8 +5291,9 @@ class SLABreachedIncidentsView(APIView):
                 filters
             ).select_related()
 
-            # Step 9: Process incidents to find breached ones
+            # Step 9: Process incidents to find breached and achieved ones
             breached_incidents = []
+            achieved_incidents = []
             offense_db_ids = {
                 int(part)
                 for inc in incidents
@@ -5296,103 +5319,104 @@ class SLABreachedIncidentsView(APIView):
 
                 sla = sla_metrics_dict[level]
                 occured = inc.occured
-                is_breached = False
-
-                # Check which SLA type is breached
+                
+                # Calculate metrics for all SLA types
+                tta_delta = (inc.incident_tta - occured).total_seconds() / 60
+                ttn_delta = (inc.incident_ttn - occured).total_seconds() / 60
+                ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
+                
+                # Determine if breached for the requested SLA type
                 if sla_type == "tta":
-                    tta_delta = (inc.incident_tta - occured).total_seconds() / 60
                     is_breached = tta_delta > sla.tta_minutes
+                    actual_minutes = tta_delta
+                    breach_duration = max(0, actual_minutes - sla.tta_minutes)
                 elif sla_type == "ttn":
-                    ttn_delta = (inc.incident_ttn - occured).total_seconds() / 60
                     is_breached = ttn_delta > sla.ttn_minutes
-                elif sla_type == "ttdn":
-                    ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
+                    actual_minutes = ttn_delta
+                    breach_duration = max(0, actual_minutes - sla.ttn_minutes)
+                else:  # ttdn
                     is_breached = ttdn_delta > sla.ttdn_minutes
+                    actual_minutes = ttdn_delta
+                    breach_duration = max(0, actual_minutes - sla.ttdn_minutes)
+
+                offense_db_id = None
+                offense_id = None
+                if inc.name:
+                    parts = inc.name.split()
+                    if parts and parts[0].isdigit():
+                        offense_db_id = parts[0]
+                        offense_id = offense_map.get(offense_db_id)
+
+                description = (
+                    inc.name.strip().split(" ", 1)[1]
+                    if len(inc.name.strip().split(" ", 1)) > 1
+                    else inc.name
+                )
+
+                incident_data = {
+                    "id": str(inc.id),
+                    "db_id": inc.db_id,
+                    "account": inc.account,
+                    "name": inc.name,
+                    "description": description,
+                    "status": inc.status,
+                    "severity": inc.severity,
+                    "priority": inc.incident_priority,
+                    "phase": inc.incident_phase,
+                    "assignee": inc.owner,
+                    "playbook": inc.playbook_id,
+                    "occurred": inc.occured.isoformat() if inc.occured else "N/A",
+                    "sla": inc.sla,
+                    "offense_id": offense_id,
+                    "offense_db_id": offense_db_id,
+                    "offense_link": request.build_absolute_uri(
+                        f"/tenant/api/offense-details/{offense_id}/"
+                    )
+                    if offense_id
+                    else None,
+                    "sla_type": sla_type.upper(),
+                    "sla_minutes": getattr(sla, f"{sla_type}_minutes"),
+                    "actual_minutes": actual_minutes,
+                    "breach_duration_minutes": breach_duration,
+                    "mitre_tactic": inc.mitre_tactic,
+                    "mitre_technique": inc.mitre_technique,
+                    "configuration_item": inc.configuration_item,
+                    "is_breached": is_breached,
+                }
 
                 if is_breached:
-                    offense_db_id = None
-                    offense_id = None
-                    if inc.name:
-                        parts = inc.name.split()
-                        if parts and parts[0].isdigit():
-                            offense_db_id = parts[0]
-                            offense_id = offense_map.get(offense_db_id)
+                    breached_incidents.append(incident_data)
+                else:
+                    achieved_incidents.append(incident_data)
 
-                    description = (
-                        inc.name.strip().split(" ", 1)[1]
-                        if len(inc.name.strip().split(" ", 1)) > 1
-                        else inc.name
-                    )
+            # Step 10: Filter based on show_only parameter
+            if show_only == "breached":
+                result_incidents = breached_incidents
+            elif show_only == "achieved":
+                result_incidents = achieved_incidents
+            else:
+                result_incidents = breached_incidents + achieved_incidents
 
-                    # Calculate the appropriate delta based on sla_type
-                    if sla_type == "tta":
-                        actual_minutes = (
-                            inc.incident_tta - occured
-                        ).total_seconds() / 60
-                        breach_duration = max(0, actual_minutes - sla.tta_minutes)
-                    elif sla_type == "ttn":
-                        actual_minutes = (
-                            inc.incident_ttn - occured
-                        ).total_seconds() / 60
-                        breach_duration = max(0, actual_minutes - sla.ttn_minutes)
-                    else:  # ttdn
-                        actual_minutes = (
-                            inc.incident_ttdn - occured
-                        ).total_seconds() / 60
-                        breach_duration = max(0, actual_minutes - sla.ttdn_minutes)
-
-                    breached_incidents.append(
-                        {
-                            "id": str(inc.id),
-                            "db_id": inc.db_id,
-                            "account": inc.account,
-                            "name": inc.name,
-                            "description": description,
-                            "status": inc.status,
-                            "severity": inc.severity,
-                            "priority": inc.incident_priority,
-                            "phase": inc.incident_phase,
-                            "assignee": inc.owner,
-                            "playbook": inc.playbook_id,
-                            "occurred": inc.occured.isoformat()
-                            if inc.occured
-                            else "N/A",
-                            "sla": inc.sla,
-                            "offense_id": offense_id,
-                            "offense_db_id": offense_db_id,
-                            "offense_link": request.build_absolute_uri(
-                                f"/tenant/api/offense-details/{offense_id}/"
-                            )
-                            if offense_id
-                            else None,
-                            "sla_type": sla_type.upper(),
-                            "sla_minutes": getattr(sla, f"{sla_type}_minutes"),
-                            "actual_minutes": actual_minutes,
-                            "breach_duration_minutes": breach_duration,
-                            "mitre_tactic": inc.mitre_tactic,
-                            "mitre_technique": inc.mitre_technique,
-                            "configuration_item": inc.configuration_item,
-                        }
-                    )
-
-            # Step 10: Pagination
+            # Step 11: Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
             paginated_incidents = paginator.paginate_queryset(
-                breached_incidents, request
+                result_incidents, request
             )
 
-            # Step 11: Return response
+            # Step 12: Return response
             return paginator.get_paginated_response(
                 {
                     "sla_type": sla_type.upper(),
-                    "total_breached_incidents": len(breached_incidents),
-                    "breached_incidents": paginated_incidents,
+                    "total_incidents": len(result_incidents),
+                    "total_breached": len(breached_incidents),
+                    "total_achieved": len(achieved_incidents),
+                    "incidents": paginated_incidents,
                 }
             )
 
         except Exception as e:
-            logger.error(f"Error in SLABreachedIncidentsView: {str(e)}")
+            logger.error(f"Error in SLAAchievedBreachedIncidentsView: {str(e)}")
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
