@@ -321,8 +321,6 @@ class IBMQradarConstants:
     AQL_QUERY_FOR_DOMAIN_WISE_DATA = """SELECT DATEFORMAT(starttime,'YYYY-MM-dd hh:mm') as 'startTime', DOMAINNAME(domainid) AS 'DOMAIN_NAME', logsourcename(logSourceId) AS 'Log Source', COUNT(*) AS 'Count' from events where ( (logSourceId<'63') or (logSourceId>'63' and logSourceId<'69') or (logSourceId>'69' and logSourceId<'117') or (logSourceId>'117' and logSourceId<'18876') or (logSourceId>'18876') AND ("domainId"='5') or ("domainId"='6') or ("domainId"='10') AND ('Log Source'NOT ILIKE'%wincollect%') ) AND "Log Source" <> 'Health Metrics-2 :: MEYLVQRCON01' GROUP BY logSourceId order by "Count" desc last 24 hours"""
 
 
-
-
 class ITSMConstants:
     ITSM_START_INDEX = 1
     ITSM_ROW_COUNT = 1000

@@ -26,6 +26,7 @@ class DuIbmQradarTenants(models.Model):
     def __str__(self):
         return self.name
 
+
 class IBMQraderDomainHighLevelCategoryCount(models.Model):
     id = models.AutoField(primary_key=True)
     domain = models.ForeignKey(
@@ -67,7 +68,6 @@ class IBMQraderCategoryWiseData(models.Model):
 
     def __str__(self):
         return self.domain
-
 
 
 class IBMQradarEventCollector(models.Model):

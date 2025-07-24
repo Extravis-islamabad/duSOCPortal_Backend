@@ -56,8 +56,8 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "channels",
-    'rest_framework_swagger',  # Swagger
-    'drf_yasg',  # adding api documentation
+    "rest_framework_swagger",  # Swagger
+    "drf_yasg",  # adding api documentation
 ]
 
 INSTALLED_APPS += [
@@ -87,7 +87,7 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 ]
 
 SWAGGER_SETTINGS = {
-   'DEFAULT_INFO': 'import.path.to.urls.api_info',
+    "DEFAULT_INFO": "import.path.to.urls.api_info",
 }
 
 ROOT_URLCONF = "sockportal__backend.urls"

@@ -112,6 +112,7 @@ def sync_event_collectors(
     except Exception as e:
         logger.error(f"Unexpected error in sync_event_collectors: {str(e)}")
 
+
 @shared_task
 def sync_top_high_level_category_count(
     username: str, password: str, ip_address: str, port: str, integration_id: int
@@ -120,7 +121,7 @@ def sync_top_high_level_category_count(
     logger.info("Running QRadarTasks.sync_top_high_level_category_count() task")
     try:
         with IBMQradar(
-                username=username, password=password, ip_address=ip_address, port=port
+            username=username, password=password, ip_address=ip_address, port=port
         ) as ibm_qradar:
             search_id = ibm_qradar._get_do_aql_query(
                 query=IBMQradarConstants.AQL_QUERY_FOR_DOMAIN_EVENTS
@@ -132,17 +133,21 @@ def sync_top_high_level_category_count(
                 )
                 return
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
-            transformed_data = ibm_qradar._transform_high_level_category_data_from_named_fields(
-                data
+            transformed_data = (
+                ibm_qradar._transform_high_level_category_data_from_named_fields(data)
             )
             if transformed_data:
                 ibm_qradar._insert_high_level_category_counts(transformed_data)
-                logger.info("Completed QRadarTasks.sync_top_high_level_category_count() task")
+                logger.info(
+                    "Completed QRadarTasks.sync_top_high_level_category_count() task"
+                )
                 logger.info(
                     f"QRadarTasks.sync_top_high_level_category_count() task took {time.time() - start} seconds"
                 )
     except Exception as e:
-        logger.error(f"Unexpected error in sync_top_high_level_category_count(): {str(e)}")
+        logger.error(
+            f"Unexpected error in sync_top_high_level_category_count(): {str(e)}"
+        )
 
 
 @shared_task
@@ -153,7 +158,7 @@ def sync_category_wise_data_count(
     logger.info("Running QRadarTasks.sync_category_wise_data_count() task")
     try:
         with IBMQradar(
-                username=username, password=password, ip_address=ip_address, port=port
+            username=username, password=password, ip_address=ip_address, port=port
         ) as ibm_qradar:
             search_id = ibm_qradar._get_do_aql_query(
                 query=IBMQradarConstants.AQL_QUERY_FOR_DOMAIN_WISE_DATA
@@ -165,17 +170,20 @@ def sync_category_wise_data_count(
                 )
                 return
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
-            transformed_data = ibm_qradar._transform_category_wise_data_from_named_fields(
-                data
+            transformed_data = (
+                ibm_qradar._transform_category_wise_data_from_named_fields(data)
             )
             if transformed_data:
                 ibm_qradar._insert_category_wise_data(transformed_data)
-                logger.info("Completed QRadarTasks.sync_category_wise_data_count() task")
+                logger.info(
+                    "Completed QRadarTasks.sync_category_wise_data_count() task"
+                )
                 logger.info(
                     f"QRadarTasks.sync_category_wise_data_count() task took {time.time() - start} seconds"
                 )
     except Exception as e:
         logger.error(f"Unexpected error in sync_category_wise_data_count(): {str(e)}")
+
 
 @shared_task
 def sync_event_log_assets(
@@ -1952,9 +1960,6 @@ def sync_top_destination_connection_for_admin(
                 ibm_qradar._insert_top_destination_connection_data(transformed)
 
 
-
-
-
 @shared_task
 def sync_daily_event_counts_logs():
     results = IntegrationCredentials.objects.filter(
@@ -2076,17 +2081,15 @@ def sync_daily_event_counts_for_admin(
                 ibm_qradar._insert_daily_event_count_data(transformed)
 
 
-
 # @shared_task
 # def sync_domain_events_data(
 #     username, password, ip_address, port
 # ):
 
 
-
-
 # domain_names = DuIbmQradarTenants.objects.values_list("name", flat=True)
 # print(domain_names)
+
 
 @shared_task
 def sync_successful_logons_for_admin(
@@ -2214,7 +2217,6 @@ def sync_remote_users_count():
     )
 
     for result in results:
-
         sync_remote_users_count_for_admin.delay(
             username=result.username,
             password=result.password,

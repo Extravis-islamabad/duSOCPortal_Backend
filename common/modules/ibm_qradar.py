@@ -26,6 +26,8 @@ from tenant.models import (
     IBMQradarEventCollector,
     IBMQradarLogSourceTypes,
     IBMQradarOffense,
+    IBMQraderCategoryWiseData,
+    IBMQraderDomainHighLevelCategoryCount,
     LastMonthAvgEpsLog,
     MonthlyAvgEpsLog,
     ReconEventLog,
@@ -39,7 +41,7 @@ from tenant.models import (
     TotalEvents,
     TotalTrafficLog,
     WeeklyAvgEpsLog,
-    WeeklyCorrelatedEventLog, IBMQraderDomainHighLevelCategoryCount, IBMQraderCategoryWiseData,
+    WeeklyCorrelatedEventLog,
 )
 
 
@@ -1115,7 +1117,13 @@ class IBMQradar:
         df = pd.DataFrame(data_list)
 
         # Ensure necessary fields are present
-        required_fields = ["DOMAIN_NAME", "startTime", "High Level Category", "Event Name", "Count"]
+        required_fields = [
+            "DOMAIN_NAME",
+            "startTime",
+            "High Level Category",
+            "Event Name",
+            "Count",
+        ]
         df = df[[field for field in required_fields if field in df.columns]]
         print(df)
         # Map domain name to tenant ID
@@ -1127,14 +1135,15 @@ class IBMQradar:
 
         # Convert data types
         df["domain_id"] = df["domain_id"].astype(int)
-        df["start_time"] = pd.to_datetime(df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce")
+        df["start_time"] = pd.to_datetime(
+            df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce"
+        )
         df["count"] = df["Count"].fillna(0).astype(int).astype(str)
 
         # Optionally drop unneeded columns
         df.drop(columns=["DOMAIN_NAME", "Count", "startTime"], inplace=True)
 
         # Add event_id via hashing (or other logic)
-
 
         # Final rename to match model fields
         df.rename(
@@ -1166,7 +1175,9 @@ class IBMQradar:
 
         # Data conversions
         df["domain_id"] = df["domain_id"].astype(int)
-        df["start_time"] = pd.to_datetime(df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce")
+        df["start_time"] = pd.to_datetime(
+            df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce"
+        )
         df["count"] = df["Count"].fillna(0).astype(int).astype(str)
 
         # Drop unused raw columns
@@ -1189,7 +1200,9 @@ class IBMQradar:
         :param data: A list of dicts ready to be inserted into IBMQraderDomainHighLevelCategoryCount.
         """
         start = time.time()
-        logger.info(f"IBMQRadar._insert_high_level_category_counts() started at: {start}")
+        logger.info(
+            f"IBMQRadar._insert_high_level_category_counts() started at: {start}"
+        )
 
         try:
             with transaction.atomic():
@@ -1201,7 +1214,9 @@ class IBMQradar:
                 f"IBMQRadar._insert_high_level_category_counts() took: {time.time() - start:.2f} seconds"
             )
         except Exception as e:
-            logger.error(f"Error in IBMQRadar._insert_high_level_category_counts(): {str(e)}")
+            logger.error(
+                f"Error in IBMQRadar._insert_high_level_category_counts(): {str(e)}"
+            )
             transaction.set_rollback(True)
 
     def _insert_category_wise_data(self, data):
@@ -1223,7 +1238,6 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error in _insert_category_wise_data(): {str(e)}")
             transaction.set_rollback(True)
-
 
     def _insert_eps(self, data):
         """
