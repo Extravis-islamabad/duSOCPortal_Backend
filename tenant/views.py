@@ -4865,7 +4865,8 @@ class SLASeverityIncidentsView(APIView):
         except Exception as e:
             logger.error(f"Error in SLASeverityIncidentsView: {str(e)}")
             return Response({"error": str(e)}, status=500)
-        
+
+
 class SLASeverityMetricsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5017,6 +5018,7 @@ class SLASeverityMetricsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class SLABreachedIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5117,7 +5119,9 @@ class SLABreachedIncidentsView(APIView):
             end_date_str = request.query_params.get("end_date")
             occurred_start_str = request.query_params.get("occurred_start")
             occurred_end_str = request.query_params.get("occurred_end")
-            show_only = request.query_params.get("show_only", "all")  # 'all', 'breached', 'achieved'
+            show_only = request.query_params.get(
+                "show_only", "all"
+            )  # 'all', 'breached', 'achieved'
 
             date_format = "%Y-%m-%d"
 
@@ -5319,12 +5323,12 @@ class SLABreachedIncidentsView(APIView):
 
                 sla = sla_metrics_dict[level]
                 occured = inc.occured
-                
+
                 # Calculate metrics for all SLA types
                 tta_delta = (inc.incident_tta - occured).total_seconds() / 60
                 ttn_delta = (inc.incident_ttn - occured).total_seconds() / 60
                 ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
-                
+
                 # Determine if breached for the requested SLA type
                 if sla_type == "tta":
                     is_breached = tta_delta > sla.tta_minutes
@@ -5400,9 +5404,7 @@ class SLABreachedIncidentsView(APIView):
             # Step 11: Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
-            paginated_incidents = paginator.paginate_queryset(
-                result_incidents, request
-            )
+            paginated_incidents = paginator.paginate_queryset(result_incidents, request)
 
             # Step 12: Return response
             return paginator.get_paginated_response(
