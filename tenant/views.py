@@ -1701,10 +1701,10 @@ class IncidentsView(APIView):
                 offense_id = offense_map.get(offense_db_id) if offense_db_id else None
 
                 # Use isoformat() for consistent datetime formatting
-                created_date = row["created"].isoformat() if row["created"] else "N/A"
-                created_at_date = (
-                    row["created_at"].isoformat() if row.get("created_at") else "N/A"
-                )
+                # created_date = row["created"].isoformat() if row["created"] else "N/A"
+                # created_at_date = (
+                #     row["created_at"].isoformat() if row.get("created_at") else "N/A"
+                # )
                 occurred_date = row["occured"].isoformat() if row["occured"] else "N/A"
 
                 description = (
@@ -1724,8 +1724,8 @@ class IncidentsView(APIView):
                         "severity": row["severity"],
                         "priority": row["incident_priority"],
                         "phase": row["incident_phase"],
-                        "created": created_date,
-                        "created_at": created_at_date,
+                        # "created": created_date,
+                        # "created_at": created_at_date,
                         "assignee": row["owner"],
                         "playbook": row["playbook_id"],
                         "occurred": occurred_date,
