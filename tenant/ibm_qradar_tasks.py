@@ -184,6 +184,41 @@ def sync_category_wise_data_count(
     except Exception as e:
         logger.error(f"Unexpected error in sync_category_wise_data_count(): {str(e)}")
 
+@shared_task
+def sync_sensitive_count_wise_data(
+    username: str, password: str, ip_address: str, port: str, integration_id: int
+):
+    start = time.time()
+    logger.info("Running QRadarTasks.sync_sensitive_count_wise_data() task")
+    try:
+        with IBMQradar(
+            username=username, password=password, ip_address=ip_address, port=port
+        ) as ibm_qradar:
+            search_id = ibm_qradar._get_do_aql_query(
+                query=IBMQradarConstants.AQL_QUERY_FOR_SENITIVE_DATA
+            )
+            flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
+            if not flag:
+                logger.warning(
+                    f"IBM QRadar EPS sync failed for integration {integration_id}"
+                )
+                return
+            data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+            transformed_data = (
+                ibm_qradar._transform_sensitive_data_from_named_fields(data)
+            )
+            if transformed_data:
+                ibm_qradar._insert_sensitive_data(transformed_data)
+                logger.info(
+                    "Completed QRadarTasks.sync_sensitive_count_wise_data() task"
+                )
+                logger.info(
+                    f"QRadarTasks.sync_sensitive_count_wise_data() task took {time.time() - start} seconds"
+                )
+    except Exception as e:
+        logger.error(f"Unexpected error in sync_sensitive_count_wise_data(): {str(e)}")
+
+
 
 @shared_task
 def sync_event_log_assets(

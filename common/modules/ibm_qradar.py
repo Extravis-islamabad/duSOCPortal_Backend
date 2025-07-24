@@ -41,7 +41,7 @@ from tenant.models import (
     TotalEvents,
     TotalTrafficLog,
     WeeklyAvgEpsLog,
-    WeeklyCorrelatedEventLog,
+    WeeklyCorrelatedEventLog, IBMQraderSensitiveData,
 )
 
 
@@ -1238,6 +1238,75 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error in _insert_category_wise_data(): {str(e)}")
             transaction.set_rollback(True)
+
+    def _transform_sensitive_data_from_named_fields(self, data_list):
+        """
+        Transforms QRadar sensitive data into model-ready dicts.
+        Maps domainname_domainid to tenant ID.
+        """
+        df = pd.DataFrame(data_list)
+
+        required_fields = [
+            "domainname_domainid",
+            "startTime",
+            "Source IP",
+            "Destination IP",
+            "Destination Port",
+            "Destination Geographic Country/Region",
+            "Count",
+            "Event Count (Sum)",
+        ]
+
+        df = df[[field for field in required_fields if field in df.columns]]
+
+        # Map domain name to tenant ID
+        domain_map = DBMappings.get_name_to_id_mapping(DuIbmQradarTenants)
+        df["domain_id"] = df["domainname_domainid"].map(domain_map)
+
+        # Drop rows where domain mapping failed
+        df.dropna(subset=["domain_id"], inplace=True)
+
+        # Type conversions
+        df["domain_id"] = df["domain_id"].astype(int)
+        df["start_time"] = pd.to_datetime(df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce")
+        df["count"] = df["Count"].fillna(0).astype(int).astype(str)
+        df["total_event_count"] = df["Event Count (Sum)"].fillna(0).astype(int).astype(str)
+
+        # Drop unused raw fields
+        df.drop(columns=["domainname_domainid", "startTime", "Count", "Event Count (Sum)"], inplace=True)
+
+        # Rename fields to match model
+        df.rename(
+            columns={
+                "Source IP": "source_ip",
+                "Destination IP": "destination_ip",
+                "Destination Port": "destination_port",
+                "Destination Geographic Country/Region": "destination_country_and_region",
+            },
+            inplace=True,
+        )
+
+        return df.to_dict(orient="records")
+
+    def _insert_sensitive_data(self, data):
+        """
+        Inserts sensitive QRadar records into IBMQraderSensitiveData table.
+        """
+        start = time.time()
+        logger.info(f"_insert_sensitive_data() started at: {start}")
+
+        try:
+            with transaction.atomic():
+                IBMQraderSensitiveData.objects.bulk_create(
+                    [IBMQraderSensitiveData(**item) for item in data]
+                )
+            logger.info(f"Inserted sensitive data records: {len(data)}")
+            logger.info(f"_insert_sensitive_data() took: {time.time() - start:.2f} seconds")
+        except Exception as e:
+            logger.error(f"Error in _insert_sensitive_data(): {str(e)}")
+            transaction.set_rollback(True)
+
+
 
     def _insert_eps(self, data):
         """
