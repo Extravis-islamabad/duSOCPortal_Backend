@@ -229,13 +229,20 @@ def sync_parent_high_level_category():
     )
 
     for result in results:
-        sync_top_high_level_category_count.delay(
+        sync_category_wise_data_count.delay(
             username=result.username,
             password=result.password,
             ip_address=result.ip_address,
             port=result.port,
             integration_id=result.integration.id,
         )
+        # sync_top_high_level_category_count.delay(
+        #     username=result.username,
+        #     password=result.password,
+        #     ip_address=result.ip_address,
+        #     port=result.port,
+        #     integration_id=result.integration.id,
+        # )
 
 
 @shared_task
