@@ -219,7 +219,7 @@ def sync_notes():
     )
 
     for result in results:
-        sync_notes_child(
+        sync_notes_child.delay(
             token=result.api_key,
             ip_address=result.ip_address,
             port=result.port,
@@ -244,4 +244,4 @@ def sync_soar_data():
             integration_id=result.integration.id,
         )
     sync_requests_for_soar.delay()
-    # sync_notes.delay()
+    sync_notes.delay()
