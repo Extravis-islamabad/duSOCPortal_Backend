@@ -39,7 +39,7 @@ from tenant.models import (
     TotalEvents,
     TotalTrafficLog,
     WeeklyAvgEpsLog,
-    WeeklyCorrelatedEventLog,
+    WeeklyCorrelatedEventLog, IBMQraderDomainHighLevelCategoryCount, IBMQraderCategoryWiseData,
 )
 
 
@@ -1106,6 +1106,124 @@ class IBMQradar:
         eps_dict = eps_summary.to_dict(orient="records")
 
         return eps_dict
+
+    def _transform_high_level_category_data_from_named_fields(self, data_list):
+        """
+        Transforms high-level QRadar category count data to model-ready dicts.
+        Maps DOMAIN_NAME to tenant ID.
+        """
+        df = pd.DataFrame(data_list)
+
+        # Ensure necessary fields are present
+        required_fields = ["DOMAIN_NAME", "startTime", "High Level Category", "Event Name", "Count"]
+        df = df[[field for field in required_fields if field in df.columns]]
+        print(df)
+        # Map domain name to tenant ID
+        domain_map = DBMappings.get_name_to_id_mapping(DuIbmQradarTenants)
+        df["domain_id"] = df["DOMAIN_NAME"].map(domain_map)
+
+        # Drop rows with unmatched domains
+        df.dropna(subset=["domain_id"], inplace=True)
+
+        # Convert data types
+        df["domain_id"] = df["domain_id"].astype(int)
+        df["start_time"] = pd.to_datetime(df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce")
+        df["count"] = df["Count"].fillna(0).astype(int).astype(str)
+
+        # Optionally drop unneeded columns
+        df.drop(columns=["DOMAIN_NAME", "Count", "startTime"], inplace=True)
+
+        # Add event_id via hashing (or other logic)
+
+
+        # Final rename to match model fields
+        df.rename(
+            columns={
+                "High Level Category": "high_level_category",
+                "Event Name": "event_name",
+            },
+            inplace=True,
+        )
+
+        return df.to_dict(orient="records")
+
+    def _transform_category_wise_data_from_named_fields(self, data_list):
+        """
+        Transforms QRadar category-wise log source count data into model-ready dicts.
+        Maps DOMAIN_NAME to tenant ID.
+        """
+        df = pd.DataFrame(data_list)
+
+        required_fields = ["DOMAIN_NAME", "startTime", "Log Source", "Count"]
+        df = df[[field for field in required_fields if field in df.columns]]
+
+        # Map DOMAIN_NAME to DuIbmQradarTenants.id
+        domain_map = DBMappings.get_name_to_id_mapping(DuIbmQradarTenants)
+        df["domain_id"] = df["DOMAIN_NAME"].map(domain_map)
+
+        # Drop rows where mapping failed
+        df.dropna(subset=["domain_id"], inplace=True)
+
+        # Data conversions
+        df["domain_id"] = df["domain_id"].astype(int)
+        df["start_time"] = pd.to_datetime(df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce")
+        df["count"] = df["Count"].fillna(0).astype(int).astype(str)
+
+        # Drop unused raw columns
+        df.drop(columns=["DOMAIN_NAME", "Count", "startTime"], inplace=True)
+
+        # Rename to match model fields
+        df.rename(
+            columns={
+                "Log Source": "log_source",
+            },
+            inplace=True,
+        )
+
+        return df.to_dict(orient="records")
+
+    def _insert_high_level_category_counts(self, data):
+        """
+        Inserts high-level QRadar category count records into the database.
+
+        :param data: A list of dicts ready to be inserted into IBMQraderDomainHighLevelCategoryCount.
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._insert_high_level_category_counts() started at: {start}")
+
+        try:
+            with transaction.atomic():
+                IBMQraderDomainHighLevelCategoryCount.objects.bulk_create(
+                    [IBMQraderDomainHighLevelCategoryCount(**item) for item in data]
+                )
+            logger.info(f"Inserted High Level Category records: {len(data)}")
+            logger.info(
+                f"IBMQRadar._insert_high_level_category_counts() took: {time.time() - start:.2f} seconds"
+            )
+        except Exception as e:
+            logger.error(f"Error in IBMQRadar._insert_high_level_category_counts(): {str(e)}")
+            transaction.set_rollback(True)
+
+    def _insert_category_wise_data(self, data):
+        """
+        Inserts category-wise log source count data into IBMQraderCategoryWiseData table.
+        """
+        start = time.time()
+        logger.info(f"_insert_category_wise_data() started at: {start}")
+
+        try:
+            with transaction.atomic():
+                IBMQraderCategoryWiseData.objects.bulk_create(
+                    [IBMQraderCategoryWiseData(**item) for item in data]
+                )
+            logger.info(f"Inserted CategoryWise records: {len(data)}")
+            logger.info(
+                f"_insert_category_wise_data() took: {time.time() - start:.2f} seconds"
+            )
+        except Exception as e:
+            logger.error(f"Error in _insert_category_wise_data(): {str(e)}")
+            transaction.set_rollback(True)
+
 
     def _insert_eps(self, data):
         """

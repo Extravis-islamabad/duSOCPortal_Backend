@@ -26,7 +26,14 @@ from .serializers import (
 )
 
 
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+
 class UserCreateAPIView(APIView):
+    @swagger_auto_schema(
+        request_body=UserCreateSerializer
+    )
     def post(self, request):
         """
         Creates a new user.
@@ -66,6 +73,19 @@ class UserCreateAPIView(APIView):
 
 
 class UserLoginAPIView(APIView):
+    @swagger_auto_schema(
+
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'username': openapi.Schema(type=openapi.TYPE_STRING),
+                'password': openapi.Schema(type=openapi.TYPE_STRING),
+            },
+            required=['username', 'password']
+
+
+        )
+    )
     def post(self, request):
         # Extract credentials from request
         """
@@ -147,6 +167,9 @@ class UserDetailsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
+    # @swagger_auto_schema(
+    #     request_body=UserDetailSerializer
+    # )
     def get(self, request):
         """
         Retrieves the user details.

@@ -315,6 +315,13 @@ class IBMQradarConstants:
     AQL_QUERY_FOR_GEOLOCATION = "SELECT sourceip, GEO::LOOKUP(sourceip, 'geo_json') AS geo FROM events group by sourceip"
     AQL_EPS_UPDATED_QUERY = """SELECT DOMAINNAME(domainid) AS 'client',"Hostname" AS 'Hostname',MAX("Value") AS 'Peak EPS', AVG("Value") AS 'Average EPS',DATEFORMAT(endtime,'YYYY-MM-dd hh:mm:ss') AS 'Time',NOW() AS 'Current Timestamp (ms)' from events where ( "Metric ID"='EventRate' AND "deviceType"='368' ) GROUP BY "Hostname" """
 
+    # adding two more queries given by Mutahir
+    AQL_QUERY_FOR_DOMAIN_EVENTS = """SELECT DATEFORMAT(starttime,'YYYY-MM-dd hh:mm') as 'startTime', DOMAINNAME(domainid) AS 'DOMAIN_NAME', categoryname(category - category % 1000) AS 'High Level Category', categoryname(category) AS 'Event Name', COUNT(*) AS 'Count' from events where (category - category % 1000)='5000' GROUP BY (category - category % 1000), category order by "Count" desc last 1 DAYS"""
+
+    AQL_QUERY_FOR_DOMAIN_WISE_DATA = """SELECT DATEFORMAT(starttime,'YYYY-MM-dd hh:mm') as 'startTime', DOMAINNAME(domainid) AS 'DOMAIN_NAME', logsourcename(logSourceId) AS 'Log Source', COUNT(*) AS 'Count' from events where ( (logSourceId<'63') or (logSourceId>'63' and logSourceId<'69') or (logSourceId>'69' and logSourceId<'117') or (logSourceId>'117' and logSourceId<'18876') or (logSourceId>'18876') AND ("domainId"='5') or ("domainId"='6') or ("domainId"='10') AND ('Log Source'NOT ILIKE'%wincollect%') ) AND "Log Source" <> 'Health Metrics-2 :: MEYLVQRCON01' GROUP BY logSourceId order by "Count" desc last 24 hours"""
+
+
+
 
 class ITSMConstants:
     ITSM_START_INDEX = 1
