@@ -26,6 +26,49 @@ class DuIbmQradarTenants(models.Model):
     def __str__(self):
         return self.name
 
+class IBMQraderDomainHighLevelCategoryCount(models.Model):
+    id = models.AutoField(primary_key=True)
+    domain = models.ForeignKey(
+        DuIbmQradarTenants,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_domains",
+    )
+
+    start_time = models.DateTimeField()
+    high_level_category = models.CharField(max_length=255, blank=True, default=None)
+    event_name = models.CharField(max_length=255, blank=True, default=None)
+    count = models.CharField(max_length=10, blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "du_ibm_qradar_domain_high_level_category_count"
+
+    def __str__(self):
+        return self.event_name
+
+
+class IBMQraderCategoryWiseData(models.Model):
+    id = models.AutoField(primary_key=True)
+    domain = models.ForeignKey(
+        DuIbmQradarTenants,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_domains_for_category_wise_data",
+    )
+
+    start_time = models.DateTimeField()
+    log_source = models.CharField(max_length=255, blank=True, default=None)
+    count = models.CharField(max_length=20, blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "du_ibm_qradar_category_wise_data"
+
+    def __str__(self):
+        return self.domain
+
+
 
 class IBMQradarEventCollector(models.Model):
     id = models.AutoField(primary_key=True)

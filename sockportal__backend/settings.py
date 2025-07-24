@@ -86,6 +86,9 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     "access-control-allow-origin",
 ]
 
+SWAGGER_SETTINGS = {
+   'DEFAULT_INFO': 'import.path.to.urls.api_info',
+}
 
 ROOT_URLCONF = "sockportal__backend.urls"
 
