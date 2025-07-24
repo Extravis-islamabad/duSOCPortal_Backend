@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 
 import pandas as pd
@@ -37,6 +38,9 @@ class CortexSOAR:
             raise ValueError("CortexSOAR both token, ip_address and port are required")
         self.base_url = self._get_base_url()
         self.headers = {"Accept": "application/json", "Authorization": token}
+        self.field_pattern = re.compile(
+            r"(?i)" + r"|".join(map(re.escape, CortexSOARConstants.EXPECTED_FIELDS))
+        )
 
     def __enter__(self):
         """
@@ -460,6 +464,21 @@ class CortexSOAR:
         data = response.json()
         return data
 
+    def is_structured_note(self, content: str) -> bool:
+        """Heuristic to keep only clean, original notes, not echoed commands or artifacts."""
+        if not self.field_pattern.search(content):
+            return False
+        stripped = content.strip()
+        if stripped.startswith("!") or stripped.startswith("{"):
+            return False
+        if 'note_entry="' in content or '\\"' in content or '\\"' in content:
+            return False
+        if "### " in content or stripped.startswith("|") or "Offenses List" in content:
+            return False
+        if "Incident data:" in content and "CustomFields" in content:
+            return False
+        return True
+
     def _transform_notes_data(
         self, entries: list, incident_id, integration_id, account
     ) -> list:
@@ -470,9 +489,11 @@ class CortexSOAR:
         logger.info(f"CortexSOAR._transform_notes_data() incident_id: {incident_id}")
         records = []
         entries = entries.get("entries")
+
         for rec in entries:
-            # if not rec.get("user"):
-            #     continue
+            content = rec.get("contents", "")
+            if not self.is_structured_note(content):
+                continue
 
             try:
                 db_id_str = rec.get("id")  # , "").split("@")[0]
@@ -484,7 +505,7 @@ class CortexSOAR:
                 DUSoarNotes(
                     db_id=db_id,
                     category=rec.get("category"),
-                    content=rec.get("contents"),
+                    content=content,
                     created=parse_datetime(rec.get("created")),
                     user=rec.get("user"),
                     incident_id=incident_id,

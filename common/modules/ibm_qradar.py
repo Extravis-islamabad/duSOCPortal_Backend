@@ -1120,8 +1120,11 @@ class IBMQradar:
             with transaction.atomic():
                 IBMQradarEPS.objects.bulk_create(
                     [IBMQradarEPS(**item) for item in data],  # make model instances
-                    batch_size=1000,  # optional for performance
                 )
+            logger.info(f"Inserted EPS records: {len(data)}")
+            logger.success(
+                f"IBMQRadar._insert_eps() took: {time.time() - start:.2f} seconds"
+            )
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._insert_eps(): {str(e)}")
             transaction.rollback()

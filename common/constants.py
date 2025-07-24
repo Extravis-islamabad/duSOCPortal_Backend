@@ -330,6 +330,18 @@ class CortexSOARConstants:
     INCIDENT_ENDPOINT = "incidents/search"
     NOTES_ENDPOINT = "investigation"
     BATCH_SIZE = 10000
+    EXPECTED_FIELDS = [
+        "Rule Description",
+        "Description",
+        "Analysis",
+        "Incident Analysis",
+        "Payload",
+        "Payloads",
+        "Impact",
+        "Impacts",
+        "Recommendation",
+        "Recommendations",
+    ]
 
 
 class AdminWebsocketConstants:
