@@ -43,8 +43,8 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_notes, sync_notes_for_incident
-from tenant.ibm_qradar_tasks import sync_top_high_level_category_count, sync_category_wise_data_count
+from tenant.cortex_soar_tasks import sync_notes_for_incident
+from tenant.ibm_qradar_tasks import sync_parent_high_level_category
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -241,12 +241,8 @@ class TestView(APIView):
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
-        #sync_notes()
-        sync_category_wise_data_count("svc.soc.portal",
-"SeonRx##0@55555",
-"10.225.148.146",
-"443",
-3)
+        # sync_notes()
+        sync_parent_high_level_category()
         # This will delete the tenants and cascade delete related incidents
         # sync_notes()
         # sync_ibm.delay()
