@@ -124,7 +124,7 @@ def sync_top_high_level_category_count(
             username=username, password=password, ip_address=ip_address, port=port
         ) as ibm_qradar:
             search_id = ibm_qradar._get_do_aql_query(
-                query=IBMQradarConstants.AQL_QUERY_FOR_DOMAIN_EVENTS
+                query=IBMQradarConstants.AQL_QUERY_FOR_DOMAIN_EVENTS_AEP
             )
             flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
             if not flag:
