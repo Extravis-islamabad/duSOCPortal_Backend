@@ -95,6 +95,80 @@ class IBMQraderSensitiveData(models.Model):
         return self.domain
 
 
+
+#1
+class IBMQraderCorelatedEvents(models.Model):
+    id = models.AutoField(primary_key=True)
+    domain = models.ForeignKey(
+        DuIbmQradarTenants,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_corelated_events",
+    )
+    start_time = models.DateTimeField()
+    event_name = models.CharField(max_length=255, blank=True, default=None)
+    magnitude_maximum = models.CharField(max_length=20, blank=True, default=None)
+    total_event_count = models.CharField(max_length=20, blank=True, default=None)
+    count = models.CharField(max_length=20, blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "du_ibm_qradar_corelated_events_data"
+
+    def __str__(self):
+        return self.domain
+
+
+#2
+class IBMQraderAEPEntraAuthentication(models.Model):
+    id = models.AutoField(primary_key=True)
+    domain = models.ForeignKey(
+        DuIbmQradarTenants,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_aep_authentication",
+    )
+    start_time = models.DateTimeField()
+    event_name = models.CharField(max_length=255, blank=True, default=None)
+    user = models.CharField(max_length=20, blank=True, default=None)
+    low_level_category = models.CharField(max_length=255, blank=True, default=None)
+    total_event_count = models.CharField(max_length=20, blank=True, default=None)
+    count = models.CharField(max_length=20, blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "du_ibm_qradar_aep_authentication_data"
+
+    def __str__(self):
+        return self.domain
+
+
+#3
+class IBMQraderAllowedOutbounds(models.Model):
+    id = models.AutoField(primary_key=True)
+    domain = models.ForeignKey(
+        DuIbmQradarTenants,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_allowed_outbounds",
+    )
+
+    start_time = models.DateTimeField()
+    source_ip = models.CharField(max_length=255, blank=True, default=None)
+    destination_ip = models.CharField(max_length=255, blank=True, default=None)
+    destination_port = models.CharField(max_length=20, blank=True, default=None)
+    destination_country_and_region = models.CharField(max_length=255, blank=True, default=None)
+    count = models.CharField(max_length=20, blank=True, default=None)
+    total_event_count = models.CharField(max_length=20, blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "du_ibm_qradar_allowed_outbounds_data"
+
+    def __str__(self):
+        return self.domain
+
+
 class IBMQradarEventCollector(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)
