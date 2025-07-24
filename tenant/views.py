@@ -1703,10 +1703,10 @@ class IncidentsView(APIView):
                 offense_id = offense_map.get(offense_db_id) if offense_db_id else None
 
                 # Use isoformat() for consistent datetime formatting
-                # created_date = row["created"].isoformat() if row["created"] else "N/A"
-                # created_at_date = (
-                #     row["created_at"].isoformat() if row.get("created_at") else "N/A"
-                # )
+                created_date = row["created"].isoformat() if row["created"] else "N/A"
+                created_at_date = (
+                    row["created_at"].isoformat() if row.get("created_at") else "N/A"
+                )
                 occurred_date = row["occured"].isoformat() if row["occured"] else "N/A"
 
                 description = (
@@ -1726,8 +1726,8 @@ class IncidentsView(APIView):
                         "severity": row["severity"],
                         "priority": row["incident_priority"],
                         "phase": row["incident_phase"],
-                        # "created": created_date,
-                        # "created_at": created_at_date,
+                        "created": created_date,
+                        "created_at": created_at_date,
                         "assignee": row["owner"],
                         "playbook": row["playbook_id"],
                         "occurred": occurred_date,
@@ -2034,11 +2034,11 @@ class IncidentDetailView(APIView):
                     "account": incident["account"],
                     "name": incident["name"],
                     "status": incident["status"],
-                    # "created": (
-                    #     incident["created"].strftime("%Y-%m-%d %I:%M %p")
-                    #     if incident["created"]
-                    #     else "Unknown"
-                    # ),
+                    "created": (
+                        incident["created"].strftime("%Y-%m-%d %I:%M %p")
+                        if incident["created"]
+                        else "Unknown"
+                    ),
                     "modified": (
                         incident["modified"].strftime("%Y-%m-%d %I:%M %p")
                         if incident["modified"]
@@ -2065,7 +2065,7 @@ class IncidentDetailView(APIView):
                     "sla": incident["sla"],
                     "playbook": incident["playbook_id"],
                     "occurred": (
-                        incident["occured"].isoformat()
+                        incident["occured"].strftime("%Y-%m-%d %I:%M %p")
                         if incident["occured"]
                         else "Unknown"
                     ),
@@ -4867,8 +4867,7 @@ class SLASeverityIncidentsView(APIView):
         except Exception as e:
             logger.error(f"Error in SLASeverityIncidentsView: {str(e)}")
             return Response({"error": str(e)}, status=500)
-
-
+        
 class SLASeverityMetricsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5020,7 +5019,6 @@ class SLASeverityMetricsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class SLABreachedIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5121,9 +5119,7 @@ class SLABreachedIncidentsView(APIView):
             end_date_str = request.query_params.get("end_date")
             occurred_start_str = request.query_params.get("occurred_start")
             occurred_end_str = request.query_params.get("occurred_end")
-            show_only = request.query_params.get(
-                "show_only", "all"
-            )  # 'all', 'breached', 'achieved'
+            show_only = request.query_params.get("show_only", "all")  # 'all', 'breached', 'achieved'
 
             date_format = "%Y-%m-%d"
 
@@ -5325,12 +5321,12 @@ class SLABreachedIncidentsView(APIView):
 
                 sla = sla_metrics_dict[level]
                 occured = inc.occured
-
+                
                 # Calculate metrics for all SLA types
                 tta_delta = (inc.incident_tta - occured).total_seconds() / 60
                 ttn_delta = (inc.incident_ttn - occured).total_seconds() / 60
                 ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
-
+                
                 # Determine if breached for the requested SLA type
                 if sla_type == "tta":
                     is_breached = tta_delta > sla.tta_minutes
@@ -5388,6 +5384,11 @@ class SLABreachedIncidentsView(APIView):
                     "mitre_technique": inc.mitre_technique,
                     "configuration_item": inc.configuration_item,
                     "is_breached": is_breached,
+                    
+                    # Conditional datetime fields based on sla_type
+                    "incident_tta": inc.incident_tta.isoformat() if sla_type == "tta" and inc.incident_tta else None,
+                    "incident_ttn": inc.incident_ttn.isoformat() if sla_type == "ttn" and inc.incident_ttn else None,
+                    "incident_ttdn": inc.incident_ttdn.isoformat() if sla_type == "ttdn" and inc.incident_ttdn else None,
                 }
 
                 if is_breached:
@@ -5406,7 +5407,9 @@ class SLABreachedIncidentsView(APIView):
             # Step 11: Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
-            paginated_incidents = paginator.paginate_queryset(result_incidents, request)
+            paginated_incidents = paginator.paginate_queryset(
+                result_incidents, request
+            )
 
             # Step 12: Return response
             return paginator.get_paginated_response(
