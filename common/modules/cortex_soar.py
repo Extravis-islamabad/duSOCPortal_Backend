@@ -480,6 +480,13 @@ class CortexSOAR:
             return False
         if "Incident data:" in content and "CustomFields" in content:
             return False
+
+        if (
+            "Failed to execute" in content
+            and "Traceback" in content
+            and "DemistoException" in content
+        ):
+            return False
         return True
 
     def format_payload_content(self, content: str) -> str:

@@ -184,6 +184,7 @@ def sync_category_wise_data_count(
     except Exception as e:
         logger.error(f"Unexpected error in sync_category_wise_data_count(): {str(e)}")
 
+
 @shared_task
 def sync_sensitive_count_wise_data(
     username: str, password: str, ip_address: str, port: str, integration_id: int
@@ -204,8 +205,8 @@ def sync_sensitive_count_wise_data(
                 )
                 return
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
-            transformed_data = (
-                ibm_qradar._transform_sensitive_data_from_named_fields(data)
+            transformed_data = ibm_qradar._transform_sensitive_data_from_named_fields(
+                data
             )
             if transformed_data:
                 ibm_qradar._insert_sensitive_data(transformed_data)
@@ -217,6 +218,7 @@ def sync_sensitive_count_wise_data(
                 )
     except Exception as e:
         logger.error(f"Unexpected error in sync_sensitive_count_wise_data(): {str(e)}")
+
 
 @shared_task
 def sync_correlated_events_data(
@@ -238,14 +240,13 @@ def sync_correlated_events_data(
                 )
                 return
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+
             transformed_data = (
                 ibm_qradar._transform_corelated_events_data_from_named_fields(data)
             )
             if transformed_data:
                 ibm_qradar._insert_corelated_events_data(transformed_data)
-                logger.info(
-                    "Completed QRadarTasks.sync_correlated_events_data() task"
-                )
+                logger.info("Completed QRadarTasks.sync_correlated_events_data() task")
                 logger.info(
                     f"QRadarTasks.sync_correlated_events_data() task took {time.time() - start} seconds"
                 )
@@ -280,14 +281,13 @@ def sync_aep_entra_failures_data(
             )
             if transformed_data:
                 ibm_qradar._insert_aep_authentication_data(transformed_data)
-                logger.info(
-                    "Completed QRadarTasks.sync_aep_entra_failures_data() task"
-                )
+                logger.info("Completed QRadarTasks.sync_aep_entra_failures_data() task")
                 logger.info(
                     f"QRadarTasks.sync_aep_entra_failures_data() task took {time.time() - start} seconds"
                 )
     except Exception as e:
         logger.error(f"Unexpected error in sync_aep_entra_failures_data(): {str(e)}")
+
 
 @shared_task
 def sync_allowed_outbound_data(
@@ -309,14 +309,13 @@ def sync_allowed_outbound_data(
                 )
                 return
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+
             transformed_data = (
                 ibm_qradar._transform_allowed_outbounds_data_from_named_fields(data)
             )
             if transformed_data:
                 ibm_qradar._insert_allowed_outbounds_data(transformed_data)
-                logger.info(
-                    "Completed QRadarTasks.sync_allowed_outbound_data() task"
-                )
+                logger.info("Completed QRadarTasks.sync_allowed_outbound_data() task")
                 logger.info(
                     f"QRadarTasks.sync_allowed_outbound_data() task took {time.time() - start} seconds"
                 )
@@ -376,6 +375,7 @@ def sync_parent_high_level_category():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
 def sync_top_high_level_category_count_category():
     results = IntegrationCredentials.objects.filter(
@@ -411,6 +411,7 @@ def sync_event_log_assets_categogy():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
 def sync_allowed_outbound_data_categogy():
     results = IntegrationCredentials.objects.filter(
@@ -428,6 +429,7 @@ def sync_allowed_outbound_data_categogy():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
 def sync_aep_entra_failures_data_categogy():
     results = IntegrationCredentials.objects.filter(
@@ -444,7 +446,6 @@ def sync_aep_entra_failures_data_categogy():
             port=result.port,
             integration_id=result.integration.id,
         )
-
 
 
 @shared_task
