@@ -167,7 +167,31 @@ class IBMQraderAllowedOutbounds(models.Model):
 
     def __str__(self):
         return self.domain
+#4
 
+class IBMQraderAllowedInbounds(models.Model):
+    id = models.AutoField(primary_key=True)
+    domain = models.ForeignKey(
+        DuIbmQradarTenants,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_allowed_inbounds",
+    )
+
+    start_time = models.DateTimeField()
+    source_ip = models.CharField(max_length=255, blank=True, default=None)
+    destination_ip = models.CharField(max_length=255, blank=True, default=None)
+    destination_port = models.CharField(max_length=20, blank=True, default=None)
+    destination_country_and_region_count = models.CharField(max_length=255, blank=True, default=None)
+    count = models.CharField(max_length=20, blank=True, default=None)
+    total_event_count = models.CharField(max_length=20, blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "du_ibm_qradar_allowed_inbounds_data"
+
+    def __str__(self):
+        return self.domain
 
 class IBMQradarEventCollector(models.Model):
     id = models.AutoField(primary_key=True)

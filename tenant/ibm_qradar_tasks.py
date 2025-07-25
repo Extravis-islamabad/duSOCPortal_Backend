@@ -321,7 +321,42 @@ def sync_allowed_outbound_data(
                     f"QRadarTasks.sync_allowed_outbound_data() task took {time.time() - start} seconds"
                 )
     except Exception as e:
-        logger.error(f"Unexpected error in sync_aep_entra_failures_data(): {str(e)}")
+        logger.error(f"Unexpected error in sync_allowed_outbound_data(): {str(e)}")
+
+
+@shared_task
+def sync_allowed_inbound_data(
+    username: str, password: str, ip_address: str, port: str, integration_id: int
+):
+    start = time.time()
+    logger.info("Running QRadarTasks.sync_allowed_inbound_data() task")
+    try:
+        with IBMQradar(
+            username=username, password=password, ip_address=ip_address, port=port
+        ) as ibm_qradar:
+            search_id = ibm_qradar._get_do_aql_query(
+                query=IBMQradarConstants.AQL_QUERY_FOR_ALLOWED_INBOUND_DATA
+            )
+            flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
+            if not flag:
+                logger.warning(
+                    f"IBM QRadar EPS sync failed for integration {integration_id}"
+                )
+                return
+            data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+            transformed_data = (
+                ibm_qradar._transform_allowed_inbounds_data(data.get("events"))
+            )
+            if transformed_data:
+                ibm_qradar._insert_allowed_inbounds_data(transformed_data)
+                logger.info(
+                    "Completed QRadarTasks.sync_allowed_inbound_data() task"
+                )
+                logger.info(
+                    f"QRadarTasks.sync_allowed_inbound_data() task took {time.time() - start} seconds"
+                )
+    except Exception as e:
+        logger.error(f"Unexpected error in sync_allowed_inbound_data(): {str(e)}")
 
 
 @shared_task
@@ -396,7 +431,7 @@ def sync_top_high_level_category_count_category():
 
 # adding tasks for above AQL queries
 @shared_task
-def sync_event_log_assets_categogy():
+def sync_event_log_assets_category():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
@@ -412,7 +447,7 @@ def sync_event_log_assets_categogy():
         )
 
 @shared_task
-def sync_allowed_outbound_data_categogy():
+def sync_allowed_outbound_data_category():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
@@ -429,7 +464,7 @@ def sync_allowed_outbound_data_categogy():
         )
 
 @shared_task
-def sync_aep_entra_failures_data_categogy():
+def sync_aep_entra_failures_data_category():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
@@ -445,6 +480,22 @@ def sync_aep_entra_failures_data_categogy():
             integration_id=result.integration.id,
         )
 
+@shared_task
+def sync_allowed_inbound_data_category():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+
+    for result in results:
+        sync_allowed_inbound_data.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
 
 
 @shared_task
@@ -2306,16 +2357,6 @@ def sync_daily_event_counts_for_admin(
 
             if transformed:
                 ibm_qradar._insert_daily_event_count_data(transformed)
-
-
-# @shared_task
-# def sync_domain_events_data(
-#     username, password, ip_address, port
-# ):
-
-
-# domain_names = DuIbmQradarTenants.objects.values_list("name", flat=True)
-# print(domain_names)
 
 
 @shared_task
