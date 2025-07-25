@@ -3292,25 +3292,15 @@ class EPSGraphAPIView(APIView):
             start_str = request.query_params.get("start_date")
             end_str = request.query_params.get("end_date")
             try:
-                start_dubai = dubai_tz.localize(
-                    datetime.strptime(start_str, "%Y-%m-%d")
-                )
-                end_dubai = dubai_tz.localize(
-                    datetime.strptime(end_str, "%Y-%m-%d") - timedelta(days=1)
-                )
-                start_time = start_dubai.astimezone(dt_timezone.utc)
-                end_time = end_dubai.astimezone(dt_timezone.utc)
-                if start_time > end_time:
-                    return Response(
-                        {"error": "Start date must be before end date."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                start_time = datetime.strptime(start_str, "%Y-%m-%d")
+                end_time = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
+                time_trunc = TruncDate("created_at")
             except (ValueError, TypeError):
                 return Response(
                     {"error": "Invalid custom date format. Use YYYY-MM-DD."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            time_trunc = TruncDate("created_at")
+
         else:
             return Response(
                 {"error": "Unsupported filter."}, status=status.HTTP_400_BAD_REQUEST
