@@ -24,6 +24,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import make_aware
 from loguru import logger
+from pytz import timezone as pytz_timezone
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
@@ -3162,143 +3163,14 @@ class EPSCountValuesByDomainAPIView(APIView):
             )
 
 
-# class EPSGraphAPIView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             filter_value = int(
-#                 request.query_params.get("filter_type", FilterType.TODAY.value)
-#             )
-#             filter_enum = FilterType(filter_value)
-#         except (ValueError, KeyError):
-#             return Response(
-#                 {"error": "Invalid filter value."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response(
-#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-#             )
-
-#         now = timezone.now()
-
-#         # Determine time range and truncation
-#         if filter_enum == FilterType.TODAY:
-#             start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-#             time_trunc = TruncHour("created_at")
-#         elif filter_enum == FilterType.WEEK:
-#             start_time = now - timedelta(days=6)
-#             time_trunc = TruncDay("created_at")
-#         elif filter_enum == FilterType.MONTH:
-#             start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-#             time_trunc = TruncDate("created_at")
-#         elif filter_enum == FilterType.YEAR:
-#             start_time = now.replace(
-#                 month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-#             )
-#             time_trunc = TruncDate("created_at")
-#         elif filter_enum == FilterType.QUARTER:
-#             month = (now.month - 1) // 3 * 3 + 1
-#             start_time = now.replace(
-#                 month=month, day=1, hour=0, minute=0, second=0, microsecond=0
-#             )
-#             time_trunc = TruncDate("created_at")
-#         elif filter_enum == FilterType.LAST_6_MONTHS:
-#             start_time = now - timedelta(days=182)
-#             time_trunc = TruncDate("created_at")
-#         elif filter_enum == FilterType.LAST_3_WEEKS:
-#             start_time = now - timedelta(weeks=3)
-#             time_trunc = TruncDate("created_at")
-#         elif filter_enum == FilterType.LAST_MONTH:
-#             first_day_this_month = now.replace(day=1)
-#             last_month = first_day_this_month - timedelta(days=1)
-#             start_time = last_month.replace(day=1)
-#             time_trunc = TruncDate("created_at")
-#         elif filter_enum == FilterType.CUSTOM_RANGE:
-#             start_str = request.query_params.get("start_date")
-#             end_str = request.query_params.get("end_date")
-#             try:
-#                 start_time = datetime.strptime(start_str, "%Y-%m-%d")
-#                 end_time = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
-#                 if start_time > end_time:
-#                     return Response(
-#                         {"error": "Start date must be before end date."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-#             except (ValueError, TypeError):
-#                 return Response(
-#                     {"error": "Invalid custom date format. Use YYYY-MM-DD."},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-#             time_trunc = TruncDate("created_at")
-#         else:
-#             return Response(
-#                 {"error": "Unsupported filter."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-
-#         # Get QRadar domain IDs
-#         qradar_tenant_ids = tenant.company.qradar_mappings.values_list(
-#             "qradar_tenant__id", flat=True
-#         )
-
-#         # If custom range, apply both start and end time
-#         filter_kwargs = {"domain_id__in": qradar_tenant_ids}
-#         if filter_enum == FilterType.CUSTOM_RANGE:
-#             filter_kwargs["created_at__range"] = (start_time, end_time)
-#         else:
-#             filter_kwargs["created_at__gte"] = start_time
-
-#         # Query EPS data
-#         eps_data_raw = (
-#             IBMQradarEPS.objects.filter(**filter_kwargs)
-#             .annotate(interval=time_trunc)
-#             .values("interval")
-#             .annotate(total_eps=Avg("eps"))
-#             .order_by("interval")
-#         )
-
-#         eps_data = [
-#             {
-#                 "interval": entry["interval"],
-#                 "total_eps": float(
-#                     Decimal(entry["total_eps"]).quantize(
-#                         Decimal("0.01"), rounding=ROUND_HALF_UP
-#                     )
-#                 ),
-#             }
-#             for entry in eps_data_raw
-#         ]
-
-#         # Contracted volume info
-#         mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
-#         contracted_volume = mapping.contracted_volume if mapping else None
-#         contracted_volume_type = mapping.contracted_volume_type if mapping else None
-#         contracted_volume_type_display = (
-#             mapping.get_contracted_volume_type_display() if mapping else None
-#         )
-
-#         return Response(
-#             {
-#                 "contracted_volume": contracted_volume,
-#                 "contracted_volume_type": contracted_volume_type,
-#                 "contracted_volume_type_display": contracted_volume_type_display,
-#                 "eps_graph": eps_data,
-#             },
-#             status=200,
-#         )
-
-
 class EPSGraphAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
     def get(self, request):
+        from datetime import datetime, timedelta
+        from datetime import timezone as dt_timezone
+
         try:
             filter_value = int(
                 request.query_params.get("filter_type", FilterType.TODAY.value)
@@ -3317,45 +3189,80 @@ class EPSGraphAPIView(APIView):
             )
 
         now = timezone.now()
+        dubai_tz = pytz_timezone("Asia/Dubai")
+        dubai_now = now.astimezone(dubai_tz)
 
-        # Time range & truncation logic
         if filter_enum == FilterType.TODAY:
-            start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            dubai_midnight = dubai_now.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = dubai_midnight.astimezone(dt_timezone.utc)
             time_trunc = TruncHour("created_at")
+
         elif filter_enum == FilterType.WEEK:
-            start_time = now - timedelta(days=6)
+            start_time_dubai = (dubai_now - timedelta(days=6)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
             time_trunc = TruncDay("created_at")
+
         elif filter_enum == FilterType.MONTH:
-            start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            start_time_dubai = dubai_now.replace(
+                day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
             time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.YEAR:
-            start_time = now.replace(
+            start_time_dubai = dubai_now.replace(
                 month=1, day=1, hour=0, minute=0, second=0, microsecond=0
             )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
             time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.QUARTER:
-            month = (now.month - 1) // 3 * 3 + 1
-            start_time = now.replace(
+            month = (dubai_now.month - 1) // 3 * 3 + 1
+            start_time_dubai = dubai_now.replace(
                 month=month, day=1, hour=0, minute=0, second=0, microsecond=0
             )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
             time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.LAST_6_MONTHS:
-            start_time = now - timedelta(days=182)
+            start_time_dubai = (dubai_now - timedelta(days=182)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
             time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.LAST_3_WEEKS:
-            start_time = now - timedelta(weeks=3)
+            start_time_dubai = (dubai_now - timedelta(weeks=3)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
             time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.LAST_MONTH:
-            first_day_this_month = now.replace(day=1)
+            first_day_this_month = dubai_now.replace(day=1)
             last_month = first_day_this_month - timedelta(days=1)
-            start_time = last_month.replace(day=1)
+            start_time_dubai = last_month.replace(
+                day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
             time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.CUSTOM_RANGE:
             start_str = request.query_params.get("start_date")
             end_str = request.query_params.get("end_date")
             try:
-                start_time = datetime.strptime(start_str, "%Y-%m-%d")
-                end_time = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
+                start_dubai = dubai_tz.localize(
+                    datetime.strptime(start_str, "%Y-%m-%d")
+                )
+                end_dubai = dubai_tz.localize(
+                    datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
+                )
+                start_time = start_dubai.astimezone(dt_timezone.utc)
+                end_time = end_dubai.astimezone(dt_timezone.utc)
                 if start_time > end_time:
                     return Response(
                         {"error": "Start date must be before end date."},
@@ -3394,22 +3301,27 @@ class EPSGraphAPIView(APIView):
         )
 
         # Format EPS data
-        eps_data = [
-            {
-                "interval": entry["interval"],
-                "average_eps": float(
-                    Decimal(entry["average_eps"]).quantize(
-                        Decimal("0.01"), rounding=ROUND_HALF_UP
-                    )
-                ),
-                "peak_eps": float(
-                    Decimal(entry["peak_eps"]).quantize(
-                        Decimal("0.01"), rounding=ROUND_HALF_UP
-                    )
-                ),
-            }
-            for entry in eps_data_raw
-        ]
+        eps_data = []
+        for entry in eps_data_raw:
+            interval_utc = entry["interval"]
+            interval_dubai = interval_utc.astimezone(dubai_tz)
+
+            eps_data.append(
+                {
+                    "interval": interval_utc,
+                    "display_interval": interval_dubai.strftime("%Y-%m-%d %H:%M"),
+                    "average_eps": float(
+                        Decimal(entry["average_eps"]).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                    "peak_eps": float(
+                        Decimal(entry["peak_eps"]).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                }
+            )
 
         # Contracted volume info
         mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
