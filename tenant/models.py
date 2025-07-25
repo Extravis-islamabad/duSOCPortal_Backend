@@ -82,7 +82,9 @@ class IBMQraderSensitiveData(models.Model):
     source_ip = models.CharField(max_length=255, blank=True, default=None)
     destination_ip = models.CharField(max_length=255, blank=True, default=None)
     destination_port = models.CharField(max_length=20, blank=True, default=None)
-    destination_country_and_region = models.CharField(max_length=255, blank=True, default=None)
+    destination_country_and_region = models.CharField(
+        max_length=255, blank=True, default=None
+    )
     count = models.CharField(max_length=20, blank=True, default=None)
     total_event_count = models.CharField(max_length=20, blank=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -95,8 +97,7 @@ class IBMQraderSensitiveData(models.Model):
         return self.domain
 
 
-
-#1
+# 1
 class IBMQraderCorelatedEvents(models.Model):
     id = models.AutoField(primary_key=True)
     domain = models.ForeignKey(
@@ -119,7 +120,7 @@ class IBMQraderCorelatedEvents(models.Model):
         return self.domain
 
 
-#2
+# 2
 class IBMQraderAEPEntraAuthentication(models.Model):
     id = models.AutoField(primary_key=True)
     domain = models.ForeignKey(
@@ -143,7 +144,7 @@ class IBMQraderAEPEntraAuthentication(models.Model):
         return self.domain
 
 
-#3
+# 3
 class IBMQraderAllowedOutbounds(models.Model):
     id = models.AutoField(primary_key=True)
     domain = models.ForeignKey(
@@ -156,7 +157,9 @@ class IBMQraderAllowedOutbounds(models.Model):
     source_ip = models.CharField(max_length=255, blank=True, default=None)
     destination_ip = models.CharField(max_length=255, blank=True, default=None)
     destination_port = models.CharField(max_length=20, blank=True, default=None)
-    destination_country_and_region = models.CharField(max_length=255, blank=True, default=None)
+    destination_country_and_region = models.CharField(
+        max_length=255, blank=True, default=None
+    )
     count = models.CharField(max_length=20, blank=True, default=None)
     total_event_count = models.CharField(max_length=20, blank=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
