@@ -4,6 +4,8 @@ import time
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils import timezone
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from loguru import logger
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -26,14 +28,8 @@ from .serializers import (
 )
 
 
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-
-
 class UserCreateAPIView(APIView):
-    @swagger_auto_schema(
-        request_body=UserCreateSerializer
-    )
+    @swagger_auto_schema(request_body=UserCreateSerializer)
     def post(self, request):
         """
         Creates a new user.
@@ -74,16 +70,13 @@ class UserCreateAPIView(APIView):
 
 class UserLoginAPIView(APIView):
     @swagger_auto_schema(
-
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                'username': openapi.Schema(type=openapi.TYPE_STRING),
-                'password': openapi.Schema(type=openapi.TYPE_STRING),
+                "username": openapi.Schema(type=openapi.TYPE_STRING),
+                "password": openapi.Schema(type=openapi.TYPE_STRING),
             },
-            required=['username', 'password']
-
-
+            required=["username", "password"],
         )
     )
     def post(self, request):
