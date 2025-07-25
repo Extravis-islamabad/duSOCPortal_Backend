@@ -3195,7 +3195,7 @@ class EPSGraphAPIView(APIView):
                 end_date = datetime.strptime(end_str, "%Y-%m-%d")
                 if start_date == end_date:
                     return Response(
-                        {"error": "Start date and end date are the same"},
+                        {"error": "End date should be greater then Start date"},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 if start_date > end_date:
