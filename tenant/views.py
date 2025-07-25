@@ -3296,7 +3296,7 @@ class EPSGraphAPIView(APIView):
                     datetime.strptime(start_str, "%Y-%m-%d")
                 )
                 end_dubai = dubai_tz.localize(
-                    datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
+                    datetime.strptime(end_str, "%Y-%m-%d") - timedelta(days=1)
                 )
                 start_time = start_dubai.astimezone(dt_timezone.utc)
                 end_time = end_dubai.astimezone(dt_timezone.utc)
