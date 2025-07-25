@@ -242,9 +242,7 @@ def sync_correlated_events_data(
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
 
             transformed_data = (
-                ibm_qradar._transform_corelated_events_data_from_named_fields(
-                    data.get("events")
-                )
+                ibm_qradar._transform_corelated_events_data_from_named_fields(data)
             )
             if transformed_data:
                 ibm_qradar._insert_corelated_events_data(transformed_data)
@@ -279,9 +277,7 @@ def sync_aep_entra_failures_data(
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
 
             transformed_data = (
-                ibm_qradar._transform_aep_authentication_data_from_named_fields(
-                    data.get("events")
-                )
+                ibm_qradar._transform_aep_authentication_data_from_named_fields(data)
             )
             if transformed_data:
                 ibm_qradar._insert_aep_authentication_data(transformed_data)
@@ -315,9 +311,7 @@ def sync_allowed_outbound_data(
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
 
             transformed_data = (
-                ibm_qradar._transform_allowed_outbounds_data_from_named_fields(
-                    data.get("events")
-                )
+                ibm_qradar._transform_allowed_outbounds_data_from_named_fields(data)
             )
             if transformed_data:
                 ibm_qradar._insert_allowed_outbounds_data(transformed_data)
