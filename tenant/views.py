@@ -3181,6 +3181,35 @@ class EPSGraphAPIView(APIView):
                 {"error": "Invalid filter value."}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        if filter_enum == FilterType.CUSTOM_RANGE:
+            try:
+                start_str = request.query_params.get("start_date")
+                end_str = request.query_params.get("end_date")
+                if not start_str or not end_str:
+                    return Response(
+                        {"error": "Missing start_date or end_date"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                start_date = datetime.strptime(start_str, "%Y-%m-%d")
+                end_date = datetime.strptime(end_str, "%Y-%m-%d")
+                if start_date == end_date:
+                    return Response(
+                        {"error": "Start date and end date are the same"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if start_date > end_date:
+                    return Response(
+                        {"error": "Start date is after end date"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            except Exception:
+                return Response(
+                    {"error": "Invalid start or end date."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         try:
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
