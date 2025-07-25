@@ -230,7 +230,6 @@ def sync_correlated_events_data(
         with IBMQradar(
             username=username, password=password, ip_address=ip_address, port=port
         ) as ibm_qradar:
-
             search_id = ibm_qradar._get_do_aql_query(
                 query=IBMQradarConstants.AQL_QUERY_FOR_CORRELATED_EVENTS_DATA
             )
@@ -267,7 +266,6 @@ def sync_aep_entra_failures_data(
         with IBMQradar(
             username=username, password=password, ip_address=ip_address, port=port
         ) as ibm_qradar:
-
             search_id = ibm_qradar._get_do_aql_query(
                 query=IBMQradarConstants.AQL_QUERY_FOR_AEP_ENTRA_FAILURES_DATA
             )
@@ -279,7 +277,6 @@ def sync_aep_entra_failures_data(
                 return
 
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
-
 
             transformed_data = (
                 ibm_qradar._transform_aep_authentication_data_from_named_fields(
@@ -306,7 +303,6 @@ def sync_allowed_outbound_data(
         with IBMQradar(
             username=username, password=password, ip_address=ip_address, port=port
         ) as ibm_qradar:
-
             search_id = ibm_qradar._get_do_aql_query(
                 query=IBMQradarConstants.AQL_QUERY_FOR_ALLOWED_OUTBOUND_DATA
             )
@@ -318,7 +314,6 @@ def sync_allowed_outbound_data(
                 return
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
 
-            
             transformed_data = (
                 ibm_qradar._transform_allowed_outbounds_data_from_named_fields(
                     data.get("events")
