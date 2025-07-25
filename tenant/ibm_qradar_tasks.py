@@ -344,7 +344,7 @@ def sync_allowed_inbound_data(
                 return
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
             transformed_data = ibm_qradar._transform_allowed_inbounds_data(
-                data.get("events")
+                data
             )
             if transformed_data:
                 ibm_qradar._insert_allowed_inbounds_data(transformed_data)

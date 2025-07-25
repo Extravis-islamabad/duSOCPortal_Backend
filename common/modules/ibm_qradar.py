@@ -1574,7 +1574,7 @@ class IBMQradar:
         df["source_ip"] = df["Source IP"].astype(str)
         df["destination_ip"] = df["Destination IP"].astype(str)
         df["destination_port"] = df["Destination Port"].astype(str)
-        df["destination_country_and_region"] = (
+        df["destination_country_and_region_count"] = (
             df["Destination Geographic Country/Region (Unique Count)"]
             .fillna("")
             .astype(str)
