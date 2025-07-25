@@ -3302,13 +3302,28 @@ class EPSGraphAPIView(APIView):
 
         # Format EPS data
         eps_data = []
+
         for entry in eps_data_raw:
             interval_utc = entry["interval"]
-            interval_dubai = interval_utc.astimezone(dubai_tz)
+
+            if isinstance(interval_utc, datetime):
+                dt_utc = interval_utc
+            else:
+                dt_utc = datetime.combine(
+                    interval_utc, datetime.min.time(), tzinfo=dt_timezone.utc
+                )
+
+            interval_dubai = dt_utc.astimezone(dubai_tz)
+
+            interval_value = (
+                dt_utc
+                if filter_enum == FilterType.TODAY
+                else dt_utc.replace(hour=20, minute=0, second=0, microsecond=0)
+            )
 
             eps_data.append(
                 {
-                    "interval": interval_utc,
+                    "interval": interval_value.isoformat().replace("+00:00", "Z"),
                     "display_interval": interval_dubai.strftime("%Y-%m-%d %H:%M"),
                     "average_eps": float(
                         Decimal(entry["average_eps"]).quantize(
