@@ -24,6 +24,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import make_aware
 from loguru import logger
+from pytz import timezone as pytz_timezone
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
@@ -43,9 +44,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.ibm_qradar_tasks import sync_parent_high_level_category, sync_sensitive_count_wise_data, \
-    sync_correlated_events_data, sync_aep_entra_failures_data, sync_allowed_outbound_data, sync_allowed_inbound_data
+from tenant.cortex_soar_tasks import sync_notes, sync_notes_for_incident
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -242,26 +241,18 @@ class TestView(APIView):
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
-        # sync_notes()
-        #  sync_correlated_events_data("svc.soc.portal",
-        #  "SeonRx##0@55555",
-        # "10.225.148.146",
-        #  443, 3)
-        #
-        #  sync_aep_entra_failures_data("svc.soc.portal",
-        #                              "SeonRx##0@55555",
-        #                              "10.225.148.146",
-        #                              443, 3)
-        #
-        #  sync_allowed_outbound_data("svc.soc.portal",
-        #                              "SeonRx##0@55555",
-        #                              "10.225.148.146",
-        #                              443, 3)
+        sync_notes()
+        # sync_correlated_events_data(
+        #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
+        # )
 
-        sync_allowed_inbound_data("svc.soc.portal",
-                                    "SeonRx##0@55555",
-                                    "10.225.148.146",
-                                    443, 3)
+        # sync_aep_entra_failures_data(
+        #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
+        # )
+
+        # sync_allowed_outbound_data(
+        #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
+        # )
         # This will delete the tenants and cascade delete related incidents
         # sync_notes()
         # sync_ibm.delay()
@@ -3177,6 +3168,9 @@ class EPSGraphAPIView(APIView):
     permission_classes = [IsTenant]
 
     def get(self, request):
+        from datetime import datetime, timedelta
+        from datetime import timezone as dt_timezone
+
         try:
             filter_value = int(
                 request.query_params.get("filter_type", FilterType.TODAY.value)
@@ -3195,45 +3189,80 @@ class EPSGraphAPIView(APIView):
             )
 
         now = timezone.now()
+        dubai_tz = pytz_timezone("Asia/Dubai")
+        dubai_now = now.astimezone(dubai_tz)
 
-        # Time range & truncation logic
         if filter_enum == FilterType.TODAY:
-            start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            time_trunc = TruncHour("qradar_end_time")
+            dubai_midnight = dubai_now.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = dubai_midnight.astimezone(dt_timezone.utc)
+            time_trunc = TruncHour("created_at")
+
         elif filter_enum == FilterType.WEEK:
-            start_time = now - timedelta(days=6)
-            time_trunc = TruncDay("qradar_end_time")
+            start_time_dubai = (dubai_now - timedelta(days=6)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
+            time_trunc = TruncDay("created_at")
+
         elif filter_enum == FilterType.MONTH:
-            start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            time_trunc = TruncDate("qradar_end_time")
+            start_time_dubai = dubai_now.replace(
+                day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
+            time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.YEAR:
-            start_time = now.replace(
+            start_time_dubai = dubai_now.replace(
                 month=1, day=1, hour=0, minute=0, second=0, microsecond=0
             )
-            time_trunc = TruncDate("qradar_end_time")
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
+            time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.QUARTER:
-            month = (now.month - 1) // 3 * 3 + 1
-            start_time = now.replace(
+            month = (dubai_now.month - 1) // 3 * 3 + 1
+            start_time_dubai = dubai_now.replace(
                 month=month, day=1, hour=0, minute=0, second=0, microsecond=0
             )
-            time_trunc = TruncDate("qradar_end_time")
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
+            time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.LAST_6_MONTHS:
-            start_time = now - timedelta(days=182)
-            time_trunc = TruncDate("qradar_end_time")
+            start_time_dubai = (dubai_now - timedelta(days=182)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
+            time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.LAST_3_WEEKS:
-            start_time = now - timedelta(weeks=3)
-            time_trunc = TruncDate("qradar_end_time")
+            start_time_dubai = (dubai_now - timedelta(weeks=3)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
+            time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.LAST_MONTH:
-            first_day_this_month = now.replace(day=1)
+            first_day_this_month = dubai_now.replace(day=1)
             last_month = first_day_this_month - timedelta(days=1)
-            start_time = last_month.replace(day=1)
-            time_trunc = TruncDate("qradar_end_time")
+            start_time_dubai = last_month.replace(
+                day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_time_dubai.astimezone(dt_timezone.utc)
+            time_trunc = TruncDate("created_at")
+
         elif filter_enum == FilterType.CUSTOM_RANGE:
             start_str = request.query_params.get("start_date")
             end_str = request.query_params.get("end_date")
             try:
-                start_time = datetime.strptime(start_str, "%Y-%m-%d")
-                end_time = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
+                start_dubai = dubai_tz.localize(
+                    datetime.strptime(start_str, "%Y-%m-%d")
+                )
+                end_dubai = dubai_tz.localize(
+                    datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
+                )
+                start_time = start_dubai.astimezone(dt_timezone.utc)
+                end_time = end_dubai.astimezone(dt_timezone.utc)
                 if start_time > end_time:
                     return Response(
                         {"error": "Start date must be before end date."},
@@ -3244,7 +3273,7 @@ class EPSGraphAPIView(APIView):
                     {"error": "Invalid custom date format. Use YYYY-MM-DD."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            time_trunc = TruncDate("qradar_end_time")
+            time_trunc = TruncDate("created_at")
         else:
             return Response(
                 {"error": "Unsupported filter."}, status=status.HTTP_400_BAD_REQUEST
@@ -3258,9 +3287,9 @@ class EPSGraphAPIView(APIView):
         # Filtering logic
         filter_kwargs = {"domain_id__in": qradar_tenant_ids}
         if filter_enum == FilterType.CUSTOM_RANGE:
-            filter_kwargs["qradar_end_time__range"] = (start_time, end_time)
+            filter_kwargs["created_at__range"] = (start_time, end_time)
         else:
-            filter_kwargs["qradar_end_time__gte"] = start_time
+            filter_kwargs["created_at__gte"] = start_time
 
         # Query EPS data
         eps_data_raw = (
@@ -3272,22 +3301,27 @@ class EPSGraphAPIView(APIView):
         )
 
         # Format EPS data
-        eps_data = [
-            {
-                "interval": entry["interval"],
-                "average_eps": float(
-                    Decimal(entry["average_eps"]).quantize(
-                        Decimal("0.01"), rounding=ROUND_HALF_UP
-                    )
-                ),
-                "peak_eps": float(
-                    Decimal(entry["peak_eps"]).quantize(
-                        Decimal("0.01"), rounding=ROUND_HALF_UP
-                    )
-                ),
-            }
-            for entry in eps_data_raw
-        ]
+        eps_data = []
+        for entry in eps_data_raw:
+            interval_utc = entry["interval"]
+            interval_dubai = interval_utc.astimezone(dubai_tz)
+
+            eps_data.append(
+                {
+                    "interval": interval_utc,
+                    "display_interval": interval_dubai.strftime("%Y-%m-%d %H:%M"),
+                    "average_eps": float(
+                        Decimal(entry["average_eps"]).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                    "peak_eps": float(
+                        Decimal(entry["peak_eps"]).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                }
+            )
 
         # Contracted volume info
         mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
