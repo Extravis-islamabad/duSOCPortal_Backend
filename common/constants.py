@@ -354,6 +354,7 @@ class CortexSOARConstants:
         "Impacts",
         "Recommendation",
         "Recommendations",
+        "Rule",
     ]
 
 
