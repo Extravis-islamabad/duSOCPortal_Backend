@@ -1217,7 +1217,6 @@ class OwnerDistributionView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class DashboardView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1304,42 +1303,42 @@ class DashboardView(APIView):
                     ).count(),
                 }
 
-            # Open Incidents (status=1) - Using true positive filters
+            # Open Incidents (status=1) - Using true positive filters with WEEKLY comparison
             if not filter_list or "open" in filter_list:
                 open_count = DUCortexSOARIncidentFinalModel.objects.filter(
                     true_positive_filters, status=1
                 ).count()
 
-                yesterday_open = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=1, created__date=yesterday
+                last_week_open = DUCortexSOARIncidentFinalModel.objects.filter(
+                    true_positive_filters, status=1, created__date__range=[last_week, yesterday]
                 ).count()
 
-                today_open = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=1, created__date=today
+                current_week_open = DUCortexSOARIncidentFinalModel.objects.filter(
+                    true_positive_filters, status=1, created__date__range=[today - timedelta(days=6), today]
                 ).count()
 
                 percent_change = self._calculate_percentage_change(
-                    today_open, yesterday_open, "day"
+                    current_week_open, last_week_open, "week"
                 )
 
                 dashboard_data["open"] = {"count": open_count, "change": percent_change}
 
-            # Closed Incidents (status=2) - Using true positive filters
+            # Closed Incidents (status=2) - Using true positive filters with WEEKLY comparison
             if not filter_list or "closed" in filter_list:
                 closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
                     true_positive_filters, status=2
                 ).count()
 
-                yesterday_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=2, closed__date=yesterday
+                last_week_closed = DUCortexSOARIncidentFinalModel.objects.filter(
+                    true_positive_filters, status=2, closed__date__range=[last_week, yesterday]
                 ).count()
 
-                today_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=2, closed__date=today
+                current_week_closed = DUCortexSOARIncidentFinalModel.objects.filter(
+                    true_positive_filters, status=2, closed__date__range=[today - timedelta(days=6), today]
                 ).count()
 
                 percent_change = self._calculate_percentage_change(
-                    today_closed, yesterday_closed, "day"
+                    current_week_closed, last_week_closed, "week"
                 )
 
                 dashboard_data["closed"] = {
@@ -1437,8 +1436,7 @@ class DashboardView(APIView):
         change = max(-100, min(100, change))  # Bound between -100% and 100%
         direction = "↑" if change >= 0 else "↓"
         return f"{direction} {abs(round(change, 1))}% from previous {period}"
-
-
+    
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
