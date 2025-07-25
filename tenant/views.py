@@ -243,17 +243,22 @@ class TestView(APIView):
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
         # sync_notes()
-        sync_correlated_events_data("svc.soc.portal",
-        "SeonRx##0@55555",
-       "10.225.148.146",
-        443, 3)
+        #  sync_correlated_events_data("svc.soc.portal",
+        #  "SeonRx##0@55555",
+        # "10.225.148.146",
+        #  443, 3)
+        #
+        #  sync_aep_entra_failures_data("svc.soc.portal",
+        #                              "SeonRx##0@55555",
+        #                              "10.225.148.146",
+        #                              443, 3)
+        #
+        #  sync_allowed_outbound_data("svc.soc.portal",
+        #                              "SeonRx##0@55555",
+        #                              "10.225.148.146",
+        #                              443, 3)
 
-        sync_aep_entra_failures_data("svc.soc.portal",
-                                    "SeonRx##0@55555",
-                                    "10.225.148.146",
-                                    443, 3)
-
-        sync_allowed_outbound_data("svc.soc.portal",
+        sync_allowed_inbound_data("svc.soc.portal",
                                     "SeonRx##0@55555",
                                     "10.225.148.146",
                                     443, 3)
