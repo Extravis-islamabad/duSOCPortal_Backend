@@ -1217,6 +1217,7 @@ class OwnerDistributionView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class DashboardView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1310,11 +1311,15 @@ class DashboardView(APIView):
                 ).count()
 
                 last_week_open = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=1, created__date__range=[last_week, yesterday]
+                    true_positive_filters,
+                    status=1,
+                    created__date__range=[last_week, yesterday],
                 ).count()
 
                 current_week_open = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=1, created__date__range=[today - timedelta(days=6), today]
+                    true_positive_filters,
+                    status=1,
+                    created__date__range=[today - timedelta(days=6), today],
                 ).count()
 
                 percent_change = self._calculate_percentage_change(
@@ -1330,11 +1335,15 @@ class DashboardView(APIView):
                 ).count()
 
                 last_week_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=2, closed__date__range=[last_week, yesterday]
+                    true_positive_filters,
+                    status=2,
+                    closed__date__range=[last_week, yesterday],
                 ).count()
 
                 current_week_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=2, closed__date__range=[today - timedelta(days=6), today]
+                    true_positive_filters,
+                    status=2,
+                    closed__date__range=[today - timedelta(days=6), today],
                 ).count()
 
                 percent_change = self._calculate_percentage_change(
@@ -1436,7 +1445,8 @@ class DashboardView(APIView):
         change = max(-100, min(100, change))  # Bound between -100% and 100%
         direction = "↑" if change >= 0 else "↓"
         return f"{direction} {abs(round(change, 1))}% from previous {period}"
-    
+
+
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
