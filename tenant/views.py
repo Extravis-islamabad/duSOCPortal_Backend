@@ -43,9 +43,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.ibm_qradar_tasks import sync_parent_high_level_category, sync_sensitive_count_wise_data, \
-    sync_correlated_events_data, sync_aep_entra_failures_data, sync_allowed_outbound_data
+from tenant.cortex_soar_tasks import sync_notes, sync_notes_for_incident
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -242,21 +240,18 @@ class TestView(APIView):
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
-        # sync_notes()
-        sync_correlated_events_data("svc.soc.portal",
-        "SeonRx##0@55555",
-       "10.225.148.146",
-        443, 3)
+        sync_notes()
+        # sync_correlated_events_data(
+        #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
+        # )
 
-        sync_aep_entra_failures_data("svc.soc.portal",
-                                    "SeonRx##0@55555",
-                                    "10.225.148.146",
-                                    443, 3)
+        # sync_aep_entra_failures_data(
+        #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
+        # )
 
-        sync_allowed_outbound_data("svc.soc.portal",
-                                    "SeonRx##0@55555",
-                                    "10.225.148.146",
-                                    443, 3)
+        # sync_allowed_outbound_data(
+        #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
+        # )
         # This will delete the tenants and cascade delete related incidents
         # sync_notes()
         # sync_ibm.delay()
@@ -2021,7 +2016,7 @@ class IncidentDetailView(APIView):
 
             notes_by_user_dict = defaultdict(list)
             for note in notes:
-                user = note.user or "Unknown"
+                user = note.user or "DBot"
                 notes_by_user_dict[user].append(
                     {
                         "id": note.id,
@@ -4881,7 +4876,8 @@ class SLASeverityIncidentsView(APIView):
         except Exception as e:
             logger.error(f"Error in SLASeverityIncidentsView: {str(e)}")
             return Response({"error": str(e)}, status=500)
-        
+
+
 class SLASeverityMetricsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5033,6 +5029,7 @@ class SLASeverityMetricsView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class SLABreachedIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5133,7 +5130,9 @@ class SLABreachedIncidentsView(APIView):
             end_date_str = request.query_params.get("end_date")
             occurred_start_str = request.query_params.get("occurred_start")
             occurred_end_str = request.query_params.get("occurred_end")
-            show_only = request.query_params.get("show_only", "all")  # 'all', 'breached', 'achieved'
+            show_only = request.query_params.get(
+                "show_only", "all"
+            )  # 'all', 'breached', 'achieved'
 
             date_format = "%Y-%m-%d"
 
@@ -5335,12 +5334,12 @@ class SLABreachedIncidentsView(APIView):
 
                 sla = sla_metrics_dict[level]
                 occured = inc.occured
-                
+
                 # Calculate metrics for all SLA types
                 tta_delta = (inc.incident_tta - occured).total_seconds() / 60
                 ttn_delta = (inc.incident_ttn - occured).total_seconds() / 60
                 ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
-                
+
                 # Determine if breached for the requested SLA type
                 if sla_type == "tta":
                     is_breached = tta_delta > sla.tta_minutes
@@ -5398,11 +5397,16 @@ class SLABreachedIncidentsView(APIView):
                     "mitre_technique": inc.mitre_technique,
                     "configuration_item": inc.configuration_item,
                     "is_breached": is_breached,
-                    
                     # Conditional datetime fields based on sla_type
-                    "incident_tta": inc.incident_tta.isoformat() if sla_type == "tta" and inc.incident_tta else None,
-                    "incident_ttn": inc.incident_ttn.isoformat() if sla_type == "ttn" and inc.incident_ttn else None,
-                    "incident_ttdn": inc.incident_ttdn.isoformat() if sla_type == "ttdn" and inc.incident_ttdn else None,
+                    "incident_tta": inc.incident_tta.isoformat()
+                    if sla_type == "tta" and inc.incident_tta
+                    else None,
+                    "incident_ttn": inc.incident_ttn.isoformat()
+                    if sla_type == "ttn" and inc.incident_ttn
+                    else None,
+                    "incident_ttdn": inc.incident_ttdn.isoformat()
+                    if sla_type == "ttdn" and inc.incident_ttdn
+                    else None,
                 }
 
                 if is_breached:
@@ -5421,9 +5425,7 @@ class SLABreachedIncidentsView(APIView):
             # Step 11: Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
-            paginated_incidents = paginator.paginate_queryset(
-                result_incidents, request
-            )
+            paginated_incidents = paginator.paginate_queryset(result_incidents, request)
 
             # Step 12: Return response
             return paginator.get_paginated_response(
