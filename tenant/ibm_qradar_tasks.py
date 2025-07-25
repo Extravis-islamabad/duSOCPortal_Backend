@@ -343,14 +343,12 @@ def sync_allowed_inbound_data(
                 )
                 return
             data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
-            transformed_data = (
-                ibm_qradar._transform_allowed_inbounds_data(data.get("events"))
+            transformed_data = ibm_qradar._transform_allowed_inbounds_data(
+                data.get("events")
             )
             if transformed_data:
                 ibm_qradar._insert_allowed_inbounds_data(transformed_data)
-                logger.info(
-                    "Completed QRadarTasks.sync_allowed_inbound_data() task"
-                )
+                logger.info("Completed QRadarTasks.sync_allowed_inbound_data() task")
                 logger.info(
                     f"QRadarTasks.sync_allowed_inbound_data() task took {time.time() - start} seconds"
                 )
@@ -482,6 +480,7 @@ def sync_aep_entra_failures_data_category():
             integration_id=result.integration.id,
         )
 
+
 @shared_task
 def sync_allowed_inbound_data_category():
     results = IntegrationCredentials.objects.filter(
@@ -498,6 +497,7 @@ def sync_allowed_inbound_data_category():
             port=result.port,
             integration_id=result.integration.id,
         )
+
 
 @shared_task
 def sync_offenses():
