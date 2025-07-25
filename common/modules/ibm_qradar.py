@@ -26,12 +26,8 @@ from tenant.models import (
     IBMQradarEventCollector,
     IBMQradarLogSourceTypes,
     IBMQradarOffense,
-    IBMQraderAEPEntraAuthentication,
-    IBMQraderAllowedOutbounds,
     IBMQraderCategoryWiseData,
-    IBMQraderCorelatedEvents,
     IBMQraderDomainHighLevelCategoryCount,
-    IBMQraderSensitiveData,
     LastMonthAvgEpsLog,
     MonthlyAvgEpsLog,
     ReconEventLog,
@@ -45,7 +41,8 @@ from tenant.models import (
     TotalEvents,
     TotalTrafficLog,
     WeeklyAvgEpsLog,
-    WeeklyCorrelatedEventLog,
+    WeeklyCorrelatedEventLog, IBMQraderSensitiveData, IBMQraderCorelatedEvents, IBMQraderAEPEntraAuthentication,
+    IBMQraderAllowedOutbounds, IBMQraderAllowedInbounds,
 )
 
 
@@ -1272,19 +1269,12 @@ class IBMQradar:
 
         # Type conversions
         df["domain_id"] = df["domain_id"].astype(int)
-        df["start_time"] = pd.to_datetime(
-            df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce"
-        )
+        df["start_time"] = pd.to_datetime(df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce")
         df["count"] = df["Count"].fillna(0).astype(int).astype(str)
-        df["total_event_count"] = (
-            df["Event Count (Sum)"].fillna(0).astype(int).astype(str)
-        )
+        df["total_event_count"] = df["Event Count (Sum)"].fillna(0).astype(int).astype(str)
 
         # Drop unused raw fields
-        df.drop(
-            columns=["domainname_domainid", "startTime", "Count", "Event Count (Sum)"],
-            inplace=True,
-        )
+        df.drop(columns=["domainname_domainid", "startTime", "Count", "Event Count (Sum)"], inplace=True)
 
         # Rename fields to match model
         df.rename(
@@ -1312,9 +1302,7 @@ class IBMQradar:
                     [IBMQraderSensitiveData(**item) for item in data]
                 )
             logger.info(f"Inserted sensitive data records: {len(data)}")
-            logger.info(
-                f"_insert_sensitive_data() took: {time.time() - start:.2f} seconds"
-            )
+            logger.info(f"_insert_sensitive_data() took: {time.time() - start:.2f} seconds")
         except Exception as e:
             logger.error(f"Error in _insert_sensitive_data(): {str(e)}")
             transaction.set_rollback(True)
@@ -1345,28 +1333,13 @@ class IBMQradar:
 
         # Type conversions
         df["domain_id"] = df["domain_id"].astype(int)
-        df["start_time"] = pd.to_datetime(
-            df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce"
-        )
+        df["start_time"] = pd.to_datetime(df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce")
         df["count"] = df["Count"].fillna(0).astype(int).astype(str)
-        df["total_event_count"] = (
-            df["Event Count (Sum)"].fillna(0).astype(int).astype(str)
-        )
-        df["magnitude_maximum"] = (
-            df["Magnitude (Maximum)"].fillna(0).astype(int).astype(str)
-        )
+        df["total_event_count"] = df["Event Count (Sum)"].fillna(0).astype(int).astype(str)
+        df["magnitude_maximum"] = df["Magnitude (Maximum)"].fillna(0).astype(int).astype(str)
 
         # Drop unused columns
-        df.drop(
-            columns=[
-                "DOMAIN NAME",
-                "startTime",
-                "Count",
-                "Event Count (Sum)",
-                "Magnitude (Maximum)",
-            ],
-            inplace=True,
-        )
+        df.drop(columns=["DOMAIN NAME", "startTime", "Count", "Event Count (Sum)", "Magnitude (Maximum)"], inplace=True)
 
         # Rename to match model
         df.rename(columns={"Event Name": "event_name"}, inplace=True)
@@ -1386,9 +1359,7 @@ class IBMQradar:
                     [IBMQraderCorelatedEvents(**item) for item in data]
                 )
             logger.info(f"Inserted correlated events: {len(data)}")
-            logger.info(
-                f"_insert_corelated_events_data() took: {time.time() - start:.2f} seconds"
-            )
+            logger.info(f"_insert_corelated_events_data() took: {time.time() - start:.2f} seconds")
         except Exception as e:
             logger.error(f"Error in _insert_corelated_events_data(): {str(e)}")
             transaction.set_rollback(True)
@@ -1419,23 +1390,19 @@ class IBMQradar:
 
         # Type conversions
         df["domain_id"] = df["domain_id"].astype(int)
-        df["start_time"] = pd.to_datetime(
-            df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce"
-        )
+        df["start_time"] = pd.to_datetime(df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce")
         df["count"] = df["Count"].fillna(0).astype(int).astype(str)
-        df["total_event_count"] = (
-            df["Event Count (Sum)"].fillna(0).astype(int).astype(str)
-        )
+        df["total_event_count"] = df["Event Count (Sum)"].fillna(0).astype(int).astype(str)
 
         # Drop unused original columns
-        df.drop(
-            columns=["DOMAIN NAME", "startTime", "Count", "Event Count (Sum)"],
-            inplace=True,
-        )
+        df.drop(columns=["DOMAIN NAME", "startTime", "Count", "Event Count (Sum)"], inplace=True)
 
         # Rename to match model
         df.rename(
-            columns={"User": "user", "Low Level Category": "low_level_category"},
+            columns={
+                "User": "user",
+                "Low Level Category": "low_level_category"
+            },
             inplace=True,
         )
 
@@ -1457,9 +1424,7 @@ class IBMQradar:
                     [IBMQraderAEPEntraAuthentication(**item) for item in data]
                 )
             logger.info(f"Inserted AEP authentication records: {len(data)}")
-            logger.info(
-                f"_insert_aep_authentication_data() took: {time.time() - start:.2f} seconds"
-            )
+            logger.info(f"_insert_aep_authentication_data() took: {time.time() - start:.2f} seconds")
         except Exception as e:
             logger.error(f"Error in _insert_aep_authentication_data(): {str(e)}")
             transaction.set_rollback(True)
@@ -1479,7 +1444,7 @@ class IBMQradar:
             "Destination Port",
             "Destination Geographic Country/Region",
             "Event Count (Sum)",
-            "Count",
+            "Count"
         ]
         df = df[[field for field in required_fields if field in df.columns]]
 
@@ -1492,30 +1457,20 @@ class IBMQradar:
 
         # Type conversions
         df["domain_id"] = df["domain_id"].astype(int)
-        df["start_time"] = pd.to_datetime(
-            df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce"
-        )
+        df["start_time"] = pd.to_datetime(df["startTime"], format="%Y-%m-%d %H:%M", errors="coerce")
         df["count"] = df["Count"].fillna(0).astype(int).astype(str)
-        df["total_event_count"] = (
-            df["Event Count (Sum)"].fillna(0).astype(int).astype(str)
-        )
+        df["total_event_count"] = df["Event Count (Sum)"].fillna(0).astype(int).astype(str)
 
         # Drop unused columns
-        df.drop(
-            columns=["domainname_domainid", "startTime", "Count", "Event Count (Sum)"],
-            inplace=True,
-        )
+        df.drop(columns=["domainname_domainid", "startTime", "Count", "Event Count (Sum)"], inplace=True)
 
         # Rename to match model fields
-        df.rename(
-            columns={
-                "Source IP": "source_ip",
-                "Destination IP": "destination_ip",
-                "Destination Port": "destination_port",
-                "Destination Geographic Country/Region": "destination_country_and_region",
-            },
-            inplace=True,
-        )
+        df.rename(columns={
+            "Source IP": "source_ip",
+            "Destination IP": "destination_ip",
+            "Destination Port": "destination_port",
+            "Destination Geographic Country/Region": "destination_country_and_region",
+        }, inplace=True)
 
         return df.to_dict(orient="records")
 
@@ -1532,9 +1487,7 @@ class IBMQradar:
                     [IBMQraderAllowedOutbounds(**item) for item in data]
                 )
             logger.info(f"Inserted allowed outbound records: {len(data)}")
-            logger.info(
-                f"_insert_allowed_outbounds_data() took: {time.time() - start:.2f} seconds"
-            )
+            logger.info(f"_insert_allowed_outbounds_data() took: {time.time() - start:.2f} seconds")
         except Exception as e:
             logger.error(f"Error in _insert_allowed_outbounds_data(): {str(e)}")
             transaction.set_rollback(True)
@@ -1704,6 +1657,8 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error in IBMQRadar._insert_total_events(): {str(e)}")
             transaction.rollback()
+
+
 
     # def _transform_event_count_data(self, data_list, integration_id, domain_id):
     #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)

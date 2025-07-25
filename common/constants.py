@@ -328,6 +328,7 @@ class IBMQradarConstants:
 
     AQL_QUERY_FOR_ALLOWED_OUTBOUND_DATA = """SELECT DATEFORMAT(starttime,'YYYY-MM-dd hh:mm') as 'startTime', DOMAINNAME(domainid),"sourceIP" AS 'Source IP', "destinationIP" AS 'Destination IP', "destinationPort" AS 'Destination Port', "destinationGeographicLocation" AS 'Destination Geographic Country/Region', SUM("eventCount") AS 'Event Count (Sum)', COUNT(*) AS 'Count' from events where ( ( ( (category='4002') or (category='4012') AND ("destinationIP"<'10.0.0.0') or ("destinationIP">'10.255.255.255' and "destinationIP"<'172.16.0.0') or ("destinationIP">'172.31.255.255' and "destinationIP"<'192.168.0.0') or ("destinationIP">'192.168.255.255') ) AND ("deviceType"='20') or ("deviceType"='73') or ("deviceType"='194') or ("deviceType"='206') or ("deviceType"='270') ) AND ("sourceIP">='10.0.0.0' and "sourceIP"<='10.255.255.255') or ("sourceIP">='172.16.0.0' and "sourceIP"<='172.31.255.255') or ("sourceIP">='192.168.0.0' and "sourceIP"<='192.168.255.255') ) GROUP BY "sourceIP", "destinationIP", "destinationPort", "destinationGeographicLocation" order by "Event Count (Sum)" desc LIMIT 50 last 24 hours"""
 
+    AQL_QUERY_FOR_ALLOWED_INBOUND_DATA = """SELECT DATEFORMAT(starttime,'YYYY-MM-dd hh:mm') as 'startTime',DOMAINNAME(domainid),"sourceIP" AS 'Source IP', "destinationIP" AS 'Destination IP', "destinationPort" AS 'Destination Port', UniqueCount("destinationGeographicLocation") AS 'Destination Geographic Country/Region (Unique Count)', SUM("eventCount") AS 'Event Count (Sum)', COUNT(*) AS 'Count' from events where (( ( ( (category='4002') or (category='4012') or (category='4014') AND ("destinationIP">='10.0.0.0' and "destinationIP"<='10.255.255.255') or ("destinationIP">='172.16.0.0' and "destinationIP"<='172.31.255.255') or ("destinationIP">='192.168.0.0' and "destinationIP"<='192.168.255.255') ) AND ("deviceType"='20') or ("deviceType"='73') or ("deviceType"='183') or ("deviceType"='206') or ("deviceType"='273') ) AND ("sourceIP"<'10.0.0.0') or ("sourceIP">'10.255.255.255' and "sourceIP"<'172.16.0.0') or ("sourceIP">'172.31.255.255' and "sourceIP"<'192.168.0.0') or ("sourceIP">'192.168.255.255') ) AND "Source IP" <> '127.0.0.1') AND "Destination IP" <> '0.0.0.0' GROUP BY "sourceIP", "destinationIP", "destinationPort" order by "Count" desc LIMIT 50 last 24 hours"""
 
 class ITSMConstants:
     ITSM_START_INDEX = 1
@@ -354,7 +355,6 @@ class CortexSOARConstants:
         "Impacts",
         "Recommendation",
         "Recommendations",
-        "Rule",
     ]
 
 
