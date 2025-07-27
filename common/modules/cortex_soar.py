@@ -302,7 +302,7 @@ class CortexSOAR:
                 account=entry.get("account"),
                 name=entry.get("name"),
                 status=entry.get("status"),
-                reason=entry.get("qradarclosereason"),
+                reason=custom.get("qradarclosereason"),
                 occured=self.safe_parse_datetime(entry.get("occurred")),
                 closed=self.safe_parse_datetime(entry.get("closed")),
                 sla=entry.get("sla"),
