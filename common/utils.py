@@ -81,6 +81,17 @@ class DBMappings:
         )
 
 
+from datetime import datetime
+
+
+def extract_start_datetime(filename):
+    try:
+        start_str = filename.split("_to_")[0].replace("from_", "")
+        return datetime.strptime(start_str, "%Y-%m-%d %H_%M_%S")
+    except Exception:
+        return None  # or raise
+
+
 class LDAP:
     @staticmethod
     def get_connection():

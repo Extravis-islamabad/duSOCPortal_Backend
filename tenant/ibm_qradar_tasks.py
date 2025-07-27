@@ -1,11 +1,15 @@
+import os
 import time
 from datetime import timedelta
+from pathlib import Path
 
+import pandas as pd
 from celery import shared_task
 from loguru import logger
 
 from common.constants import IBMQradarConstants
 from common.modules.ibm_qradar import IBMQradar
+from common.utils import extract_start_datetime
 from integration.models import (
     CredentialTypes,
     IntegrationCredentials,
@@ -580,6 +584,58 @@ def sync_eps_for_domain(
 
 
 @shared_task
+def sync_eps_for_domain_historical(
+    username: str, password: str, ip_address: str, port: int, integration_id: int
+):
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        path = "dump_files"
+        csv_files = [
+            f for f in os.listdir(path) if f.endswith(".csv") and f.startswith("from_")
+        ]
+
+        sorted_csvs = sorted(
+            [f for f in csv_files if extract_start_datetime(f)],
+            key=lambda f: extract_start_datetime(f),
+        )
+
+        for filename in reversed(sorted_csvs):
+            if filename == "from_2025-07-19 00_00_00_to_2025-07-19 23_59_59.csv":
+                continue
+            print(f"Processing file: {filename}")
+            file_path = Path(path) / filename
+            try:
+                df = pd.read_csv(file_path)
+            except Exception as e:
+                logger.error(f"Failed to read {filename}: {e}")
+                continue
+
+            transformed_data = (
+                ibm_qradar._transform_eps_data_from_named_fields_historical(
+                    data_list=df, integration=integration_id
+                )
+            )
+
+            if transformed_data:
+                ibm_qradar._insert_eps(transformed_data)
+                logger.info(f"Inserted EPS data from {filename}")
+            else:
+                logger.warning(f"No EPS data to insert from {filename}")
+
+        # logger.info("Completed QRadarTasks.sync_eps_for_domain_historical task")
+        # df = pd.read_csv(f"{path}/{sorted_csvs[-1]}")
+
+        # transformed_data = ibm_qradar._transform_eps_data_from_named_fields_historical(
+        #     data_list=df, integration=integration_id
+        # )
+        # if transformed_data:
+        #     ibm_qradar._insert_eps(transformed_data)
+
+        #     logger.info("Completed QRadarTasks.sync_eps_for_domain() task")
+
+
+@shared_task
 def sync_geo_location_child(
     username: str, password: str, ip_address: str, port: int, integration_id: int
 ):
@@ -616,7 +672,14 @@ def sync_ibm_tenant_eps():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
     for result in results:
-        sync_eps_for_domain.delay(
+        # sync_eps_for_domain.delay(
+        #     username=result.username,
+        #     password=result.password,
+        #     ip_address=result.ip_address,
+        #     port=result.port,
+        #     integration_id=result.integration.id,
+        # )
+        sync_eps_for_domain_historical(
             username=result.username,
             password=result.password,
             ip_address=result.ip_address,

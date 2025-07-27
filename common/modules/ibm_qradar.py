@@ -1068,6 +1068,140 @@ class IBMQradar:
         results = response.json().get("events", [])
         return results
 
+    # TODO : We have to work here FOR EPS
+
+    def _transform_eps_data_from_named_fields_historical(self, data_list, integration):
+        """
+        Transforms 24hr EPS data into 5-minute interval records
+        grouped by client + hostname + 5-minute windows.
+        """
+        df = pd.DataFrame(data_list)
+
+        # Convert 'Time' to datetime and floor to 5-minute intervals
+        df["Time"] = pd.to_datetime(df["Time"], format="%Y-%m-%d %H:%M:%S")
+        df["Time_5min"] = df["Time"].dt.floor("5min")
+
+        # Group by client + hostname + 5-min interval
+        grouped = (
+            df.groupby(["client", "Time_5min"])
+            .agg(peak_eps=("Value", "max"), average_eps=("Value", "mean"))
+            .reset_index()
+        )
+
+        # Map client to domain ID
+        domain_map = DBMappings.get_name_to_id_mapping(DuIbmQradarTenants)
+        grouped["domain_id"] = grouped["client"].map(domain_map)
+        grouped.dropna(subset=["domain_id"], inplace=True)
+        grouped["domain_id"] = grouped["domain_id"].astype(int)
+
+        # Add integration_id and rename Time_5min
+        grouped["integration_id"] = integration
+        grouped.rename(columns={"Time_5min": "qradar_end_time"}, inplace=True)
+        grouped["created_at"] = grouped["qradar_end_time"]
+        # Optional: drop client if not needed
+        grouped.drop(columns=["client"], inplace=True)
+
+        return grouped.to_dict(orient="records")
+
+    # def _transform_eps_data_from_named_fields_historical(self, data_list, integration):
+    #     """
+    #     Transforms 24hr EPS data into 5-minute interval summaries,
+    #     aggregates per hostname, then per client.
+    #     """
+    #     df = pd.DataFrame(data_list)
+
+    #     # Parse and floor timestamps to 5-minutes
+    #     df["Time"] = pd.to_datetime(df["Time"], format="%Y-%m-%d %H:%M:%S")
+    #     df["Time_5min"] = df["Time"].dt.floor("5min")
+
+    #     # Step 1: Group by client + hostname + 5-min interval
+    #     interval_grouped = (
+    #         df.groupby(["client", "Hostname", "Time_5min"])
+    #         .agg(
+    #             peak_eps=("Value", "max"),
+    #             average_eps=("Value", "mean")
+    #         )
+    #         .reset_index()
+    #     )
+
+    #     # Step 2: Group by client (combine all hostnames and intervals)
+    #     eps_summary = (
+    #         interval_grouped.groupby("client")
+    #         .agg(
+    #             peak_eps=("peak_eps", "sum"),
+    #             average_eps=("average_eps", "sum"),
+    #             qradar_end_time=("Time_5min", "min")  # or 'max' if you want latest
+    #         )
+    #         .reset_index()
+    #     )
+
+    #     # Map client to tenant (domain) ID
+    #     domain_map = DBMappings.get_name_to_id_mapping(DuIbmQradarTenants)
+    #     eps_summary["tenant_id"] = eps_summary["client"].map(domain_map)
+    #     eps_summary.dropna(subset=["tenant_id"], inplace=True)
+
+    #     # Final adjustments
+    #     eps_summary["integration_id"] = integration
+    #     eps_summary.rename(columns={
+    #         "tenant_id": "domain_id",
+    #     }, inplace=True)
+    #     eps_summary["domain_id"] = eps_summary["domain_id"].astype(int)
+
+    #     return eps_summary.to_dict(orient="records")
+
+    # def _transform_eps_data_from_named_fields_historical(self, data_list, integration, date=None):
+    #     """
+    #     Transforms 24hr EPS data into 5-minute interval summaries,
+    #     aggregates per hostname, then per client.
+    #     """
+    #     df = pd.DataFrame(data_list)
+
+    #     # Parse and round down to 5-min bins
+    #     df["Time"] = pd.to_datetime(df["Time"], format="%Y-%m-%d %H:%M:%S")
+    #     df["Time_5min"] = df["Time"].dt.floor("5min")
+
+    #     # Step 1: Group by client + hostname + 5min bin
+    #     interval_grouped = (
+    #         df.groupby(["client", "Hostname", "Time_5min"])
+    #         .agg({
+    #             "Value": "first",  # optional, or drop
+    #             "Peak EPS": "max",
+    #             "Average EPS": "mean",
+    #         })
+    #         .reset_index()
+    #     )
+
+    #     # Step 2: Group by client to summarize across all bins
+    #     eps_summary = (
+    #         interval_grouped.groupby("client")
+    #         .agg({
+    #             "Peak EPS": "sum",
+    #             "Average EPS": "sum",
+    #             "Time_5min": "min",  # or 'max' depending on use case
+    #         })
+    #         .reset_index()
+    #     )
+
+    #     # Map client names to domain IDs
+    #     domain_map = DBMappings.get_name_to_id_mapping(DuIbmQradarTenants)
+    #     eps_summary["tenant_id"] = eps_summary["client"].map(domain_map)
+    #     eps_summary.dropna(subset=["tenant_id"], inplace=True)
+
+    #     eps_summary["integration_id"] = integration
+    #     eps_summary["qradar_end_time"] = eps_summary["Time_5min"]
+    #     eps_summary.drop(columns=["Time_5min", "client"], inplace=True)
+
+    #     # Rename for model compatibility
+    #     eps_summary.rename(columns={
+    #         "Peak EPS": "peak_eps",
+    #         "Average EPS": "average_eps",
+    #         "tenant_id": "domain_id",
+    #     }, inplace=True)
+
+    #     eps_summary["domain_id"] = eps_summary["domain_id"].astype(int)
+
+    #     return eps_summary.to_dict(orient="records")
+
     def _transform_eps_data_from_named_fields(self, data_list, integration):
         """
         Transforms EPS data using client name and hostname to model foreign keys.
