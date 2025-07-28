@@ -926,7 +926,7 @@ class SeverityDistributionView(APIView):
             total_incident_filters = true_positive_filters | false_positive_filters
 
             # Define our severity levels (P1-P4)
-            SEVERITY_LEVELS = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
+            SEVERITY_LEVELS = {1: "1", 2: "2", 3: "3", 4: "4"}
 
             # Get counts for each severity level using the exact same filters as total incidents
             severity_counts = (
