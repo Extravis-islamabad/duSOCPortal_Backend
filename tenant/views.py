@@ -43,7 +43,8 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_notes_for_incident, sync_requests_for_soar
+from tenant.cortex_soar_tasks import sync_notes_for_incident
+from tenant.ibm_qradar_tasks import sync_ibm_tenant_eps
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -237,10 +238,11 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
+        sync_ibm_tenant_eps()
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
-        sync_requests_for_soar()
+        # sync_requests_for_soar()
         # sync_correlated_events_data(
         #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
         # )
@@ -1904,65 +1906,65 @@ class IncidentDetailView(APIView):
                 except (json.JSONDecodeError, TypeError):
                     source_ips = []
 
-            log_source_types = []
-            if incident["log_source_type"]:
-                try:
-                    log_source_types = (
-                        json.loads(incident["log_source_type"])
-                        if isinstance(incident["log_source_type"], str)
-                        else incident["log_source_type"]
-                    )
-                except (json.JSONDecodeError, TypeError):
-                    log_source_types = []
+            # log_source_types = []
+            # if incident["log_source_type"]:
+            #     try:
+            #         log_source_types = (
+            #             json.loads(incident["log_source_type"])
+            #             if isinstance(incident["log_source_type"], str)
+            #             else incident["log_source_type"]
+            #         )
+            #     except (json.JSONDecodeError, TypeError):
+            #         log_source_types = []
 
             # Create related items
             related_items = {"alerts": [], "users": [], "assets": []}
 
-            if incident["list_of_rules_offense"]:
-                try:
-                    rules = (
-                        json.loads(incident["list_of_rules_offense"])
-                        if isinstance(incident["list_of_rules_offense"], str)
-                        else incident["list_of_rules_offense"]
-                    )
-                    # Handle list of strings
-                    if isinstance(rules, list) and all(
-                        isinstance(rule, str) for rule in rules
-                    ):
-                        for rule in rules[:5]:  # Limit to first 5
-                            related_items["alerts"].append(
-                                {"title": "Rule", "subtitle": rule or "Unknown Rule"}
-                            )
-                    # Handle list of dictionaries
-                    elif isinstance(rules, list):
-                        for rule in rules[:5]:
-                            rule_id = (
-                                rule.get("id", "Unknown")
-                                if isinstance(rule, dict)
-                                else "Unknown"
-                            )
-                            rule_name = (
-                                rule.get("name", "Unknown Rule")
-                                if isinstance(rule, dict)
-                                else str(rule)
-                            )
-                            related_items["alerts"].append(
-                                {"title": f"Rule {rule_id}", "subtitle": rule_name}
-                            )
-                    else:
-                        related_items["alerts"].append(
-                            {
-                                "title": "Associated Rules",
-                                "subtitle": "See incident details",
-                            }
-                        )
-                except (json.JSONDecodeError, TypeError):
-                    related_items["alerts"].append(
-                        {
-                            "title": "Associated Rules",
-                            "subtitle": "See incident details",
-                        }
-                    )
+            # if incident["list_of_rules_offense"]:
+            #     try:
+            #         rules = (
+            #             json.loads(incident["list_of_rules_offense"])
+            #             if isinstance(incident["list_of_rules_offense"], str)
+            #             else incident["list_of_rules_offense"]
+            #         )
+            #         # Handle list of strings
+            #         if isinstance(rules, list) and all(
+            #             isinstance(rule, str) for rule in rules
+            #         ):
+            #             for rule in rules[:5]:  # Limit to first 5
+            #                 related_items["alerts"].append(
+            #                     {"title": "Rule", "subtitle": rule or "Unknown Rule"}
+            #                 )
+            #         # Handle list of dictionaries
+            #         elif isinstance(rules, list):
+            #             for rule in rules[:5]:
+            #                 rule_id = (
+            #                     rule.get("id", "Unknown")
+            #                     if isinstance(rule, dict)
+            #                     else "Unknown"
+            #                 )
+            #                 rule_name = (
+            #                     rule.get("name", "Unknown Rule")
+            #                     if isinstance(rule, dict)
+            #                     else str(rule)
+            #                 )
+            #                 related_items["alerts"].append(
+            #                     {"title": f"Rule {rule_id}", "subtitle": rule_name}
+            #                 )
+            #         else:
+            #             related_items["alerts"].append(
+            #                 {
+            #                     "title": "Associated Rules",
+            #                     "subtitle": "See incident details",
+            #                 }
+            #             )
+            #     except (json.JSONDecodeError, TypeError):
+            #         related_items["alerts"].append(
+            #             {
+            #                 "title": "Associated Rules",
+            #                 "subtitle": "See incident details",
+            #             }
+            #         )
 
             ticket_id = None
             ticket_db_id = None
@@ -1984,10 +1986,6 @@ class IncidentDetailView(APIView):
             else:
                 offense_id = offenses.id
             source_ips_str = ", ".join(source_ips) if source_ips else "Unknown"
-            log_source_type_str = (
-                ", ".join(log_source_types) if log_source_types else "Unknown"
-            )
-
             account_name = f"acc_{incident['account']}"
             notes = DUSoarNotes.objects.filter(
                 incident_id=incident["id"],
@@ -2062,7 +2060,7 @@ class IncidentDetailView(APIView):
                         "priority": incident["incident_priority"] or None,
                         "severity": incident["severity"],
                         "sourceIPs": source_ips_str,
-                        "logSourceType": log_source_type_str,
+                        "logSourceType": incident["log_source_type"],
                         "category": incident["qradar_category"] or None,
                         "sub_category": incident["qradar_sub_category"] or None,
                         "mitre_tactic": incident["mitre_tactic"],
@@ -2086,6 +2084,8 @@ class IncidentDetailView(APIView):
                     "ttn": incident["incident_ttn"],
                     "ttdn": incident["incident_ttdn"],
                     "notes": notes_by_user,
+                    "list_of_rules_offense": incident["list_of_rules_offense"],
+                    "closing_reason": incident["reason"],
                 }
             }
 
