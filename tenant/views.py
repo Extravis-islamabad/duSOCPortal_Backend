@@ -2888,7 +2888,7 @@ class TopLogSourcesAPIView(APIView):
                 )
                 .annotate(offense_count=Count("du_ibm_qradar_offenses"))
                 .order_by("-offense_count")
-                .values("id", "db_id", "name", "description", "offense_count")[:5]
+                .values("id", "db_id", "name", "description", "offense_count")[:10]
             )
 
             # Step 4: Format the response
