@@ -3157,13 +3157,14 @@ class EPSCountValuesByDomainAPIView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+
 class EPSGraphAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
     def get(self, request):
+        from django.db.models.functions import TruncMonth, TruncWeek
         from pytz import timezone as pytz_timezone
-        from django.db.models.functions import TruncWeek, TruncMonth
 
         try:
             filter_value = int(
@@ -3204,14 +3205,26 @@ class EPSGraphAPIView(APIView):
         elif filter_enum == FilterType.QUARTER:
             # Show 3 full months - current month and 2 previous months
             # If current month is July, show May, June, July
-            start_of_current_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            start_of_current_month = now.replace(
+                day=1, hour=0, minute=0, second=0, microsecond=0
+            )
             # Go back 2 months from start of current month
             if start_of_current_month.month >= 3:
-                start_time = start_of_current_month.replace(month=start_of_current_month.month - 2)
+                start_time = start_of_current_month.replace(
+                    month=start_of_current_month.month - 2
+                )
             else:
                 # Handle year boundary
-                year = start_of_current_month.year - 1 if start_of_current_month.month <= 2 else start_of_current_month.year
-                month = start_of_current_month.month + 10 if start_of_current_month.month <= 2 else start_of_current_month.month - 2
+                year = (
+                    start_of_current_month.year - 1
+                    if start_of_current_month.month <= 2
+                    else start_of_current_month.year
+                )
+                month = (
+                    start_of_current_month.month + 10
+                    if start_of_current_month.month <= 2
+                    else start_of_current_month.month - 2
+                )
                 start_time = start_of_current_month.replace(year=year, month=month)
             time_trunc = TruncMonth("created_at")  # Group by month to get 3 data points
         elif filter_enum == FilterType.YEAR:
@@ -3219,7 +3232,9 @@ class EPSGraphAPIView(APIView):
             start_time = now.replace(
                 month=1, day=1, hour=0, minute=0, second=0, microsecond=0
             )
-            time_trunc = TruncMonth("created_at")  # Group by month to get 12 data points
+            time_trunc = TruncMonth(
+                "created_at"
+            )  # Group by month to get 12 data points
         elif filter_enum == FilterType.LAST_6_MONTHS:
             start_time = now - timedelta(days=182)
             time_trunc = TruncDate("created_at")
@@ -3291,20 +3306,22 @@ class EPSGraphAPIView(APIView):
                 interval_str = entry["interval"].strftime("%B")
             else:
                 interval_str = entry["interval"].strftime("%Y-%m-%d")
-            
-            eps_data.append({
-                "interval": interval_str,
-                "average_eps": float(
-                    Decimal(entry["average_eps"]).quantize(
-                        Decimal("0.01"), rounding=ROUND_HALF_UP
-                    )
-                ),
-                "peak_eps": float(
-                    Decimal(entry["peak_eps"]).quantize(
-                        Decimal("0.01"), rounding=ROUND_HALF_UP
-                    )
-                ),
-            })
+
+            eps_data.append(
+                {
+                    "interval": interval_str,
+                    "average_eps": float(
+                        Decimal(entry["average_eps"]).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                    "peak_eps": float(
+                        Decimal(entry["peak_eps"]).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                }
+            )
 
         # Contracted volume info
         mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
@@ -3323,6 +3340,8 @@ class EPSGraphAPIView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
 class AlertListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
