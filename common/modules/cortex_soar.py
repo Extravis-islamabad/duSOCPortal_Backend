@@ -470,6 +470,8 @@ class CortexSOAR:
 
         if stripped.startswith("payload:") or stripped.startswith("analysis:"):
             return True
+        if stripped.startswith("payload") or stripped.startswith("analysis"):
+            return True
 
         if not self.field_pattern.search(content):
             return False
