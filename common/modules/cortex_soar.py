@@ -465,41 +465,35 @@ class CortexSOAR:
         return data
 
     def is_structured_note(self, content: str) -> bool:
-        """Heuristic to keep only clean, original notes, not echoed commands or artifacts."""
+        """Heuristic to keep only clean, original notes, not echoed commands, raw dumps or artifacts."""
+        stripped = content.strip().lower()
+
+        if stripped.startswith("payload:") or stripped.startswith("analysis:"):
+            return True
+
         if not self.field_pattern.search(content):
             return False
-        stripped = content.strip()
 
-        if stripped.startswith("Payload:"):
-            return True
         if stripped.startswith("!") or stripped.startswith("{"):
             return False
-        if 'note_entry="' in content or '\\"' in content or '\\"' in content:
+
+        if 'note_entry="' in content or '\\"' in content:
             return False
+
         if "### " in content or stripped.startswith("|") or "Offenses List" in content:
             return False
+
         if "Incident data:" in content and "CustomFields" in content:
-            return False
+            return False  # Raw incident object dump
 
         if (
             "Failed to execute" in content
             and "Traceback" in content
             and "DemistoException" in content
         ):
-            return False
-        return True
+            return False  # Suppress command error traces
 
-    def format_payload_content(self, content: str) -> str:
-        """Reformat raw Payload:\n{json} into readable pretty-printed JSON."""
-        if content.strip().startswith("Payload:"):
-            _, _, payload_str = content.partition("Payload:")
-            try:
-                parsed = json.loads(payload_str.strip())
-                pretty = json.dumps(parsed, indent=2)
-                return f"Payload:\n{pretty}"
-            except Exception:
-                return content  # fallback: store as-is if malformed
-        return content
+        return True
 
     def _transform_notes_data(
         self, entries: list, incident_id, integration_id, account
@@ -523,7 +517,6 @@ class CortexSOAR:
             except (IndexError, ValueError):
                 continue  # Skip malformed db_id
 
-            # formatted_content = self.format_payload_content(content)
             records.append(
                 DUSoarNotes(
                     db_id=db_id,
