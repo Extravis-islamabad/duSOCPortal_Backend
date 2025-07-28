@@ -2041,15 +2041,13 @@ class IncidentDetailView(APIView):
                     "account": incident["account"],
                     "name": incident["name"],
                     "status": incident["status"],
-                    "created": (
-                        incident["created"].strftime("%Y-%m-%d %I:%M %p")
-                        if incident["created"]
-                        else "Unknown"
-                    ),
+                    # "created": (
+                    #     incident["created"].strftime("%Y-%m-%d %I:%M %p")
+                    #     if incident["created"]
+                    #     else "Unknown"
+                    # ),
                     "modified": (
-                        incident["modified"].strftime("%Y-%m-%d %I:%M %p")
-                        if incident["modified"]
-                        else "Unknown"
+                        incident["modified"] if incident["modified"] else "Unknown"
                     ),
                     "assignee": (
                         "N/A" if incident["owner"] == " " else incident["owner"]
@@ -2072,9 +2070,7 @@ class IncidentDetailView(APIView):
                     "sla": incident["sla"],
                     "playbook": incident["playbook_id"],
                     "occurred": (
-                        incident["occured"].strftime("%Y-%m-%d %I:%M %p")
-                        if incident["occured"]
-                        else "Unknown"
+                        incident["occured"] if incident["occured"] else "Unknown"
                     ),
                     "offense_id": offense_id,
                     "offense_db_id": offense_db_id,
