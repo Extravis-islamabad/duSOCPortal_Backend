@@ -1852,7 +1852,7 @@ class IncidentDetailView(APIView):
                     {
                         "icon": "add_alert",
                         "title": "Incident created",
-                        "time": incident["created"].strftime("%I:%M %p"),
+                        "time": incident["created"],
                         "description": "System created the incident",
                         "detail": f"Source: {incident['qradar_category'] or 'SIEM Alert'}",
                     }
@@ -1863,7 +1863,7 @@ class IncidentDetailView(APIView):
                     {
                         "icon": "person",
                         "title": "Assigned",
-                        "time": incident["modified"].strftime("%I:%M %p"),
+                        "time": incident["modified"],
                         "description": f"Incident assigned to {incident['owner']}",
                         "detail": "Action: Changed assignee from Unassigned",
                     }
@@ -1874,7 +1874,7 @@ class IncidentDetailView(APIView):
                     {
                         "icon": "task_alt",
                         "title": "Incident closed",
-                        "time": incident["closed"].strftime("%I:%M %p"),
+                        "time": incident["closed"],
                         "description": f"Closed by {incident['closing_user_id'] or 'System'}",
                         "detail": f"Reason: {incident['reason'] or 'Not specified'}",
                     }
@@ -1885,7 +1885,7 @@ class IncidentDetailView(APIView):
                     {
                         "icon": "schedule",
                         "title": "Incident acknowledged",
-                        "time": incident["incident_tta"].strftime("%I:%M %p"),
+                        "time": incident["incident_tta"],
                         "description": "Time to acknowledge recorded",
                         "detail": f"TTA: {incident['tta_calculation'] or 'Standard calculation'}",
                     }
