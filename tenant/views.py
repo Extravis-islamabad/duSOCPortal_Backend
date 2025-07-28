@@ -3158,12 +3158,158 @@ class EPSCountValuesByDomainAPIView(APIView):
             )
 
 
+# class EPSGraphAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         from pytz import timezone as pytz_timezone
+
+#         try:
+#             filter_value = int(
+#                 request.query_params.get("filter_type", FilterType.TODAY.value)
+#             )
+#             filter_enum = FilterType(filter_value)
+#         except (ValueError, KeyError):
+#             return Response(
+#                 {"error": "Invalid filter value."}, status=status.HTTP_400_BAD_REQUEST
+#             )
+
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         now = timezone.now()
+
+#         # Time range & truncation logic
+#         if filter_enum == FilterType.TODAY:
+#             dubai_tz = pytz_timezone("Asia/Dubai")
+#             dubai_now = now.astimezone(dubai_tz)
+#             dubai_midnight = dubai_now.replace(
+#                 hour=0, minute=0, second=0, microsecond=0
+#             )
+#             # Convert back to UTC for filtering the UTC-based DB
+#             start_time = dubai_midnight.astimezone(pytz_timezone("UTC"))
+#             time_trunc = TruncHour("created_at")
+#         elif filter_enum == FilterType.WEEK:
+#             start_time = now - timedelta(days=6)
+#             time_trunc = TruncDay("created_at")
+#         elif filter_enum == FilterType.MONTH:
+#             start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+#             time_trunc = TruncDate("created_at")
+#         elif filter_enum == FilterType.YEAR:
+#             start_time = now.replace(
+#                 month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+#             )
+#             time_trunc = TruncDate("created_at")
+#         elif filter_enum == FilterType.QUARTER:
+#             month = (now.month - 1) // 3 * 3 + 1
+#             start_time = now.replace(
+#                 month=month, day=1, hour=0, minute=0, second=0, microsecond=0
+#             )
+#             time_trunc = TruncDate("created_at")
+#         elif filter_enum == FilterType.LAST_6_MONTHS:
+#             start_time = now - timedelta(days=182)
+#             time_trunc = TruncDate("created_at")
+#         elif filter_enum == FilterType.LAST_3_WEEKS:
+#             start_time = now - timedelta(weeks=3)
+#             time_trunc = TruncDate("created_at")
+#         elif filter_enum == FilterType.LAST_MONTH:
+#             first_day_this_month = now.replace(day=1)
+#             last_month = first_day_this_month - timedelta(days=1)
+#             start_time = last_month.replace(day=1)
+#             time_trunc = TruncDate("created_at")
+#         elif filter_enum == FilterType.CUSTOM_RANGE:
+#             start_str = request.query_params.get("start_date")
+#             end_str = request.query_params.get("end_date")
+#             try:
+#                 start_time = datetime.strptime(start_str, "%Y-%m-%d")
+#                 end_time = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
+#                 if start_time > end_time:
+#                     return Response(
+#                         {"error": "Start date must be before end date."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+#             except (ValueError, TypeError):
+#                 return Response(
+#                     {"error": "Invalid custom date format. Use YYYY-MM-DD."},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+#             time_trunc = TruncDate("created_at")
+#         else:
+#             return Response(
+#                 {"error": "Unsupported filter."}, status=status.HTTP_400_BAD_REQUEST
+#             )
+
+#         # Domain mapping
+#         qradar_tenant_ids = tenant.company.qradar_mappings.values_list(
+#             "qradar_tenant__id", flat=True
+#         )
+
+#         # Filtering logic
+#         filter_kwargs = {"domain_id__in": qradar_tenant_ids}
+#         if filter_enum == FilterType.CUSTOM_RANGE:
+#             filter_kwargs["created_at__range"] = (start_time, end_time)
+#         else:
+#             filter_kwargs["created_at__gte"] = start_time
+
+#         # Query EPS data
+#         eps_data_raw = (
+#             IBMQradarEPS.objects.filter(**filter_kwargs)
+#             .annotate(interval=time_trunc)
+#             .values("interval")
+#             .annotate(average_eps=Avg("average_eps"), peak_eps=Max("peak_eps"))
+#             .order_by("interval")
+#         )
+
+#         # Format EPS data
+#         eps_data = [
+#             {
+#                 "interval": entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
+#                 if filter_enum == FilterType.TODAY
+#                 else entry["interval"].strftime("%Y-%m-%d"),
+#                 "average_eps": float(
+#                     Decimal(entry["average_eps"]).quantize(
+#                         Decimal("0.01"), rounding=ROUND_HALF_UP
+#                     )
+#                 ),
+#                 "peak_eps": float(
+#                     Decimal(entry["peak_eps"]).quantize(
+#                         Decimal("0.01"), rounding=ROUND_HALF_UP
+#                     )
+#                 ),
+#             }
+#             for entry in eps_data_raw
+#         ]
+
+#         # Contracted volume info
+#         mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
+#         contracted_volume = mapping.contracted_volume if mapping else None
+#         contracted_volume_type = mapping.contracted_volume_type if mapping else None
+#         contracted_volume_type_display = (
+#             mapping.get_contracted_volume_type_display() if mapping else None
+#         )
+
+#         return Response(
+#             {
+#                 "contracted_volume": contracted_volume,
+#                 "contracted_volume_type": contracted_volume_type,
+#                 "contracted_volume_type_display": contracted_volume_type_display,
+#                 "eps_graph": eps_data,
+#             },
+#             status=status.HTTP_200_OK,
+#         )
+
 class EPSGraphAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
     def get(self, request):
         from pytz import timezone as pytz_timezone
+        from django.db.models.functions import TruncWeek, TruncMonth
 
         try:
             filter_value = int(
@@ -3198,19 +3344,28 @@ class EPSGraphAPIView(APIView):
             start_time = now - timedelta(days=6)
             time_trunc = TruncDay("created_at")
         elif filter_enum == FilterType.MONTH:
-            start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            time_trunc = TruncDate("created_at")
+            # Get start of current month and show 4 weeks (28 days back from now)
+            start_time = now - timedelta(days=28)
+            time_trunc = TruncWeek("created_at")  # Group by week to get 4 data points
+        elif filter_enum == FilterType.QUARTER:
+            # Show 3 full months - current month and 2 previous months
+            # If current month is July, show May, June, July
+            start_of_current_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            # Go back 2 months from start of current month
+            if start_of_current_month.month >= 3:
+                start_time = start_of_current_month.replace(month=start_of_current_month.month - 2)
+            else:
+                # Handle year boundary
+                year = start_of_current_month.year - 1 if start_of_current_month.month <= 2 else start_of_current_month.year
+                month = start_of_current_month.month + 10 if start_of_current_month.month <= 2 else start_of_current_month.month - 2
+                start_time = start_of_current_month.replace(year=year, month=month)
+            time_trunc = TruncMonth("created_at")  # Group by month to get 3 data points
         elif filter_enum == FilterType.YEAR:
+            # Show 12 months - start from beginning of current year
             start_time = now.replace(
                 month=1, day=1, hour=0, minute=0, second=0, microsecond=0
             )
-            time_trunc = TruncDate("created_at")
-        elif filter_enum == FilterType.QUARTER:
-            month = (now.month - 1) // 3 * 3 + 1
-            start_time = now.replace(
-                month=month, day=1, hour=0, minute=0, second=0, microsecond=0
-            )
-            time_trunc = TruncDate("created_at")
+            time_trunc = TruncMonth("created_at")  # Group by month to get 12 data points
         elif filter_enum == FilterType.LAST_6_MONTHS:
             start_time = now - timedelta(days=182)
             time_trunc = TruncDate("created_at")
@@ -3265,12 +3420,26 @@ class EPSGraphAPIView(APIView):
             .order_by("interval")
         )
 
-        # Format EPS data
-        eps_data = [
-            {
-                "interval": entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
-                if filter_enum == FilterType.TODAY
-                else entry["interval"].strftime("%Y-%m-%d"),
+        # Format EPS data with improved interval formatting
+        eps_data = []
+        for entry in eps_data_raw:
+            if filter_enum == FilterType.TODAY:
+                interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            elif filter_enum == FilterType.MONTH:
+                # Format as "Week 1", "Week 2", etc.
+                week_num = len(eps_data) + 1
+                interval_str = f"Week {week_num}"
+            elif filter_enum == FilterType.QUARTER:
+                # Format as month names
+                interval_str = entry["interval"].strftime("%B %Y")
+            elif filter_enum == FilterType.YEAR:
+                # Format as month names
+                interval_str = entry["interval"].strftime("%B")
+            else:
+                interval_str = entry["interval"].strftime("%Y-%m-%d")
+            
+            eps_data.append({
+                "interval": interval_str,
                 "average_eps": float(
                     Decimal(entry["average_eps"]).quantize(
                         Decimal("0.01"), rounding=ROUND_HALF_UP
@@ -3281,9 +3450,7 @@ class EPSGraphAPIView(APIView):
                         Decimal("0.01"), rounding=ROUND_HALF_UP
                     )
                 ),
-            }
-            for entry in eps_data_raw
-        ]
+            })
 
         # Contracted volume info
         mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
@@ -3302,8 +3469,6 @@ class EPSGraphAPIView(APIView):
             },
             status=status.HTTP_200_OK,
         )
-
-
 class AlertListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
