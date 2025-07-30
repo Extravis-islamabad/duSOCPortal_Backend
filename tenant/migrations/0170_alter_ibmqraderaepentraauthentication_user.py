@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("tenant", "0169_alter_ibmqraderaepentraauthentication_created_at"),
     ]
