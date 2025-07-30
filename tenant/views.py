@@ -869,7 +869,7 @@ class SeverityDistributionView(APIView):
 
     def get(self, request):
         """
-        Retrieve severity distribution (P1-P4) for the authenticated tenant.
+        Retrieve severity distribution (P1-P4) for the authenticated tenant (only true positives).
         Uses the exact same logic as DashboardView to ensure counts match.
 
         Returns:
@@ -917,20 +917,12 @@ class SeverityDistributionView(APIView):
                 & ~Q(incident_priority__exact="")
             )
 
-            # False Positives (Done incidents)
-            false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
-                itsm_sync_status__iexact="Done"
-            )
-
-            # Total incidents = True Positives + False Positives (matches DashboardView)
-            total_incident_filters = true_positive_filters | false_positive_filters
-
             # Define our severity levels (P1-P4)
             SEVERITY_LEVELS = {1: "1", 2: "2", 3: "3", 4: "4"}
 
-            # Get counts for each severity level using the exact same filters as total incidents
+            # Get counts for each severity level using only true positive filters
             severity_counts = (
-                DUCortexSOARIncidentFinalModel.objects.filter(total_incident_filters)
+                DUCortexSOARIncidentFinalModel.objects.filter(true_positive_filters)
                 .values("severity")
                 .annotate(count=Count("id"))
             )
@@ -958,10 +950,10 @@ class SeverityDistributionView(APIView):
             # Build result ensuring all severity levels are included
             result = [
                 {
-                    "name": severity_name,
+                    "name": f"{severity_value}",
                     "value": count_dict.get(severity_value, 0),
                 }
-                for severity_value, severity_name in SEVERITY_LEVELS.items()
+                for severity_value in sorted(SEVERITY_LEVELS.keys())
             ]
 
             return Response({"severityDistribution": result}, status=200)
@@ -1546,13 +1538,31 @@ class IncidentsView(APIView):
         if status_filter:
             filters &= Q(status__iexact=status_filter)
 
+        # FIXED: Handle severity filter with same logic as SeverityDistributionView
         if severity_filter:
             try:
                 severity_value = int(severity_filter)
-                filters &= Q(severity=severity_value)
+
+                if severity_value == 4:
+                    # For P4, include severity=4, NULL, 0, and >4 (same as distribution view)
+                    severity_q = (
+                        Q(severity=4)
+                        | Q(severity__isnull=True)
+                        | Q(severity=0)
+                        | Q(severity__gt=4)
+                    )
+                    filters &= severity_q
+                elif 1 <= severity_value <= 3:
+                    # For P1-P3, exact match
+                    filters &= Q(severity=severity_value)
+                else:
+                    return Response(
+                        {"error": "Invalid severity value. Must be 1-4 (P1-P4)."},
+                        status=400,
+                    )
             except ValueError:
                 return Response(
-                    {"error": "Invalid severity format. Must be an integer."},
+                    {"error": "Invalid severity format. Must be an integer (1-4)."},
                     status=400,
                 )
 
