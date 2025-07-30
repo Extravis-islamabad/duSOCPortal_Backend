@@ -39,7 +39,8 @@ class IBMQraderDomainHighLevelCategoryCount(models.Model):
     high_level_category = models.CharField(max_length=255, blank=True, default=None)
     event_name = models.CharField(max_length=255, blank=True, default=None)
     count = models.CharField(max_length=10, blank=True, default=None)
-    created_at = models.DateTimeField(auto_now_add=True)
+    # created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
