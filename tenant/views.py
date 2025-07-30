@@ -6287,6 +6287,7 @@ class IncidentReportView(APIView):
             }
 
             # Apply date filters to all log queries
+            # TODO : Need to remap these table as per the new tables
             total_eps = (
                 TotalEvents.objects.filter(log_filters).aggregate(
                     total_eps=Sum("total_events")
@@ -6321,17 +6322,23 @@ class IncidentReportView(APIView):
                 .order_by("-event_count")[:10]
                 .values("event_name", "event_count")
             )
+
+            # TODO : correlated events will be picked from this table  du_ibm_qradar_corelated_events_data
             correlated_event_count = (
                 CorrelatedEventLog.objects.filter(log_filters).aggregate(
                     total=Sum("correlated_events_count")
                 )["total"]
                 or 0
             )
+
+            # TODO : take the count form the table   du_ibm_qradar_corelated_events_data
             daily_event_counts = (
                 DailyEventLog.objects.filter(log_filters)
                 .order_by("date")
                 .values("date", "daily_count")
             )
+            # TODO : take the count form the table   du_ibm_qradar_corelated_events_data
+
             top_alert_events = (
                 TopAlertEventLog.objects.filter(log_filters)
                 .order_by("-event_count")[:10]
@@ -6342,18 +6349,24 @@ class IncidentReportView(APIView):
                 .order_by("date", "closure_reason")
                 .values("date", "closure_reason", "reason_count")
             )
+
+            # TODO : take the eps data from the du_ibm_qradar_eps
             monthly_avg_eps = (
                 MonthlyAvgEpsLog.objects.filter(log_filters).aggregate(
                     total=Sum("monthly_avg_eps")
                 )["total"]
                 or 0
             )
+            # TODO : take the eps data from the du_ibm_qradar_eps
+
             last_month_avg_eps = (
                 LastMonthAvgEpsLog.objects.filter(log_filters).aggregate(
                     total=Sum("last_month_avg_eps")
                 )["total"]
                 or 0
             )
+            # TODO : take the eps data from the du_ibm_qradar_eps
+
             weekly_avg_eps = (
                 WeeklyAvgEpsLog.objects.filter(log_filters)
                 .annotate(created_at_date=TruncDate("created_at"))
@@ -6367,22 +6380,27 @@ class IncidentReportView(APIView):
                     created_at=F("created_at_date"),
                 )
             )
+
+            # TODO : table du_ibm_qradar_sensitive_count_wise_data
             total_traffic = (
                 TotalTrafficLog.objects.filter(log_filters).aggregate(
                     total=Sum("total_traffic")
                 )["total"]
                 or 0
             )
+            # TODO : Show top 10 destination ips on from the table du_ibm_qradar_sensitive_count_wise_data based on aggregation
             destination_addresses = (
                 DestinationAddressLog.objects.filter(log_filters)
                 .order_by("-address_count")[:10]
                 .values("destination_address", "address_count")
             )
+            # TODO : based on the destination ip use the table du_ibm_qradar_sensitive_count_wise_data
             top_destination_connections = (
                 TopDestinationConnectionLog.objects.filter(log_filters)
                 .order_by("-connection_count")[:5]
                 .values("destination_address", "connection_count")
             )
+            # TODO : take the count form the table   du_ibm_qradar_corelated_events_data
             daily_event_count = (
                 DailyEventCountLog.objects.filter(log_filters)
                 .values("full_date")
