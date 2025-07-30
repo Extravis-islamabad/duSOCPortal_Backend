@@ -3302,6 +3302,20 @@ class EPSGraphAPIView(APIView):
         # Format EPS data with improved interval formatting
         eps_data = []
         for entry in eps_data_raw:
+            interval_value = entry["interval"]
+            peak_row = (
+                IBMQradarEPS.objects.filter(**filter_kwargs)
+                .annotate(interval=time_trunc)
+                .filter(interval=interval_value, peak_eps=entry["peak_eps"])
+                .order_by("created_at")  # get earliest if multiple match
+                .first()
+            )
+            peak_eps_time = (
+                peak_row.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                if peak_row and peak_row.created_at
+                else None
+            )
+
             if filter_enum == FilterType.TODAY:
                 interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
             elif filter_enum == FilterType.MONTH:
@@ -3330,6 +3344,7 @@ class EPSGraphAPIView(APIView):
                             Decimal("0.01"), rounding=ROUND_HALF_UP
                         )
                     ),
+                    "peak_eps_time": peak_eps_time,
                 }
             )
 
