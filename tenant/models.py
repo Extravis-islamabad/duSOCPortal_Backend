@@ -162,7 +162,6 @@ class IBMQraderAllowedOutbounds(models.Model):
     )
     count = models.CharField(max_length=20, blank=True, default=None)
     total_event_count = models.CharField(max_length=20, blank=True, default=None)
-    #created_at = models.DateTimeField(auto_now_add=True)
     created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -193,7 +192,6 @@ class IBMQraderAllowedInbounds(models.Model):
     )
     count = models.CharField(max_length=20, blank=True, default=None)
     total_event_count = models.CharField(max_length=20, blank=True, default=None)
-    #created_at = models.DateTimeField(auto_now_add=True)
     created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
