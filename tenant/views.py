@@ -964,6 +964,7 @@ class SeverityDistributionView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class TypeDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1541,14 +1542,14 @@ class IncidentsView(APIView):
         if severity_filter:
             try:
                 severity_value = int(severity_filter)
-                
+
                 if severity_value == 4:
                     # For P4, include severity=4, NULL, 0, and >4 (same as distribution view)
                     severity_q = (
-                        Q(severity=4) | 
-                        Q(severity__isnull=True) | 
-                        Q(severity=0) | 
-                        Q(severity__gt=4)
+                        Q(severity=4)
+                        | Q(severity__isnull=True)
+                        | Q(severity=0)
+                        | Q(severity__gt=4)
                     )
                     filters &= severity_q
                 elif 1 <= severity_value <= 3:
@@ -1776,6 +1777,8 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
