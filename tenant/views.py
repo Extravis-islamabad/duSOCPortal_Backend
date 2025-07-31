@@ -283,7 +283,6 @@ class TestView(APIView):
         return Response({"message": "Hello, world!"})
 
 
-
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -291,19 +290,14 @@ class GetTenantAssetsList(APIView):
     def get(self, request):
         """
         Retrieve IBM QRadar assets with status counts and pagination
-        Returns counts based on filter_type if provided, otherwise returns total counts
-
-        Query Parameters:
-            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year, 5=Quarter, 
-                              6=Last 6 months, 7=Last 3 weeks, 8=Last month, 
-                              9=Custom range (requires start_date and end_date)
+        Returns overall active/inactive counts regardless of filters
 
         Returns:
             {
                 "count": filtered_count,
-                "total_assets": total_count (sum of active + inactive),
-                "active_assets": active_count,
-                "inactive_assets": inactive_count,
+                "total_assets": total_unfiltered_count,
+                "active_assets": total_active_unfiltered,
+                "inactive_assets": total_inactive_unfiltered,
                 "next": next_page_url,
                 "previous": previous_page_url,
                 "results": serialized_assets
@@ -345,69 +339,25 @@ class GetTenantAssetsList(APIView):
             # Base filter for tenant's assets
             base_filter = Q(event_collector_id__in=collector_ids)
 
-            # Step 4: Get filter_type from query params
-            filter_type_param = request.query_params.get("filter_type")
-            filter_type = None
-            if filter_type_param:
-                try:
-                    filter_type_value = int(filter_type_param)
-                    filter_type = FilterType(filter_type_value)
-                except (ValueError, KeyError):
-                    return Response(
-                        {"error": "Invalid filter_type value."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            # Step 5: Determine date range based on filter_type
-            now = timezone.now()
-            start_date = None
-            end_date = None
-
-            if filter_type:
-                if filter_type == FilterType.TODAY:
-                    start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                elif filter_type == FilterType.WEEK:
-                    start_date = now - timedelta(days=7)
-                elif filter_type == FilterType.MONTH:
-                    start_date = now - timedelta(days=30)
-                elif filter_type == FilterType.YEAR:
-                    start_date = now - timedelta(days=365)
-                elif filter_type == FilterType.QUARTER:
-                    start_date = now - timedelta(days=90)
-                elif filter_type == FilterType.LAST_6_MONTHS:
-                    start_date = now - timedelta(days=180)
-                elif filter_type == FilterType.LAST_3_WEEKS:
-                    start_date = now - timedelta(days=21)
-                elif filter_type == FilterType.LAST_MONTH:
-                    start_date = now - timedelta(days=30)
-                    end_date = now - timedelta(days=30)  # Exactly one month ago
-                elif filter_type == FilterType.CUSTOM_RANGE:
-                    start_date = self._parse_date(request.query_params.get("start_date"))
-                    end_date = self._parse_date(request.query_params.get("end_date"))
-                    if not start_date or not end_date:
-                        return Response(
-                            {"error": "Custom range requires both start_date and end_date."},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-
-            # Step 6: Get ALL assets first for total counts (unfiltered)
+            # Step 4: Get ALL assets first for total counts (unfiltered)
             all_assets = IBMQradarAssests.objects.filter(base_filter).select_related(
                 "event_collector", "log_source_type"
             )
 
-            # Calculate TOTAL active/inactive counts (unfiltered)
+            # Calculate TOTAL active/inactive counts (unfiltered) - FIXED LOGIC
             total_active = 0
             total_inactive = 0
             now = timezone.now()
 
             for asset in all_assets:
+                # Use consistent status determination logic
                 asset_status = self._get_asset_status(asset, now)
                 if asset_status == "SUCCESS":
                     total_active += 1
                 else:
                     total_inactive += 1
 
-            # Step 7: Apply request filters for the actual results
+            # Step 5: Apply request filters for the actual results
             filters = base_filter.copy()
 
             # Name filter
@@ -448,7 +398,7 @@ class GetTenantAssetsList(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Last event date filter
+            # Last event date filter (handled in Python due to timestamp conversion)
             last_event_filter = request.query_params.get("last_event_date")
 
             # Average EPS filter
@@ -483,7 +433,16 @@ class GetTenantAssetsList(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Apply date range filters if provided (from filter_type or custom)
+            # Apply date range filters if provided
+            start_date = self._parse_date(request.query_params.get("start_date"))
+            end_date = self._parse_date(request.query_params.get("end_date"))
+
+            if start_date and end_date and start_date > end_date:
+                return Response(
+                    {"error": "start_date cannot be greater than end_date."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             if start_date or end_date:
                 filtered_assets = [
                     asset
@@ -492,27 +451,30 @@ class GetTenantAssetsList(APIView):
                         not start_date
                         or (
                             asset.creation_date_converted
-                            and asset.creation_date_converted >= start_date.date()
+                            and asset.creation_date_converted >= start_date
                         )
                     )
                     and (
                         not end_date
                         or (
                             asset.creation_date_converted
-                            and asset.creation_date_converted <= end_date.date()
+                            and asset.creation_date_converted <= end_date
                         )
                     )
                 ]
 
-            # Apply status filter if provided
+            # Apply status filter if provided - FIXED LOGIC
             if status_filter := request.query_params.get("status"):
                 status_filter = status_filter.upper()
                 if status_filter not in ["SUCCESS", "ERROR"]:
                     return Response(
-                        {"error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."},
+                        {
+                            "error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
+                # Apply consistent status filtering logic
                 filtered_assets = [
                     asset
                     for asset in filtered_assets
@@ -525,16 +487,6 @@ class GetTenantAssetsList(APIView):
                 reverse=True,
             )
 
-            # Calculate filtered active/inactive counts
-            filtered_active = 0
-            filtered_inactive = 0
-            for asset in filtered_assets:
-                asset_status = self._get_asset_status(asset, now)
-                if asset_status == "SUCCESS":
-                    filtered_active += 1
-                else:
-                    filtered_inactive += 1
-
             # Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
@@ -544,26 +496,18 @@ class GetTenantAssetsList(APIView):
             serialized_data = []
             for asset in result_page:
                 asset_data = IBMQradarAssestsSerializer(asset).data
+                # Apply consistent status determination
                 asset_data["status"] = self._get_asset_status(asset, now)
                 serialized_data.append(asset_data)
 
-            # Prepare response - ensure total is always sum of active + inactive
-            if filter_type:
-                response_data = {
-                    "count": len(filtered_assets),
-                    "total_assets": filtered_active + filtered_inactive,
-                    "active_assets": filtered_active,
-                    "inactive_assets": filtered_inactive,
-                    "results": serialized_data,
-                }
-            else:
-                response_data = {
-                    "count": len(filtered_assets),
-                    "total_assets": total_active + total_inactive,
-                    "active_assets": total_active,
-                    "inactive_assets": total_inactive,
-                    "results": serialized_data,
-                }
+            # Prepare response
+            response_data = {
+                "count": len(filtered_assets),  # Count of filtered assets
+                "total_assets": len(all_assets),  # Total unfiltered count
+                "active_assets": total_active,  # Unfiltered active count
+                "inactive_assets": total_inactive,  # Unfiltered inactive count
+                "results": serialized_data,
+            }
 
             # Add pagination links if needed
             if getattr(paginator, "page", None):
@@ -581,10 +525,13 @@ class GetTenantAssetsList(APIView):
     def _get_asset_status(self, asset, now):
         """
         Determine asset status based on enabled flag and last event time
+        FIXED: Consistent logic for both counting and filtering
         """
+        # If asset is not enabled, it's always ERROR
         if not asset.enabled:
             return "ERROR"
 
+        # If no last event time, it's ERROR
         if not asset.last_event_time:
             return "ERROR"
 
@@ -606,6 +553,8 @@ class GetTenantAssetsList(APIView):
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
             raise ValueError("Invalid date format")
+
+
 class GetTenantAssetsStats(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1014,6 +963,7 @@ class SeverityDistributionView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class TypeDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -1592,14 +1542,14 @@ class IncidentsView(APIView):
         if severity_filter:
             try:
                 severity_value = int(severity_filter)
-                
+
                 if severity_value == 4:
                     # For P4, include severity=4, NULL, 0, and >4 (same as distribution view)
                     severity_q = (
-                        Q(severity=4) | 
-                        Q(severity__isnull=True) | 
-                        Q(severity=0) | 
-                        Q(severity__gt=4)
+                        Q(severity=4)
+                        | Q(severity__isnull=True)
+                        | Q(severity=0)
+                        | Q(severity__gt=4)
                     )
                     filters &= severity_q
                 elif 1 <= severity_value <= 3:
@@ -1827,6 +1777,8 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -3350,6 +3302,20 @@ class EPSGraphAPIView(APIView):
         # Format EPS data with improved interval formatting
         eps_data = []
         for entry in eps_data_raw:
+            interval_value = entry["interval"]
+            peak_row = (
+                IBMQradarEPS.objects.filter(**filter_kwargs)
+                .annotate(interval=time_trunc)
+                .filter(interval=interval_value, peak_eps=entry["peak_eps"])
+                .order_by("created_at")  # get earliest if multiple match
+                .first()
+            )
+            peak_eps_time = (
+                peak_row.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                if peak_row and peak_row.created_at
+                else None
+            )
+
             if filter_enum == FilterType.TODAY:
                 interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
             elif filter_enum == FilterType.MONTH:
@@ -3378,6 +3344,7 @@ class EPSGraphAPIView(APIView):
                             Decimal("0.01"), rounding=ROUND_HALF_UP
                         )
                     ),
+                    "peak_eps_time": peak_eps_time,
                 }
             )
 
@@ -6320,6 +6287,7 @@ class IncidentReportView(APIView):
             }
 
             # Apply date filters to all log queries
+            # TODO : Need to remap these table as per the new tables
             total_eps = (
                 TotalEvents.objects.filter(log_filters).aggregate(
                     total_eps=Sum("total_events")
@@ -6354,17 +6322,23 @@ class IncidentReportView(APIView):
                 .order_by("-event_count")[:10]
                 .values("event_name", "event_count")
             )
+
+            # TODO : correlated events will be picked from this table  du_ibm_qradar_corelated_events_data
             correlated_event_count = (
                 CorrelatedEventLog.objects.filter(log_filters).aggregate(
                     total=Sum("correlated_events_count")
                 )["total"]
                 or 0
             )
+
+            # TODO : take the count form the table   du_ibm_qradar_corelated_events_data
             daily_event_counts = (
                 DailyEventLog.objects.filter(log_filters)
                 .order_by("date")
                 .values("date", "daily_count")
             )
+            # TODO : take the count form the table   du_ibm_qradar_corelated_events_data
+
             top_alert_events = (
                 TopAlertEventLog.objects.filter(log_filters)
                 .order_by("-event_count")[:10]
@@ -6375,18 +6349,24 @@ class IncidentReportView(APIView):
                 .order_by("date", "closure_reason")
                 .values("date", "closure_reason", "reason_count")
             )
+
+            # TODO : take the eps data from the du_ibm_qradar_eps
             monthly_avg_eps = (
                 MonthlyAvgEpsLog.objects.filter(log_filters).aggregate(
                     total=Sum("monthly_avg_eps")
                 )["total"]
                 or 0
             )
+            # TODO : take the eps data from the du_ibm_qradar_eps
+
             last_month_avg_eps = (
                 LastMonthAvgEpsLog.objects.filter(log_filters).aggregate(
                     total=Sum("last_month_avg_eps")
                 )["total"]
                 or 0
             )
+            # TODO : take the eps data from the du_ibm_qradar_eps
+
             weekly_avg_eps = (
                 WeeklyAvgEpsLog.objects.filter(log_filters)
                 .annotate(created_at_date=TruncDate("created_at"))
@@ -6400,22 +6380,27 @@ class IncidentReportView(APIView):
                     created_at=F("created_at_date"),
                 )
             )
+
+            # TODO : table du_ibm_qradar_sensitive_count_wise_data
             total_traffic = (
                 TotalTrafficLog.objects.filter(log_filters).aggregate(
                     total=Sum("total_traffic")
                 )["total"]
                 or 0
             )
+            # TODO : Show top 10 destination ips on from the table du_ibm_qradar_sensitive_count_wise_data based on aggregation
             destination_addresses = (
                 DestinationAddressLog.objects.filter(log_filters)
                 .order_by("-address_count")[:10]
                 .values("destination_address", "address_count")
             )
+            # TODO : based on the destination ip use the table du_ibm_qradar_sensitive_count_wise_data
             top_destination_connections = (
                 TopDestinationConnectionLog.objects.filter(log_filters)
                 .order_by("-connection_count")[:5]
                 .values("destination_address", "connection_count")
             )
+            # TODO : take the count form the table   du_ibm_qradar_corelated_events_data
             daily_event_count = (
                 DailyEventCountLog.objects.filter(log_filters)
                 .values("full_date")
