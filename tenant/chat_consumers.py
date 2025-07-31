@@ -38,7 +38,7 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
         history = await self.get_chat_history()
         # unseen_msg_count = await self.unseen_message_count(self.user.id)
         if not history:
-            await self.send(text_data=json.dumps({"no_history": True}))
+            await self.send(text_data=json.dumps({"no_history": True,"admin_id":self.admin_id,"tenant_id":self.tenant_id }))
         else:
             for msg in history:
                 await self.send(
@@ -48,6 +48,8 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                             "sender": msg["sender"],
                             "timestamp": msg["timestamp"],
                             "is_seen": msg["is_seen"],
+                            # "admin__username":msg["admin__username"],
+
                         }
                     )
                 )
@@ -136,7 +138,7 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
             messages = (
                 ChatMessage.objects.filter(admin__id=self.admin_id, tenant=tenant)
                 .order_by("-timestamp")[offset : offset + limit]
-                .values("message", "sender__username", "timestamp","is_seen")
+                .values("message", "sender__username", "timestamp","is_seen","admin__username")
             )
             return [
                 {
@@ -144,6 +146,7 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                     "sender": m["sender__username"],
                     "timestamp": m["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
                     "is_seen":"yes" if m["is_seen"] else "no",
+                    "admin__username":m["admin__username"]
 
                 }
                 for m in reversed(messages)
@@ -155,12 +158,31 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def unseen_message_count(self, receiver_id):
         try:
+            # tenant = Tenant.objects.get(tenant__id=self.tenant_id)
+            # return ChatMessage.objects.filter(
+            #     Q(admin__id=self.admin_id) &
+            #     Q(tenant=tenant) &
+            #     Q(is_seen=False)
+            # ).count()
             tenant = Tenant.objects.get(tenant__id=self.tenant_id)
-            return ChatMessage.objects.filter(
-                Q(admin__id=self.admin_id) &
-                Q(tenant=tenant) &
-                Q(is_seen=False)
-            ).count()
+            # messages = (
+            #     ChatMessage.objects.filter(admin__id=self.admin_id, tenant=tenant)
+            #     .order_by("-timestamp")
+            #     .values("message", "sender__username", "timestamp", "is_seen", "admin__username")
+            # )
+            #
+            # return [
+            #     {
+            #         "message": m["message"],
+            #         "sender": m["sender__username"],
+            #         "timestamp": m["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
+            #         "is_seen": "yes" if m["is_seen"] else "no",
+            #         "admin__username": m["admin__username"]
+            #
+            #     }
+            #     for m in reversed(messages)
+            # ]
+            return ChatMessage.objects.filter(admin__id=self.admin_id, tenant=tenant, is_seen=False).count()
         except Exception as e:
             logger.error(f"Failed to count unseen messages: {str(e)}")
             return 0
