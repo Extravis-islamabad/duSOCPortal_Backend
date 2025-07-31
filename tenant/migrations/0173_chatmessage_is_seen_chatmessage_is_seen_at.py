@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("tenant", "0172_alter_ibmqraderallowedinbounds_created_at"),
     ]
