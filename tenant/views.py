@@ -1332,7 +1332,7 @@ class DashboardView(APIView):
             dashboard_data = {}
 
             # Total Incidents (True Positives + False Positives only)
-            if not filter_list or "totalIncidents" in filter_list:
+            if not filter_list or "total_alerts" in filter_list:
                 total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
                     total_incident_filters
                 ).count()
@@ -1350,7 +1350,7 @@ class DashboardView(APIView):
                     current_week_count, last_week_count, "week"
                 )
 
-                dashboard_data["totalIncidents"] = {
+                dashboard_data["total_alerts"] = {
                     "count": total_incidents,
                     "change": percent_change,
                     "new": DUCortexSOARIncidentFinalModel.objects.filter(
@@ -1402,7 +1402,7 @@ class DashboardView(APIView):
                 }
 
             # True Positives (Ready incidents with all required fields)
-            if not filter_list or "truePositives" in filter_list:
+            if not filter_list or "total_incidents" in filter_list:
                 tp_count = DUCortexSOARIncidentFinalModel.objects.filter(
                     true_positive_filters
                 ).count()
@@ -1420,7 +1420,7 @@ class DashboardView(APIView):
                     current_week_tp, last_week_tp, "week"
                 )
 
-                dashboard_data["truePositives"] = {
+                dashboard_data["total_incidents"] = {
                     "count": tp_count,
                     "change": percent_change,
                 }
