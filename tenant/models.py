@@ -1297,6 +1297,10 @@ class ChatMessage(models.Model):
         Tenant, on_delete=models.CASCADE, related_name="tenant_chats"
     )
     message = models.TextField()
+    #adding extra columns in order to track the unseen message count and its timestamp
+    is_seen = models.BooleanField(default=False)
+    is_seen_at = models.DateTimeField(null=True, blank=True)
+
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
