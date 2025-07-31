@@ -1272,6 +1272,7 @@ class OwnerDistributionView(APIView):
             )
 
 
+
 class DashboardView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1303,6 +1304,51 @@ class DashboardView(APIView):
             [f.strip() for f in filters.split(",") if f.strip()] if filters else []
         )
 
+        # Get filter_type from query params
+        filter_type_param = request.query_params.get("filter_type")
+        filter_type = None
+        if filter_type_param:
+            try:
+                filter_type_value = int(filter_type_param)
+                filter_type = FilterType(filter_type_value)
+            except (ValueError, KeyError):
+                return Response(
+                    {"error": "Invalid filter_type value."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        # Determine date range based on filter_type
+        now = timezone.now()
+        start_date = None
+        end_date = None
+
+        if filter_type:
+            if filter_type == FilterType.TODAY:
+                start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            elif filter_type == FilterType.WEEK:
+                start_date = now - timedelta(days=7)
+            elif filter_type == FilterType.MONTH:
+                start_date = now - timedelta(days=30)
+            elif filter_type == FilterType.YEAR:
+                start_date = now - timedelta(days=365)
+            elif filter_type == FilterType.QUARTER:
+                start_date = now - timedelta(days=90)
+            elif filter_type == FilterType.LAST_6_MONTHS:
+                start_date = now - timedelta(days=180)
+            elif filter_type == FilterType.LAST_3_WEEKS:
+                start_date = now - timedelta(days=21)
+            elif filter_type == FilterType.LAST_MONTH:
+                start_date = now - timedelta(days=30)
+                end_date = now - timedelta(days=30)  # Exactly one month ago
+            elif filter_type == FilterType.CUSTOM_RANGE:
+                start_date = self._parse_date(request.query_params.get("start_date"))
+                end_date = self._parse_date(request.query_params.get("end_date"))
+                if not start_date or not end_date:
+                    return Response(
+                        {"error": "Custom range requires both start_date and end_date."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
         try:
             # Base filters for True Positives (Ready incidents with all required fields)
             true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
@@ -1323,6 +1369,48 @@ class DashboardView(APIView):
             )
 
             total_incident_filters = true_positive_filters | false_positive_filters
+
+            # Apply date range filters if provided
+            if start_date or end_date:
+                date_filter = Q()
+                if start_date:
+                    date_filter &= Q(created__date__gte=start_date)
+                if end_date:
+                    date_filter &= Q(created__date__lte=end_date)
+                
+                true_positive_filters &= date_filter
+                false_positive_filters &= date_filter
+                total_incident_filters &= date_filter
+
+            # Additional filters from query params
+            if incident_id := request.query_params.get("incident_id"):
+                try:
+                    incident_id = int(incident_id)
+                    true_positive_filters &= Q(id=incident_id)
+                    false_positive_filters &= Q(id=incident_id)
+                    total_incident_filters &= Q(id=incident_id)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid incident_id format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            if owner := request.query_params.get("owner"):
+                true_positive_filters &= Q(owner__icontains=owner)
+                # False positives don't typically have owners, so we don't filter them
+
+            if priority := request.query_params.get("priority"):
+                true_positive_filters &= Q(incident_priority__iexact=priority)
+
+            if status_filter := request.query_params.get("status"):
+                try:
+                    status_value = int(status_filter)
+                    true_positive_filters &= Q(status=status_value)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid status value. Must be 1 (open) or 2 (closed)."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             # Date calculations
             today = timezone.now().date()
@@ -1465,6 +1553,15 @@ class DashboardView(APIView):
                     )
                 )
 
+                # Apply date range filters if provided
+                if start_date or end_date:
+                    date_filter = Q()
+                    if start_date:
+                        date_filter &= Q(created__date__gte=start_date)
+                    if end_date:
+                        date_filter &= Q(created__date__lte=end_date)
+                    incomplete_filters &= date_filter
+
                 incomplete_count = DUCortexSOARIncidentFinalModel.objects.filter(
                     incomplete_filters
                 ).count()
@@ -1492,6 +1589,14 @@ class DashboardView(APIView):
         direction = "↑" if change >= 0 else "↓"
         return f"{direction} {abs(round(change, 1))}% from previous {period}"
 
+    def _parse_date(self, date_str):
+        """Safe date parsing from string"""
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("Invalid date format")
 
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
