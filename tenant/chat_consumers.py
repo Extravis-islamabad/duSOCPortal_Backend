@@ -163,11 +163,17 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
     def unseen_message_count(self, receiver_id):
         try:
             tenant = Tenant.objects.get(tenant__id=self.tenant_id)
-            return ChatMessage.objects.filter(
+            count = ChatMessage.objects.filter(
                 admin__id=self.admin_id, tenant=tenant, is_seen=False
             ).count()
+            logger.info(f"Unseen message count for admin {self.admin_id}: {count}")
+            return count
+        except Tenant.DoesNotExist:
+            logger.warning(f"Tenant not found for tenant_id: {self.tenant_id}")
+            return 0
         except Exception as e:
-            logger.error(f"Failed to count unseen messages: {str(e)}")
+            logger.error(
+                f"Failed to count unseen messages for admin {self.admin_id}, tenant_id {self.tenant_id}: {str(e)}")
             return 0
 
     @database_sync_to_async
