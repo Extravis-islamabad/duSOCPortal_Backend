@@ -5224,35 +5224,22 @@ class SLASeverityIncidentsView(APIView):
                         end_date = now
                         filters &= Q(created__range=[start_date, end_date])
                     elif filter_type == FilterType.WEEK:
-                        start_date = now - timedelta(days=now.weekday())
+                        start_date = now - timedelta(days=7)
                         start_date = start_date.replace(
                             hour=0, minute=0, second=0, microsecond=0
                         )
                         end_date = now
                         filters &= Q(created__range=[start_date, end_date])
                     elif filter_type == FilterType.MONTH:
-                        start_date = now.replace(
-                            day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
+                        start_date = now - timedelta(days=30)
                         end_date = now
                         filters &= Q(created__range=[start_date, end_date])
                     elif filter_type == FilterType.QUARTER:
-                        current_quarter = (now.month - 1) // 3 + 1
-                        quarter_start_month = 3 * current_quarter - 2
-                        start_date = now.replace(
-                            month=quarter_start_month,
-                            day=1,
-                            hour=0,
-                            minute=0,
-                            second=0,
-                            microsecond=0,
-                        )
+                        start_date = now - timedelta(days=90)
                         end_date = now
                         filters &= Q(created__range=[start_date, end_date])
                     elif filter_type == FilterType.YEAR:
-                        start_date = now.replace(
-                            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
+                        start_date = now - timedelta(days=365)
                         end_date = now
                         filters &= Q(created__range=[start_date, end_date])
                 except Exception:
