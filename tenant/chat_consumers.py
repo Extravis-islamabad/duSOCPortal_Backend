@@ -39,13 +39,7 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
         history = await self.get_chat_history()
         # unseen_msg_count = await self.unseen_message_count(self.user.id)
         if not history:
-            await self.send(
-                text_data=json.dumps(
-                    {
-                        "no_history": True
-                    }
-                )
-            )
+            await self.send(text_data=json.dumps({"no_history": True}))
         else:
             for msg in history:
                 await self.send(

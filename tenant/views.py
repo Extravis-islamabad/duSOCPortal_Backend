@@ -1118,7 +1118,7 @@ class SeverityDistributionView(APIView):
                     count_dict[severity_val] = count_dict.get(severity_val, 0) + count
                 elif severity_val is None or severity_val == 0:
                     # Map NULL/0 severity to P4 (lowest priority)
-                    count_dict[4] = count_dict.get(4, 0) + count
+                    count_dict[1] = count_dict.get(4, 0) + count
                 elif severity_val > 4:
                     # Map severity > 4 to P4 (lowest priority)
                     count_dict[4] = count_dict.get(4, 0) + count
@@ -1834,10 +1834,13 @@ class IncidentsView(APIView):
                 if severity_value == 4:
                     # For P4, include severity=4, NULL, 0, and >4 (same as distribution view)
                     severity_q = (
-                        Q(severity=4)
-                        | Q(severity__isnull=True)
-                        | Q(severity=0)
-                        | Q(severity__gt=4)
+                        Q(severity=4) | Q(severity__isnull=False) | Q(severity__gt=4)
+                    )
+                    filters &= severity_q
+                elif severity_value == 1:
+                    # For P4, include severity=4, NULL, 0, and >4 (same as distribution view)
+                    severity_q = (
+                        Q(severity=1) | Q(severity=0) | Q(severity__isnull=True)
                     )
                     filters &= severity_q
                 elif 1 <= severity_value <= 3:
@@ -2439,9 +2442,9 @@ class OffenseStatsAPIView(APIView):
                 )
             # Initialize filters
             filters = Q(assests__id__in=assets) & Q(
-                    qradar_tenant_domain__id__in=tenant_ids
+                qradar_tenant_domain__id__in=tenant_ids
             )
-            #Handle date filtering
+            # Handle date filtering
             filter_type = request.query_params.get("filter_type")
             start_date = request.query_params.get("start_date")
             end_date = request.query_params.get("end_date")
@@ -2450,7 +2453,7 @@ class OffenseStatsAPIView(APIView):
 
             def datetime_to_unix(dt):
                 return (
-                        int(time.mktime(dt.timetuple())) * 1000
+                    int(time.mktime(dt.timetuple())) * 1000
                 )  # Convert to milliseconds
 
             if start_date and end_date:
@@ -2551,9 +2554,6 @@ class OffenseStatsAPIView(APIView):
                         {"error": f"Invalid filter_type: {str(e)}"}, status=400
                     )
 
-
-
-
             # Step 3: Calculate today's start timestamp (00:00 UTC, May 22, 2025)
             now = timezone.now()
 
@@ -2564,9 +2564,7 @@ class OffenseStatsAPIView(APIView):
             today_start_timestamp = int(today_start.timestamp() * 1000)
             # Step 4: Compute statistics directly in the database
 
-            stats = IBMQradarOffense.objects.filter(
-                filters
-            ).aggregate(
+            stats = IBMQradarOffense.objects.filter(filters).aggregate(
                 total_offenses=Count("id"),
                 open_offenses=Count(
                     Case(When(~Q(status="CLOSED"), then=1), output_field=IntegerField())
