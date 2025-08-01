@@ -94,11 +94,11 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                 await self.send(
                     text_data=json.dumps({"unseen_msg_count": unseen_count})
                 )
-            # elif msg_type == "mark_all_seen":
-            #     seen_messages_count = await self.mark_all_seen(self.user.id)
-            #     await self.send(
-            #         text_data=json.dumps({"seen_messages_count": seen_messages_count})
-            #     )
+            elif msg_type == "mark_all_seen":
+                seen_messages_count = await self.mark_all_seen(self.user.id)
+                await self.send(
+                    text_data=json.dumps({"seen_messages_count": seen_messages_count})
+                )
 
         except (json.JSONDecodeError, KeyError):
             await self.send(
@@ -177,10 +177,10 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
             )
             return 0
 
-    # @database_sync_to_async
-    # def mark_all_seen(self, user_id):
-    #     tenant = Tenant.objects.get(tenant__id=self.tenant_id)
-    #     updated_count = ChatMessage.objects.filter(
-    #         admin__id=self.admin_id, tenant=tenant, is_seen=False
-    #     ).update(is_seen=True, is_seen_at=timezone.now())
-    #     return updated_count
+    @database_sync_to_async
+    def mark_all_seen(self, user_id):
+        tenant = Tenant.objects.get(tenant__id=self.tenant_id)
+        updated_count = ChatMessage.objects.filter(
+            admin__id=self.admin_id, tenant=tenant, is_seen=False
+        ).update(is_seen=True, is_seen_at=timezone.now())
+        return updated_count
