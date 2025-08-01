@@ -44,10 +44,10 @@ app.conf.beat_schedule = {
         "task": "tenant.itsm_tasks.sync_itsm",
         "schedule": crontab(minute="*/5"),
     },
-    # "cortex-sync-tasks": {
-    #     "task": "tenant.cortex_soar_tasks.sync_soar_data",
-    #     "schedule": crontab(minute="*/5"),
-    # },
+    "cortex-sync-tasks": {
+        "task": "tenant.cortex_soar_tasks.sync_soar_data",
+        "schedule": crontab(minute="*/5"),
+    },
     "threat-intelligence-sync-tasks": {
         "task": "tenant.threat_intelligence_tasks.default_cyware",
         "schedule": crontab(minute="*/5"),
