@@ -42,9 +42,7 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
             await self.send(
                 text_data=json.dumps(
                     {
-                        "no_history": True,
-                        "admin_id": self.admin_id,
-                        "tenant_id": self.tenant_id,
+                        "no_history": True
                     }
                 )
             )
@@ -57,6 +55,7 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                             "sender": msg["sender"],
                             "timestamp": msg["timestamp"],
                             "is_seen": msg["is_seen"],
+                            "is_seen_at": msg["is_seen_at"],
                             # "admin__username":msg["admin__username"],
                         }
                     )
@@ -149,7 +148,7 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                     "sender__username",
                     "timestamp",
                     "is_seen",
-                    "admin__username",
+                    "is_seen_at",
                 )
             )
             return [
@@ -158,7 +157,7 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                     "sender": m["sender__username"],
                     "timestamp": m["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
                     "is_seen": "yes" if m["is_seen"] else "no",
-                    "admin__username": m["admin__username"],
+                    "is_seen_at": m["is_seen_at"].strftime("%Y-%m-%d %H:%M:%S"),
                 }
                 for m in reversed(messages)
             ]
@@ -169,30 +168,7 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def unseen_message_count(self, receiver_id):
         try:
-            # tenant = Tenant.objects.get(tenant__id=self.tenant_id)
-            # return ChatMessage.objects.filter(
-            #     Q(admin__id=self.admin_id) &
-            #     Q(tenant=tenant) &
-            #     Q(is_seen=False)
-            # ).count()
             tenant = Tenant.objects.get(tenant__id=self.tenant_id)
-            # messages = (
-            #     ChatMessage.objects.filter(admin__id=self.admin_id, tenant=tenant)
-            #     .order_by("-timestamp")
-            #     .values("message", "sender__username", "timestamp", "is_seen", "admin__username")
-            # )
-            #
-            # return [
-            #     {
-            #         "message": m["message"],
-            #         "sender": m["sender__username"],
-            #         "timestamp": m["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
-            #         "is_seen": "yes" if m["is_seen"] else "no",
-            #         "admin__username": m["admin__username"]
-            #
-            #     }
-            #     for m in reversed(messages)
-            # ]
             return ChatMessage.objects.filter(
                 admin__id=self.admin_id, tenant=tenant, is_seen=False
             ).count()
@@ -204,6 +180,6 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
     def mark_all_seen(self, user_id):
         tenant = Tenant.objects.get(tenant__id=self.tenant_id)
         updated_count = ChatMessage.objects.filter(
-            admin__id=self.admin_id, tenant=tenant, is_seen=False, sender__id=user_id
+            admin__id=self.admin_id, tenant=tenant, is_seen=False
         ).update(is_seen=True, is_seen_at=timezone.now())
         return updated_count
