@@ -3,12 +3,13 @@ from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.utils import timezone
 from loguru import logger
 from rest_framework_simplejwt.tokens import AccessToken
-from django.utils import timezone
+
 from authentication.models import User
 from tenant.models import ChatMessage, Tenant
-from django.db.models import Q
+
 
 class AdminTenantChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -38,7 +39,15 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
         history = await self.get_chat_history()
         # unseen_msg_count = await self.unseen_message_count(self.user.id)
         if not history:
-            await self.send(text_data=json.dumps({"no_history": True,"admin_id":self.admin_id,"tenant_id":self.tenant_id }))
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "no_history": True,
+                        "admin_id": self.admin_id,
+                        "tenant_id": self.tenant_id,
+                    }
+                )
+            )
         else:
             for msg in history:
                 await self.send(
@@ -49,7 +58,6 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                             "timestamp": msg["timestamp"],
                             "is_seen": msg["is_seen"],
                             # "admin__username":msg["admin__username"],
-
                         }
                     )
                 )
@@ -91,16 +99,12 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
             elif msg_type == "get_unseen_count":
                 unseen_count = await self.unseen_message_count(self.user.id)
                 await self.send(
-                    text_data=json.dumps({
-                        "unseen_msg_count": unseen_count
-                    })
+                    text_data=json.dumps({"unseen_msg_count": unseen_count})
                 )
             elif msg_type == "mark_all_seen":
                 seen_messages_count = await self.mark_all_seen(self.user.id)
                 await self.send(
-                    text_data=json.dumps({
-                        "seen_messages_count": seen_messages_count
-                    })
+                    text_data=json.dumps({"seen_messages_count": seen_messages_count})
                 )
 
         except (json.JSONDecodeError, KeyError):
@@ -118,15 +122,17 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
         except Exception:
             return None
 
-
-
     @database_sync_to_async
     def save_message(self, message):
         try:
             tenant = Tenant.objects.get(tenant__id=self.tenant_id)
             admin = User.objects.get(id=self.admin_id)
             ChatMessage.objects.create(
-                sender=self.user, admin=admin, tenant=tenant, message=message, is_seen=False
+                sender=self.user,
+                admin=admin,
+                tenant=tenant,
+                message=message,
+                is_seen=False,
             )
         except Exception as e:
             logger.error(f"Failed to save message: {str(e)}")
@@ -138,16 +144,21 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
             messages = (
                 ChatMessage.objects.filter(admin__id=self.admin_id, tenant=tenant)
                 .order_by("-timestamp")[offset : offset + limit]
-                .values("message", "sender__username", "timestamp","is_seen","admin__username")
+                .values(
+                    "message",
+                    "sender__username",
+                    "timestamp",
+                    "is_seen",
+                    "admin__username",
+                )
             )
             return [
                 {
                     "message": m["message"],
                     "sender": m["sender__username"],
                     "timestamp": m["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
-                    "is_seen":"yes" if m["is_seen"] else "no",
-                    "admin__username":m["admin__username"]
-
+                    "is_seen": "yes" if m["is_seen"] else "no",
+                    "admin__username": m["admin__username"],
                 }
                 for m in reversed(messages)
             ]
@@ -182,7 +193,9 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
             #     }
             #     for m in reversed(messages)
             # ]
-            return ChatMessage.objects.filter(admin__id=self.admin_id, tenant=tenant, is_seen=False).count()
+            return ChatMessage.objects.filter(
+                admin__id=self.admin_id, tenant=tenant, is_seen=False
+            ).count()
         except Exception as e:
             logger.error(f"Failed to count unseen messages: {str(e)}")
             return 0
@@ -191,14 +204,6 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
     def mark_all_seen(self, user_id):
         tenant = Tenant.objects.get(tenant__id=self.tenant_id)
         updated_count = ChatMessage.objects.filter(
-            admin__id=self.admin_id,
-            tenant=tenant,
-            is_seen=False,
-            sender__id=user_id
-        ).update(
-            is_seen=True,
-            is_seen_at=timezone.now()
-        )
+            admin__id=self.admin_id, tenant=tenant, is_seen=False, sender__id=user_id
+        ).update(is_seen=True, is_seen_at=timezone.now())
         return updated_count
-
-

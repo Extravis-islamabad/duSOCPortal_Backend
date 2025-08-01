@@ -1272,7 +1272,6 @@ class OwnerDistributionView(APIView):
             )
 
 
-
 class DashboardView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1345,7 +1344,9 @@ class DashboardView(APIView):
                 end_date = self._parse_date(request.query_params.get("end_date"))
                 if not start_date or not end_date:
                     return Response(
-                        {"error": "Custom range requires both start_date and end_date."},
+                        {
+                            "error": "Custom range requires both start_date and end_date."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -1377,7 +1378,7 @@ class DashboardView(APIView):
                     date_filter &= Q(created__date__gte=start_date)
                 if end_date:
                     date_filter &= Q(created__date__lte=end_date)
-                
+
                 true_positive_filters &= date_filter
                 false_positive_filters &= date_filter
                 total_incident_filters &= date_filter
@@ -1408,7 +1409,9 @@ class DashboardView(APIView):
                     true_positive_filters &= Q(status=status_value)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid status value. Must be 1 (open) or 2 (closed)."},
+                        {
+                            "error": "Invalid status value. Must be 1 (open) or 2 (closed)."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -1597,6 +1600,7 @@ class DashboardView(APIView):
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
             raise ValueError("Invalid date format")
+
 
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
