@@ -102,6 +102,11 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                 await self.send(
                     text_data=json.dumps({"seen_messages_count": seen_messages_count})
                 )
+            elif msg_type=="get_admin_unseen_messages_count":
+                admin_messages_count = await self.get_admin_unseen_messages_count()
+                await self.send(
+                    text_data=json.dumps({"admin_unseen_messages_count": admin_messages_count})
+                )
 
         except (json.JSONDecodeError, KeyError):
             await self.send(
@@ -208,4 +213,11 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                 tenant=tenant, is_tenant_seen=False
             ).update(is_tenant_seen=True, is_tenant_seen_at=timezone.now())
             return updated_count
+
+    @database_sync_to_async
+    def get_admin_unseen_messages_count(self):
+        count = ChatMessage.objects.filter(
+            admin__id=self.admin_id,is_admin_seen=False
+        ).count()
+        return count
 
