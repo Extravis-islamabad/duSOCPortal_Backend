@@ -2465,8 +2465,8 @@ class OffenseStatsAPIView(APIView):
                         datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
                     ).replace(hour=23, minute=59, second=59, microsecond=999999)
 
-                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & Q(
-                        start_time__lte=datetime_to_unix(end_date)
+                    filters &= Q(start_date__gte=start_date) & Q(
+                        start_date__lte=end_date
                     )
                 except ValueError:
                     return Response(
@@ -2546,8 +2546,8 @@ class OffenseStatsAPIView(APIView):
                             hour=23, minute=59, second=59, microsecond=999999
                         )
 
-                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & Q(
-                        start_time__lte=datetime_to_unix(end_date)
+                    filters &= Q(start_date__gte=start_date) & Q(
+                        start_date__lte=end_date
                     )
                 except Exception as e:
                     return Response(
