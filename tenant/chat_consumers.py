@@ -173,7 +173,8 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
             return 0
         except Exception as e:
             logger.error(
-                f"Failed to count unseen messages for admin {self.admin_id}, tenant_id {self.tenant_id}: {str(e)}")
+                f"Failed to count unseen messages for admin {self.admin_id}, tenant_id {self.tenant_id}: {str(e)}"
+            )
             return 0
 
     @database_sync_to_async
