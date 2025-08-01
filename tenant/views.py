@@ -3918,9 +3918,6 @@ class AlertListView(APIView):
                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
             )
 
-
-
-
         try:
             # Step 2: Get tenant-specific queryset
             if tenant.company.is_defualt_threat_intel:
@@ -4107,8 +4104,9 @@ class AlertListView(APIView):
 
             def datetime_to_unix(dt):
                 return (
-                        int(time.mktime(dt.timetuple())) * 1000
+                    int(time.mktime(dt.timetuple())) * 1000
                 )  # Convert to milliseconds
+
             # Handle date filtering
             filter_type = request.query_params.get("filter_type")
             start_date = request.query_params.get("start_date")
@@ -4119,8 +4117,12 @@ class AlertListView(APIView):
             if start_date and end_date:
                 try:
                     if not isinstance(start_date, str) or not isinstance(end_date, str):
-                        return Response({"error": "start_date and end_date must be strings in YYYY-MM-DD format."},
-                                        status=400)
+                        return Response(
+                            {
+                                "error": "start_date and end_date must be strings in YYYY-MM-DD format."
+                            },
+                            status=400,
+                        )
 
                     start_date = timezone.make_aware(
                         datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
@@ -4130,8 +4132,8 @@ class AlertListView(APIView):
                         datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
                     ).replace(hour=23, minute=59, second=59, microsecond=999999)
 
-                    filters_on_date &= (
-                            Q(published_time__gte=start_date) & Q(published_time__lte=end_date)
+                    filters_on_date &= Q(published_time__gte=start_date) & Q(
+                        published_time__lte=end_date
                     )
                 except ValueError:
                     return Response(
@@ -4210,8 +4212,8 @@ class AlertListView(APIView):
                         end_date = last_day_last_month.replace(
                             hour=23, minute=59, second=59, microsecond=999999
                         )
-                    filters_on_date &= (
-                            Q(published_time__gte=start_date) & Q(published_time__lte=end_date)
+                    filters_on_date &= Q(published_time__gte=start_date) & Q(
+                        published_time__lte=end_date
                     )
 
                 except Exception as e:
@@ -4219,11 +4221,12 @@ class AlertListView(APIView):
                         {"error": f"Invalid filter_type: {str(e)}"}, status=400
                     )
 
-
-
-
             # Step 4: Apply filters and sort
-            queryset = queryset.filter(filters).filter(filters_on_date).order_by("-published_time")
+            queryset = (
+                queryset.filter(filters)
+                .filter(filters_on_date)
+                .order_by("-published_time")
+            )
 
             # Step 5: Pagination
             paginator = PageNumberPagination()
@@ -5849,8 +5852,8 @@ class SLABreachedIncidentsView(APIView):
                     else None,
                     "sla_type": sla_type.upper(),
                     "sla_minutes": getattr(sla, f"{sla_type}_minutes"),
-                    "actual_minutes": actual_minutes,
-                    "breach_duration_minutes": breach_duration,
+                    "actual_minutes": round(actual_minutes),
+                    "breach_duration_minutes": round(breach_duration),
                     "mitre_tactic": inc.mitre_tactic,
                     "mitre_technique": inc.mitre_technique,
                     "configuration_item": inc.configuration_item,
