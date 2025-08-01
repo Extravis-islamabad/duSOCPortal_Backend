@@ -151,7 +151,7 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                     "sender": m["sender__username"],
                     "timestamp": m["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
                     "is_seen": "yes" if m["is_seen"] else "no",
-                    "is_seen_at": m["is_seen_at"].strftime("%Y-%m-%d %H:%M:%S"),
+                    "is_seen_at": m["is_seen_at"],
                 }
                 for m in reversed(messages)
             ]
