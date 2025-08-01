@@ -1941,20 +1941,13 @@ class IncidentsView(APIView):
         if severity_filter:
             try:
                 severity_value = int(severity_filter)
-
-                if severity_value == 4:
-                    # For P4, include severity=4, NULL, 0, and >4 (same as distribution view)
-                    severity_q = (
-                        Q(severity=4) | Q(severity__isnull=False) | Q(severity__gt=4)
-                    )
-                    filters &= severity_q
-                elif severity_value == 1:
+                if severity_value == 1:
                     # For P4, include severity=4, NULL, 0, and >4 (same as distribution view)
                     severity_q = (
                         Q(severity=1) | Q(severity=0) | Q(severity__isnull=True)
                     )
                     filters &= severity_q
-                elif 1 <= severity_value <= 3:
+                elif 1 <= severity_value <= 4:
                     # For P1-P3, exact match
                     filters &= Q(severity=severity_value)
                 else:
