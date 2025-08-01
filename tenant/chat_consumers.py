@@ -48,7 +48,6 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                             "message": msg["message"],
                             "sender": msg["sender"],
                             "timestamp": msg["timestamp"],
-                            "is_seen": msg["is_seen"],
                             "is_admin_seen":msg["is_admin_seen"],
                             "is_admin_seen_at": msg["is_admin_seen_at"],
                             "is_tenant_seen":msg["is_tenant_seen"],
@@ -92,12 +91,14 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                 )
             # adding for getting unseen messages count
             elif msg_type == "get_unseen_count":
-                unseen_count = await self.unseen_message_count(self.user.id)
+                user_type = data.get("user_type")
+                unseen_count = await self.unseen_message_count(user_type)
                 await self.send(
                     text_data=json.dumps({"unseen_msg_count": unseen_count})
                 )
             elif msg_type == "mark_all_seen":
-                seen_messages_count = await self.mark_all_seen(self.user.id)
+                user_type = data.get("user_type")
+                seen_messages_count = await self.mark_all_seen(user_type)
                 await self.send(
                     text_data=json.dumps({"seen_messages_count": seen_messages_count})
                 )
@@ -167,14 +168,23 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
             return []
 
     @database_sync_to_async
-    def unseen_message_count(self, receiver_id):
+    def unseen_message_count(self, get_unseen_for):
         try:
-            tenant = Tenant.objects.get(tenant__id=self.tenant_id)
-            count = ChatMessage.objects.filter(
-                admin__id=self.admin_id, tenant=tenant, is_seen=False
-            ).count()
-            logger.info(f"Unseen message count for admin {self.admin_id}: {count}")
-            return count
+            if get_unseen_for == "admin":
+                tenant = Tenant.objects.get(tenant__id=self.tenant_id)
+                count = ChatMessage.objects.filter(
+                    admin__id=self.admin_id, tenant=tenant, is_admin_seen=False
+                ).count()
+                logger.info(f"Unseen message count for admin {self.admin_id}: {count}")
+                return count
+            elif get_unseen_for == "tenant":
+                tenant = Tenant.objects.get(tenant__id=self.tenant_id)
+                count = ChatMessage.objects.filter(
+                    tenant=tenant, is_tenant_seen=False
+                ).count()
+                logger.info(f"Unseen message count for tenant {self.admin_id}: {count}")
+                return count
+
         except Tenant.DoesNotExist:
             logger.warning(f"Tenant not found for tenant_id: {self.tenant_id}")
             return 0
@@ -185,9 +195,17 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
             return 0
 
     @database_sync_to_async
-    def mark_all_seen(self, user_id):
-        tenant = Tenant.objects.get(tenant__id=self.tenant_id)
-        updated_count = ChatMessage.objects.filter(
-            admin__id=self.admin_id, tenant=tenant, is_seen=False
-        ).update(is_seen=True, is_seen_at=timezone.now())
-        return updated_count
+    def mark_all_seen(self, get_unseen_for):
+        if get_unseen_for == "admin":
+            tenant = Tenant.objects.get(tenant__id=self.tenant_id)
+            updated_count = ChatMessage.objects.filter(
+                admin__id=self.admin_id, tenant=tenant, is_admin_seen=False
+            ).update(is_admin_seen=True, is_admin_seen_at=timezone.now())
+            return updated_count
+        elif get_unseen_for == "tenant":
+            tenant = Tenant.objects.get(tenant__id=self.tenant_id)
+            updated_count = ChatMessage.objects.filter(
+                tenant=tenant, is_tenant_seen=False
+            ).update(is_tenant_seen=True, is_tenant_seen_at=timezone.now())
+            return updated_count
+
