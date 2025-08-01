@@ -987,15 +987,18 @@ class SeverityDistributionView(APIView):
 
             def datetime_to_unix(dt):
                 return (
-                        int(time.mktime(dt.timetuple())) * 1000
+                    int(time.mktime(dt.timetuple())) * 1000
                 )  # Convert to milliseconds
-
 
             if start_date and end_date:
                 try:
                     if not isinstance(start_date, str) or not isinstance(end_date, str):
-                        return Response({"error": "start_date and end_date must be strings in YYYY-MM-DD format."},
-                                        status=400)
+                        return Response(
+                            {
+                                "error": "start_date and end_date must be strings in YYYY-MM-DD format."
+                            },
+                            status=400,
+                        )
 
                     start_date = timezone.make_aware(
                         datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
@@ -1005,8 +1008,8 @@ class SeverityDistributionView(APIView):
                         datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
                     ).replace(hour=23, minute=59, second=59, microsecond=999999)
 
-                    true_positive_filters &= (
-                            Q(occured__gte=start_date) & Q(occured__lte=end_date)
+                    true_positive_filters &= Q(occured__gte=start_date) & Q(
+                        occured__lte=end_date
                     )
                 except ValueError:
                     return Response(
@@ -1085,16 +1088,14 @@ class SeverityDistributionView(APIView):
                         end_date = last_day_last_month.replace(
                             hour=23, minute=59, second=59, microsecond=999999
                         )
-                    true_positive_filters &= (
-                            Q(occured__gte=start_date) & Q(occured__lte=end_date)
+                    true_positive_filters &= Q(occured__gte=start_date) & Q(
+                        occured__lte=end_date
                     )
 
                 except Exception as e:
                     return Response(
                         {"error": f"Invalid filter_type: {str(e)}"}, status=400
                     )
-
-
 
             # Define our severity levels (P1-P4)
             SEVERITY_LEVELS = {1: "1", 2: "2", 3: "3", 4: "4"}
@@ -1185,8 +1186,12 @@ class TypeDistributionView(APIView):
             if start_date and end_date:
                 try:
                     if not isinstance(start_date, str) or not isinstance(end_date, str):
-                        return Response({"error": "start_date and end_date must be strings in YYYY-MM-DD format."},
-                                        status=400)
+                        return Response(
+                            {
+                                "error": "start_date and end_date must be strings in YYYY-MM-DD format."
+                            },
+                            status=400,
+                        )
 
                     start_date = timezone.make_aware(
                         datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
@@ -1196,9 +1201,7 @@ class TypeDistributionView(APIView):
                         datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
                     ).replace(hour=23, minute=59, second=59, microsecond=999999)
 
-                    filters &= (
-                            Q(occured__gte=start_date) & Q(occured__lte=end_date)
-                    )
+                    filters &= Q(occured__gte=start_date) & Q(occured__lte=end_date)
                 except ValueError:
                     return Response(
                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
@@ -1276,22 +1279,19 @@ class TypeDistributionView(APIView):
                         end_date = last_day_last_month.replace(
                             hour=23, minute=59, second=59, microsecond=999999
                         )
-                    filters &= (
-                            Q(occured__gte=start_date) & Q(occured__lte=end_date)
-                    )
+                    filters &= Q(occured__gte=start_date) & Q(occured__lte=end_date)
 
                 except Exception as e:
                     return Response(
                         {"error": f"Invalid filter_type: {str(e)}"}, status=400
                     )
 
-
-
             # Query type distribution using Django ORM
             type_data = (
                 DUCortexSOARIncidentFinalModel.objects.filter(
                     cortex_soar_tenant__in=soar_ids
-                ).filter(filters)
+                )
+                .filter(filters)
                 .values("qradar_category")
                 .annotate(count=Count("id"))
                 .order_by("-count")
@@ -4344,6 +4344,8 @@ class RecentIncidentsView(APIView):
                 start_date = now - timedelta(days=7)
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
+            elif filter_type == FilterType.QUARTER:
+                start_date = now - timedelta(days=89)
             elif filter_type == FilterType.YEAR:
                 start_date = now - timedelta(days=365)
 
@@ -4581,6 +4583,8 @@ class IncidentSummaryView(APIView):
                         start_date = now - timedelta(days=7)
                     elif filter_enum == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
+                    elif filter_enum == FilterType.QUARTER:
+                        start_date = now - timedelta(days=89)
                     elif filter_enum == FilterType.YEAR:
                         start_date = now - timedelta(days=365)
                     filters &= Q(created__gte=start_date)
@@ -4902,123 +4906,6 @@ class SLAIncidentsView(APIView):
         except Exception as e:
             logger.error(f"SLAIncidentsView Error: {str(e)}")
             return Response({"error": str(e)}, status=500)
-
-
-# class SLAComplianceView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#             logger.info(f"SLAComplianceView | Authenticated Tenant ID: {tenant.id}")
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-
-#         try:
-#             soar_integrations = tenant.company.integrations.filter(
-#                 integration_type=IntegrationTypes.SOAR_INTEGRATION,
-#                 soar_subtype=SoarSubTypes.CORTEX_SOAR,
-#                 status=True,
-#             )
-#             if not soar_integrations.exists():
-#                 return Response(
-#                     {"error": "No active SOAR integration configured."}, status=400
-#                 )
-
-#             soar_tenants = tenant.company.soar_tenants.all()
-#             if not soar_tenants:
-#                 return Response({"error": "No SOAR tenants found."}, status=404)
-#             soar_ids = [t.id for t in soar_tenants]
-
-#             filters = Q(cortex_soar_tenant_id__in=soar_ids)
-
-#             incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-#                 filters,
-#                 incident_tta__isnull=False,
-#                 incident_ttn__isnull=False,
-#                 incident_ttdn__isnull=False,
-#             )
-
-#             if tenant.company.is_default_sla:
-#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
-#             else:
-#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-#                     soar_tenant__in=soar_tenants, company=tenant.company
-#                 )
-
-#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
-
-#             priority_map = {
-#                 "P1 Critical": SlaLevelChoices.P1,
-#                 "P2 High": SlaLevelChoices.P2,
-#                 "P3 Medium": SlaLevelChoices.P3,
-#                 "P4 Low": SlaLevelChoices.P4,
-#             }
-
-#             met_sla_count = 0
-#             breached_sla_count = 0
-#             total_incident_count = 0
-
-#             for incident in incidents:
-#                 sla_level = priority_map.get(incident.incident_priority)
-#                 if not sla_level:
-#                     continue
-
-#                 sla_metric = sla_metrics_dict.get(sla_level)
-#                 if not sla_metric:
-#                     continue
-
-#                 total_incident_count += 1
-#                 created = incident.created
-#                 any_breach = False
-
-#                 if incident.incident_tta:
-#                     tta_minutes = (incident.incident_tta - created).total_seconds() / 60
-#                     if tta_minutes > sla_metric.tta_minutes:
-#                         any_breach = True
-
-#                 if incident.incident_ttn:
-#                     ttn_minutes = (incident.incident_ttn - created).total_seconds() / 60
-#                     if ttn_minutes > sla_metric.ttn_minutes:
-#                         any_breach = True
-
-#                 if incident.incident_ttdn:
-#                     ttdn_minutes = (
-#                         incident.incident_ttdn - created
-#                     ).total_seconds() / 60
-#                     if ttdn_minutes > sla_metric.ttdn_minutes:
-#                         any_breach = True
-
-#                 if any_breach:
-#                     breached_sla_count += 1
-#                 else:
-#                     met_sla_count += 1
-
-#             incident_met_percentage = (
-#                 round((met_sla_count / total_incident_count) * 100, 2)
-#                 if total_incident_count > 0
-#                 else 0.0
-#             )
-#             total_breach_incident_percentage = (
-#                 round((breached_sla_count / total_incident_count) * 100, 2)
-#                 if total_incident_count > 0
-#                 else 0.0
-#             )
-
-#             return Response(
-#                 {
-#                     "total_breached_incidents": breached_sla_count,
-#                     "total_met_target_incidents": met_sla_count,
-#                     "overall_compliance_percentage": incident_met_percentage,
-#                     "incident_met_percentage": incident_met_percentage,
-#                     "total_breach_incident_percentage": total_breach_incident_percentage,
-#                 }
-#             )
-
-#         except Exception as e:
-#             logger.error(f"SLAComplianceView Error: {str(e)}")
-#             return Response({"error": str(e)}, status=500)
 
 
 class SLAComplianceView(APIView):
