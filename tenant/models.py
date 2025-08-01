@@ -1298,9 +1298,10 @@ class ChatMessage(models.Model):
     )
     message = models.TextField()
     # adding extra columns in order to track the unseen message count and its timestamp
-    is_seen = models.BooleanField(default=False)
-    is_seen_at = models.DateTimeField(null=True, blank=True)
-
+    is_admin_seen = models.BooleanField(default=False)
+    is_admin_seen_at = models.DateTimeField(null=True, blank=True)
+    is_tenant_seen = models.BooleanField(default=False)
+    is_tenant_seen_at = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
