@@ -2324,9 +2324,9 @@ class OffenseStatsAPIView(APIView):
                 )
             # Initialize filters
             filters = Q(assests__id__in=assets) & Q(
-                    qradar_tenant_domain__id__in=tenant_ids
+                qradar_tenant_domain__id__in=tenant_ids
             )
-            #Handle date filtering
+            # Handle date filtering
             filter_type = request.query_params.get("filter_type")
             start_date = request.query_params.get("start_date")
             end_date = request.query_params.get("end_date")
@@ -2335,7 +2335,7 @@ class OffenseStatsAPIView(APIView):
 
             def datetime_to_unix(dt):
                 return (
-                        int(time.mktime(dt.timetuple())) * 1000
+                    int(time.mktime(dt.timetuple())) * 1000
                 )  # Convert to milliseconds
 
             if start_date and end_date:
@@ -2436,9 +2436,6 @@ class OffenseStatsAPIView(APIView):
                         {"error": f"Invalid filter_type: {str(e)}"}, status=400
                     )
 
-
-
-
             # Step 3: Calculate today's start timestamp (00:00 UTC, May 22, 2025)
             now = timezone.now()
 
@@ -2449,9 +2446,7 @@ class OffenseStatsAPIView(APIView):
             today_start_timestamp = int(today_start.timestamp() * 1000)
             # Step 4: Compute statistics directly in the database
 
-            stats = IBMQradarOffense.objects.filter(
-                filters
-            ).aggregate(
+            stats = IBMQradarOffense.objects.filter(filters).aggregate(
                 total_offenses=Count("id"),
                 open_offenses=Count(
                     Case(When(~Q(status="CLOSED"), then=1), output_field=IntegerField())
