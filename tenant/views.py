@@ -1000,7 +1000,7 @@ class SeverityDistributionView(APIView):
                     count_dict[severity_val] = count_dict.get(severity_val, 0) + count
                 elif severity_val is None or severity_val == 0:
                     # Map NULL/0 severity to P4 (lowest priority)
-                    count_dict[4] = count_dict.get(4, 0) + count
+                    count_dict[1] = count_dict.get(4, 0) + count
                 elif severity_val > 4:
                     # Map severity > 4 to P4 (lowest priority)
                     count_dict[4] = count_dict.get(4, 0) + count
@@ -1716,10 +1716,13 @@ class IncidentsView(APIView):
                 if severity_value == 4:
                     # For P4, include severity=4, NULL, 0, and >4 (same as distribution view)
                     severity_q = (
-                        Q(severity=4)
-                        | Q(severity__isnull=True)
-                        | Q(severity=0)
-                        | Q(severity__gt=4)
+                        Q(severity=4) | Q(severity__isnull=False) | Q(severity__gt=4)
+                    )
+                    filters &= severity_q
+                elif severity_value == 1:
+                    # For P4, include severity=4, NULL, 0, and >4 (same as distribution view)
+                    severity_q = (
+                        Q(severity=1) | Q(severity=0) | Q(severity__isnull=True)
                     )
                     filters &= severity_q
                 elif 1 <= severity_value <= 3:
