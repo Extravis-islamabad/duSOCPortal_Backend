@@ -4,7 +4,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("tenant", "0173_chatmessage_is_seen_chatmessage_is_seen_at"),
     ]

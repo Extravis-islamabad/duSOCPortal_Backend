@@ -5192,7 +5192,7 @@ class SLASeverityIncidentsView(APIView):
             start_date = request.query_params.get("start_date")
             end_date = request.query_params.get("end_date")
             db_timezone = timezone.get_fixed_timezone(240)
-            now = timezone.now().astimezone(db_timezone)
+            now = timezone.now()  # .astimezone(db_timezone)
 
             # Start with base filters
             filters = base_filters
