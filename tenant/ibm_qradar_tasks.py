@@ -390,6 +390,39 @@ def sync_event_log_assets(
 
 
 @shared_task
+def sync_event_log_assets_groups(
+    username: str, password: str, ip_address: str, port: str, integration_id: int
+):
+    start = time.time()
+    logger.info("Running QRadarTasks.sync_event_log_assets_groups() task")
+    try:
+        with IBMQradar(
+            username=username, password=password, ip_address=ip_address, port=port
+        ) as ibm_qradar:
+            data = ibm_qradar._get_log_sources_groups()
+            if data is None:
+                logger.error(
+                    "No data returned from IBM QRadar event log assets endpoint"
+                )
+                return
+
+            transformed_data = ibm_qradar.transform_assets_groups(
+                data, integration_id=integration_id
+            )
+            if transformed_data:
+                ibm_qradar._insert_assets_groups(transformed_data)
+
+        logger.info(
+            f"Successfully synced {len(transformed_data)} sync_event_log_assets_groups"
+        )
+        logger.info(
+            f"QRadarTasks.sync_event_log_assets_groups() task took {time.time() - start} seconds"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in sync_event_log_assets_groups: {str(e)}")
+
+
+@shared_task
 def sync_parent_high_level_category():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
@@ -425,16 +458,15 @@ def sync_top_high_level_category_count_category():
         )
 
 
-# adding tasks for above AQL queries
 @shared_task
-def sync_event_log_assets_category():
+def sync_event_log_assets_groups_parent():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
     for result in results:
-        sync_event_log_assets.delay(
+        sync_event_log_assets(
             username=result.username,
             password=result.password,
             ip_address=result.ip_address,
@@ -755,6 +787,13 @@ def sync_ibm_qradar_data():
             integration_id=result.integration.id,
         )
         sync_event_collectors.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+        sync_event_log_assets_groups.delay(
             username=result.username,
             password=result.password,
             ip_address=result.ip_address,
