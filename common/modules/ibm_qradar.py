@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 import requests
@@ -22,6 +22,7 @@ from tenant.models import (
     DuIbmQradarTenants,
     EventCountLog,
     IBMQradarAssests,
+    IBMQradarAssetsGroup,
     IBMQradarEPS,
     IBMQradarEventCollector,
     IBMQradarLogSourceTypes,
@@ -344,31 +345,98 @@ class IBMQradar:
             f"{self.base_url}/{IBMQradarConstants.IBM_LOG_SOURCES_GROUPS_ENDPOINT}"
         )
         try:
-            response = requests.get(
-                endpoint,
-                auth=HTTPBasicAuth(
-                    self.username,
-                    self.password,
-                ),
-                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=SSLConstants.TIMEOUT,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                    proxies=proxies,
+                )
+            else:
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                )
             if response.status_code != 200:
                 logger.warning(
-                    f"IBMQRadar._get_log_sources_types() return the status code {response.status_code}"
+                    f"IBMQRadar._get_log_sources_groups() return the status code {response.status_code}"
                 )
                 return
 
             log_sources_types = response.json()
             logger.success(
-                f"IBMQRadar._get_log_sources_types() took: {time.time() - start} seconds"
+                f"IBMQRadar._get_log_sources_groups() took: {time.time() - start} seconds"
             )
             return log_sources_types
 
         except Exception as e:
             logger.error(
-                f"An error occurred in IBMQradar._get_log_sources_types(): {str(e)}"
+                f"An error occurred in IBMQradar._get_log_sources_groups(): {str(e)}"
             )
+
+    def transform_assets_groups(self, data, integration_id):
+        df = pd.DataFrame(data)
+        df["integration_id"] = integration_id
+        df["modification_date"] = df["modification_date"].apply(
+            lambda ts: datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc)
+        )
+        df["description"] = df["description"].apply(
+            lambda d: None if isinstance(d, str) and d.strip() == "" else d
+        )
+        df.rename(
+            columns={
+                "id": "db_id",
+            },
+            inplace=True,
+        )
+        records = df.to_dict(orient="records")
+        return records
+
+    def _insert_assets_groups(self, data):
+        """
+        Inserts or updates asset group records in the AssetsGroup table.
+        """
+        start = time.time()
+        logger.info(f"AssetGroupService._insert_assets_groups() started at: {start}")
+
+        records = [IBMQradarAssetsGroup(**item) for item in data]
+        try:
+            with transaction.atomic():
+                IBMQradarAssetsGroup.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=[
+                        "name",
+                        "description",
+                        "owner",
+                        "modification_date",
+                        "parent_id",
+                        "assignable",
+                        "child_group_ids",
+                        "integration_id",
+                    ],
+                    unique_fields=["db_id"],
+                )
+                logger.info(f"Inserted/Updated {len(records)} asset group records.")
+                logger.success(
+                    f"AssetGroupService._insert_assets_groups() took: {time.time() - start:.2f} seconds"
+                )
+        except Exception as e:
+            logger.error(f"Error in _insert_assets_groups: {str(e)}")
+            transaction.rollback()
 
     def _get_event_logs(self):
         """
@@ -386,15 +454,31 @@ class IBMQradar:
         start = time.time()
         endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_EVENT_LOGS_ENDPOINT}"
         try:
-            response = requests.get(
-                endpoint,
-                auth=HTTPBasicAuth(
-                    self.username,
-                    self.password,
-                ),
-                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=SSLConstants.TIMEOUT,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                    proxies=proxies,
+                )
+            else:
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                )
             if response.status_code != 200:
                 logger.warning(
                     f"IBMQRadar._get_event_logs() return the status code {response.status_code}"
@@ -559,6 +643,7 @@ class IBMQradar:
                 "modified_date",
                 "last_event_time",
                 "integration_id",
+                "group_ids",
             ]
         ]
         df.rename(columns={"id": "db_id", "status_value": "status"}, inplace=True)
@@ -604,6 +689,8 @@ class IBMQradar:
                         "creation_date_converted",
                         "modified_date_converted",
                         "last_event_date_converted",
+                        "integration_id",
+                        "group_ids",
                     ],
                     unique_fields=["db_id"],
                 )
