@@ -260,8 +260,11 @@ class IBMQradarAssetsGroup(models.Model):
         blank=True,
     )
     child_group_ids = ArrayField(
-        base_field=models.BigIntegerField(), blank=True, default=list
+        base_field=models.BigIntegerField(), blank=True, default=list, null=True
     )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "ibm_qradar_assets_group"
