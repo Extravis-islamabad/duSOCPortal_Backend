@@ -269,6 +269,17 @@ class IBMQradarAssetsGroup(models.Model):
     class Meta:
         db_table = "ibm_qradar_assets_group"
 
+    @property
+    def groups(self):
+        """
+        Returns related IBMQradarAssetsGroup instances using group_ids.
+        """
+        from .models import IBMQradarAssetsGroup  # avoid circular import
+
+        if not self.group_ids:
+            return IBMQradarAssetsGroup.objects.none()
+        return IBMQradarAssetsGroup.objects.filter(db_id__in=self.group_ids)
+
     def __str__(self):
         return self.name
 
@@ -310,6 +321,9 @@ class IBMQradarAssests(models.Model):
         null=True,
         blank=True,
         default=None,
+    )
+    group_ids = ArrayField(
+        base_field=models.BigIntegerField(), blank=True, default=list, null=True
     )
 
     average_eps = models.IntegerField(default=0)
