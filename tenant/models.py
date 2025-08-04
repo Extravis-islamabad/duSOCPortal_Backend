@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils import timezone
 from loguru import logger
@@ -241,6 +242,34 @@ class IBMQradarLogSourceTypes(models.Model):
     class Meta:
         db_table = "ibm_qradar_log_source_types"
         ordering = ["-created_at"]
+
+
+class IBMQradarAssetsGroup(models.Model):
+    db_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    owner = models.CharField(max_length=100)
+    modification_date = models.DateTimeField()
+    parent_id = models.BigIntegerField()
+    assignable = models.BooleanField(default=False)
+
+    child_group_ids = ArrayField(
+        base_field=models.BigIntegerField(), blank=True, default=list
+    )
+
+    class Meta:
+        db_table = "ibm_qradar_assets_group"
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        # If modification_date is a number (timestamp in ms), convert it
+        if isinstance(self.modification_date, (int, float)):
+            self.modification_date = datetime.fromtimestamp(
+                self.modification_date / 1000.0, tz=timezone.utc
+            )
+        super().save(*args, **kwargs)
 
 
 class IBMQradarAssests(models.Model):
