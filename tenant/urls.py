@@ -17,7 +17,6 @@ from tenant.views import (
     IncidentSummaryView,
     IncidentsView,
     OffenseCategoriesAPIView,
-    OffenseDetailsByTenantAPIView,
     OffenseDetailsWithFlowsAndAssetsAPIView,
     OffenseDetailsWithFlowsAndAssetsDBIDAPIView,
     OwnerDistributionView,
@@ -102,11 +101,11 @@ urlpatterns = [
         name="incident-detail",
     ),
     # path("api/offense-stats/", OffenseStatsAPIView.as_view(), name="offense-stats"),
-    path(
-        "api/offenses-by-tenant-details/",
-        OffenseDetailsByTenantAPIView.as_view(),
-        name="offense-details-by-tenant",
-    ),
+    # path(
+    #     "api/offenses-by-tenant-details/",
+    #     OffenseDetailsByTenantAPIView.as_view(),
+    #     name="offense-details-by-tenant",
+    # ),
     path(
         "api/offense-details/<int:offense_id>/",
         OffenseDetailsWithFlowsAndAssetsAPIView.as_view(),
