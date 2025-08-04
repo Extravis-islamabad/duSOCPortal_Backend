@@ -252,7 +252,13 @@ class IBMQradarAssetsGroup(models.Model):
     modification_date = models.DateTimeField()
     parent_id = models.BigIntegerField()
     assignable = models.BooleanField(default=False)
-
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_assets_groups",
+        null=True,
+        blank=True,
+    )
     child_group_ids = ArrayField(
         base_field=models.BigIntegerField(), blank=True, default=list
     )
