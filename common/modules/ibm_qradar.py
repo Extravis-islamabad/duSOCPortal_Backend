@@ -325,6 +325,51 @@ class IBMQradar:
                 f"An error occurred in IBMQradar._get_log_sources_types(): {str(e)}"
             )
 
+    def _get_log_sources_groups(self):
+        """
+        Fetches the list of log source groups from the IBM QRadar endpoint.
+
+        This method sends an HTTP GET request to the IBM QRadar log source groups API endpoint
+        to retrieve the list of log source groups. It uses HTTP basic authentication with the
+        credentials set in the IBMQradarConstants. If the request is successful, it returns the
+        parsed JSON response. If the request fails or an exception occurs, it logs an error and
+        returns None.
+
+        :return: A dictionary containing log source group information if the request is successful, otherwise None.
+        :raises: Logs any exceptions that occur during the request.
+        """
+
+        start = time.time()
+        endpoint = (
+            f"{self.base_url}/{IBMQradarConstants.IBM_LOG_SOURCES_GROUPS_ENDPOINT}"
+        )
+        try:
+            response = requests.get(
+                endpoint,
+                auth=HTTPBasicAuth(
+                    self.username,
+                    self.password,
+                ),
+                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                timeout=SSLConstants.TIMEOUT,
+            )
+            if response.status_code != 200:
+                logger.warning(
+                    f"IBMQRadar._get_log_sources_types() return the status code {response.status_code}"
+                )
+                return
+
+            log_sources_types = response.json()
+            logger.success(
+                f"IBMQRadar._get_log_sources_types() took: {time.time() - start} seconds"
+            )
+            return log_sources_types
+
+        except Exception as e:
+            logger.error(
+                f"An error occurred in IBMQradar._get_log_sources_types(): {str(e)}"
+            )
+
     def _get_event_logs(self):
         """
         Fetches the list of event logs from the IBM QRadar endpoint.
