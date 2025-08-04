@@ -48,10 +48,10 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                             "message": msg["message"],
                             "sender": msg["sender"],
                             "timestamp": msg["timestamp"],
-                            "is_admin_seen":msg["is_admin_seen"],
+                            "is_admin_seen": msg["is_admin_seen"],
                             "is_admin_seen_at": msg["is_admin_seen_at"],
-                            "is_tenant_seen":msg["is_tenant_seen"],
-                            "is_tenant_seen_at":msg["is_tenant_seen_at"],
+                            "is_tenant_seen": msg["is_tenant_seen"],
+                            "is_tenant_seen_at": msg["is_tenant_seen_at"],
                         }
                     )
                 )
@@ -102,10 +102,12 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                 await self.send(
                     text_data=json.dumps({"seen_messages_count": seen_messages_count})
                 )
-            elif msg_type=="get_admin_unseen_messages_count":
+            elif msg_type == "get_admin_unseen_messages_count":
                 admin_messages_count = await self.get_admin_unseen_messages_count()
                 await self.send(
-                    text_data=json.dumps({"admin_unseen_messages_count": admin_messages_count})
+                    text_data=json.dumps(
+                        {"admin_unseen_messages_count": admin_messages_count}
+                    )
                 )
 
         except (json.JSONDecodeError, KeyError):
@@ -162,9 +164,17 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
                     "sender": m["sender__username"],
                     "timestamp": m["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
                     "is_admin_seen": "yes" if m["is_admin_seen"] else "no",
-                    "is_admin_seen_at": m["is_admin_seen_at"].strftime("%Y-%m-%d %H:%M:%S") if m["is_admin_seen_at"] else "",
+                    "is_admin_seen_at": m["is_admin_seen_at"].strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    if m["is_admin_seen_at"]
+                    else "",
                     "is_tenant_seen": "yes" if m["is_tenant_seen"] else "no",
-                    "is_tenant_seen_at":m["is_tenant_seen_at"].strftime("%Y-%m-%d %H:%M:%S") if m["is_tenant_seen_at"] else "",
+                    "is_tenant_seen_at": m["is_tenant_seen_at"].strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    if m["is_tenant_seen_at"]
+                    else "",
                 }
                 for m in reversed(messages)
             ]
@@ -217,7 +227,6 @@ class AdminTenantChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def get_admin_unseen_messages_count(self):
         count = ChatMessage.objects.filter(
-            admin__id=self.admin_id,is_admin_seen=False
+            admin__id=self.admin_id, is_admin_seen=False
         ).count()
         return count
-
