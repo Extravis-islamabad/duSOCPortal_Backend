@@ -40,7 +40,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.ibm_qradar_tasks import sync_ibm_tenant_eps
+from tenant.ibm_qradar_tasks import sync_event_log_assets_groups_parent
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -234,7 +234,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_ibm_tenant_eps()
+        sync_event_log_assets_groups_parent()
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
@@ -5144,6 +5144,177 @@ class SLAComplianceView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
+# class SLASeverityIncidentsView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+
+#         try:
+#             soar_tenants = tenant.company.soar_tenants.all()
+#             if not soar_tenants:
+#                 return Response({"error": "No SOAR tenants found."}, status=404)
+#             soar_ids = [t.id for t in soar_tenants]
+
+#             # FIXED: Use consistent filtering logic with DashboardView
+#             # Base filters for True Positives (Ready incidents with all required fields)
+#             true_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+#                 ~Q(owner__isnull=True)
+#                 & ~Q(owner__exact="")
+#                 & Q(incident_tta__isnull=False)
+#                 & Q(incident_ttn__isnull=False)
+#                 & Q(incident_ttdn__isnull=False)
+#                 & Q(itsm_sync_status__isnull=False)
+#                 & Q(itsm_sync_status__iexact="Ready")
+#                 & Q(incident_priority__isnull=False)
+#                 & ~Q(incident_priority__exact="")
+#             )
+
+#             # Base filters for False Positives (Done incidents)
+#             false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & Q(
+#                 itsm_sync_status__iexact="Done"
+#             )
+
+#             # Total incidents = True Positives + False Positives (matches DashboardView)
+#             base_filters = true_positive_filters | false_positive_filters
+
+#             # Date filtering logic (applied on top of base filters)
+#             filter_type = request.query_params.get("filter_type")
+#             start_date = request.query_params.get("start_date")
+#             end_date = request.query_params.get("end_date")
+#             db_timezone = timezone.get_fixed_timezone(240)
+#             now = timezone.now().astimezone(db_timezone)
+
+#             # Start with base filters
+#             filters = base_filters
+
+#             if start_date and end_date:
+#                 try:
+#                     start_date = timezone.make_aware(
+#                         datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
+#                     )
+#                     end_date = timezone.make_aware(
+#                         datetime.strptime(end_date, "%Y-%m-%d")
+#                         + timedelta(days=1)
+#                         - timedelta(microseconds=1),
+#                         timezone=db_timezone,
+#                     )
+#                     filters &= Q(created__range=[start_date, end_date])
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
+#                     )
+
+#             elif filter_type:
+#                 try:
+#                     filter_type = FilterType(int(filter_type))
+#                     if filter_type == FilterType.TODAY:
+#                         start_date = now.replace(
+#                             hour=0, minute=0, second=0, microsecond=0
+#                         )
+#                         end_date = now
+#                         filters &= Q(created__range=[start_date, end_date])
+#                     elif filter_type == FilterType.WEEK:
+#                         start_date = now - timedelta(days=7)
+#                         start_date = start_date.replace(
+#                             hour=0, minute=0, second=0, microsecond=0
+#                         )
+#                         end_date = now
+#                         filters &= Q(created__range=[start_date, end_date])
+#                     elif filter_type == FilterType.MONTH:
+#                         start_date = now - timedelta(days=30)
+#                         end_date = now
+#                         filters &= Q(created__range=[start_date, end_date])
+#                     elif filter_type == FilterType.QUARTER:
+#                         start_date = now - timedelta(days=90)
+#                         end_date = now
+#                         filters &= Q(created__range=[start_date, end_date])
+#                     elif filter_type == FilterType.YEAR:
+#                         start_date = now - timedelta(days=365)
+#                         end_date = now
+#                         filters &= Q(created__range=[start_date, end_date])
+#                 except Exception:
+#                     return Response({"error": "Invalid filter_type."}, status=400)
+
+#             # FIXED: Apply the consistent filters (no need for additional field checks)
+#             # The base filters already ensure these fields are not null for true positives
+#             incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+
+#             if tenant.company.is_default_sla:
+#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
+#             else:
+#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
+#                     soar_tenant__in=soar_tenants, company=tenant.company
+#                 )
+#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+#             # FIXED: Use exact same priority mapping as SLASeverityMetricsView
+#             priority_to_sla_map = {
+#                 "P1 Critical": SlaLevelChoices.P1,
+#                 "P2 High": SlaLevelChoices.P2,
+#                 "P3 Medium": SlaLevelChoices.P3,
+#                 "P4 Low": SlaLevelChoices.P4,
+#             }
+#             sla_to_label_map = {
+#                 SlaLevelChoices.P1: "p1_critical",
+#                 SlaLevelChoices.P2: "p2_high",
+#                 SlaLevelChoices.P3: "p3_medium",
+#                 SlaLevelChoices.P4: "p4_low",
+#             }
+
+#             severity_counts = {
+#                 "p1_critical": {"total_incidents": 0, "completed_incidents": 0},
+#                 "p2_high": {"total_incidents": 0, "completed_incidents": 0},
+#                 "p3_medium": {"total_incidents": 0, "completed_incidents": 0},
+#                 "p4_low": {"total_incidents": 0, "completed_incidents": 0},
+#             }
+
+#             for incident in incidents:
+#                 sla_level = priority_to_sla_map.get(incident.incident_priority)
+#                 if not sla_level:
+#                     continue
+
+#                 sla_metric = sla_metrics_dict.get(sla_level)
+#                 if not sla_metric:
+#                     continue
+
+#                 label = sla_to_label_map[sla_level]
+#                 created = incident.created
+#                 any_breach = False
+
+#                 # FIXED: Add null checks for safety (even though base filters should handle this)
+#                 if incident.incident_tta:
+#                     if (
+#                         incident.incident_tta - created
+#                     ).total_seconds() / 60 > sla_metric.tta_minutes:
+#                         any_breach = True
+#                 if incident.incident_ttn:
+#                     if (
+#                         incident.incident_ttn - created
+#                     ).total_seconds() / 60 > sla_metric.ttn_minutes:
+#                         any_breach = True
+#                 if incident.incident_ttdn:
+#                     if (
+#                         incident.incident_ttdn - created
+#                     ).total_seconds() / 60 > sla_metric.ttdn_minutes:
+#                         any_breach = True
+
+#                 severity_counts[label]["total_incidents"] += 1
+#                 if not any_breach:
+#                     severity_counts[label]["completed_incidents"] += 1
+
+#             return Response(severity_counts)
+
+#         except Exception as e:
+#             logger.error(f"Error in SLASeverityIncidentsView: {str(e)}")
+#             return Response({"error": str(e)}, status=500)
+
+
 class SLASeverityIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5151,7 +5322,6 @@ class SLASeverityIncidentsView(APIView):
     def get(self, request):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
-            logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
@@ -5159,10 +5329,9 @@ class SLASeverityIncidentsView(APIView):
             soar_tenants = tenant.company.soar_tenants.all()
             if not soar_tenants:
                 return Response({"error": "No SOAR tenants found."}, status=404)
+
             soar_ids = [t.id for t in soar_tenants]
 
-            # FIXED: Use consistent filtering logic with DashboardView
-            # Base filters for True Positives (Ready incidents with all required fields)
             true_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
@@ -5175,36 +5344,27 @@ class SLASeverityIncidentsView(APIView):
                 & ~Q(incident_priority__exact="")
             )
 
-            # Base filters for False Positives (Done incidents)
             false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & Q(
                 itsm_sync_status__iexact="Done"
             )
 
-            # Total incidents = True Positives + False Positives (matches DashboardView)
             base_filters = true_positive_filters | false_positive_filters
 
-            # Date filtering logic (applied on top of base filters)
-            filter_type = request.query_params.get("filter_type")
-            start_date = request.query_params.get("start_date")
-            end_date = request.query_params.get("end_date")
-            db_timezone = timezone.get_fixed_timezone(240)
-            now = timezone.now()  # .astimezone(db_timezone)
-
-            # Start with base filters
             filters = base_filters
 
-            if start_date and end_date:
+            # ✨ Unified date handling to match DashboardView ✨
+            now = timezone.now().date()
+            filter_type = request.query_params.get("filter_type")
+            start_date_str = request.query_params.get("start_date")
+            end_date_str = request.query_params.get("end_date")
+
+            if start_date_str and end_date_str:
                 try:
-                    start_date = timezone.make_aware(
-                        datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
+                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                    filters &= Q(created__date__gte=start_date) & Q(
+                        created__date__lte=end_date
                     )
-                    end_date = timezone.make_aware(
-                        datetime.strptime(end_date, "%Y-%m-%d")
-                        + timedelta(days=1)
-                        - timedelta(microseconds=1),
-                        timezone=db_timezone,
-                    )
-                    filters &= Q(created__range=[start_date, end_date])
                 except ValueError:
                     return Response(
                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
@@ -5214,37 +5374,25 @@ class SLASeverityIncidentsView(APIView):
                 try:
                     filter_type = FilterType(int(filter_type))
                     if filter_type == FilterType.TODAY:
-                        start_date = now.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now
-                        filters &= Q(created__range=[start_date, end_date])
+                        filters &= Q(created__date=now)
                     elif filter_type == FilterType.WEEK:
                         start_date = now - timedelta(days=7)
-                        start_date = start_date.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now
-                        filters &= Q(created__range=[start_date, end_date])
+                        filters &= Q(created__date__gte=start_date)
                     elif filter_type == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
-                        end_date = now
-                        filters &= Q(created__range=[start_date, end_date])
+                        filters &= Q(created__date__gte=start_date)
                     elif filter_type == FilterType.QUARTER:
                         start_date = now - timedelta(days=90)
-                        end_date = now
-                        filters &= Q(created__range=[start_date, end_date])
+                        filters &= Q(created__date__gte=start_date)
                     elif filter_type == FilterType.YEAR:
                         start_date = now - timedelta(days=365)
-                        end_date = now
-                        filters &= Q(created__range=[start_date, end_date])
+                        filters &= Q(created__date__gte=start_date)
                 except Exception:
                     return Response({"error": "Invalid filter_type."}, status=400)
 
-            # FIXED: Apply the consistent filters (no need for additional field checks)
-            # The base filters already ensure these fields are not null for true positives
             incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
 
+            # SLA Metric selection remains unchanged
             if tenant.company.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
@@ -5253,7 +5401,6 @@ class SLASeverityIncidentsView(APIView):
                 )
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
-            # FIXED: Use exact same priority mapping as SLASeverityMetricsView
             priority_to_sla_map = {
                 "P1 Critical": SlaLevelChoices.P1,
                 "P2 High": SlaLevelChoices.P2,
@@ -5287,7 +5434,6 @@ class SLASeverityIncidentsView(APIView):
                 created = incident.created
                 any_breach = False
 
-                # FIXED: Add null checks for safety (even though base filters should handle this)
                 if incident.incident_tta:
                     if (
                         incident.incident_tta - created
