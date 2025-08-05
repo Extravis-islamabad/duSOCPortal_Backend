@@ -4683,25 +4683,30 @@ class IncidentSummaryView(APIView):
                 & Q(itsm_sync_status__iexact="Ready")
             )
 
+            # false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+            #     itsm_sync_status__iexact="Done"
+            # )
+            # filters  = filters | false_positive_filters
             # Handle filter_type (same as AllIncidentsView)
             filter_type = request.query_params.get("filter_type")
+            now = timezone.now()
             if filter_type:
                 try:
                     filter_enum = FilterType(int(filter_type))
-                    now = timezone.now()
                     if filter_enum == FilterType.TODAY:
-                        start_date = now.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
+                        filters &= Q(created__date=now)
                     elif filter_enum == FilterType.WEEK:
                         start_date = now - timedelta(days=7)
+                        filters &= Q(created__date__gte=start_date)
                     elif filter_enum == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
+                        filters &= Q(created__date__gte=start_date)
                     elif filter_enum == FilterType.QUARTER:
                         start_date = now - timedelta(days=90)
+                        filters &= Q(created__date__gte=start_date)
                     elif filter_enum == FilterType.YEAR:
                         start_date = now - timedelta(days=365)
-                    filters &= Q(created__gte=start_date)
+                        filters &= Q(created__date__gte=start_date)
                 except Exception:
                     return Response(
                         {
@@ -4711,18 +4716,18 @@ class IncidentSummaryView(APIView):
                     )
 
             # Handle severity
-            severity = request.query_params.get("severity")
-            if severity is not None:
-                try:
-                    severity_int = int(severity)
-                    if severity_int not in range(0, 7):
-                        raise ValueError
-                    filters &= Q(severity=severity_int)
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid severity. Must be between 0 and 6."},
-                        status=400,
-                    )
+            # severity = request.query_params.get("severity")
+            # if severity is not None:
+            #     try:
+            #         severity_int = int(severity)
+            #         if severity_int not in range(0, 7):
+            #             raise ValueError
+            #         filters &= Q(severity=severity_int)
+            #     except ValueError:
+            #         return Response(
+            #             {"error": "Invalid severity. Must be between 0 and 6."},
+            #             status=400,
+            #         )
 
             # Handle priority (using SlaLevelChoices)
             priority = request.query_params.get("priority")
