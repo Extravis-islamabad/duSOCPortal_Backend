@@ -4547,6 +4547,8 @@ class AllIncidentsView(APIView):
                         start_date = now - timedelta(days=7)
                     elif filter_enum == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
+                    elif filter_enum == FilterType.QUARTER:
+                        start_date = now - timedelta(days=90)
                     elif filter_enum == FilterType.YEAR:
                         start_date = now - timedelta(days=365)
                     filters &= Q(created__gte=start_date)
@@ -4696,7 +4698,7 @@ class IncidentSummaryView(APIView):
                     elif filter_enum == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
                     elif filter_enum == FilterType.QUARTER:
-                        start_date = now - timedelta(days=89)
+                        start_date = now - timedelta(days=90)
                     elif filter_enum == FilterType.YEAR:
                         start_date = now - timedelta(days=365)
                     filters &= Q(created__gte=start_date)
