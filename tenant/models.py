@@ -269,17 +269,6 @@ class IBMQradarAssetsGroup(models.Model):
     class Meta:
         db_table = "ibm_qradar_assets_group"
 
-    @property
-    def groups(self):
-        """
-        Returns related IBMQradarAssetsGroup instances using group_ids.
-        """
-        from .models import IBMQradarAssetsGroup  # avoid circular import
-
-        if not self.group_ids:
-            return IBMQradarAssetsGroup.objects.none()
-        return IBMQradarAssetsGroup.objects.filter(db_id__in=self.group_ids)
-
     def __str__(self):
         return self.name
 
@@ -356,6 +345,17 @@ class IBMQradarAssests(models.Model):
         self.last_event_date_converted = parse_timestamp(self.last_event_time)
 
         super().save(*args, **kwargs)
+
+    @property
+    def groups(self):
+        """
+        Returns related IBMQradarAssetsGroup instances using group_ids.
+        """
+        from .models import IBMQradarAssetsGroup  # avoid circular import
+
+        if not self.group_ids:
+            return IBMQradarAssetsGroup.objects.none()
+        return IBMQradarAssetsGroup.objects.filter(db_id__in=self.group_ids)
 
 
 class IBMQradarEPS(models.Model):
