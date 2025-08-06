@@ -486,23 +486,23 @@ class GetTenantAssetsList(APIView):
             # Apply date range filters if provided (from filter_type or custom)
             if start_date or end_date:
                 filtered_assets = [
-                    asset
-                    for asset in filtered_assets
-                    if (
-                        not start_date
-                        or (
-                            asset.creation_date_converted
-                            and asset.creation_date_converted >= start_date.date()
-                        )
+                asset
+                for asset in filtered_assets
+                if (
+                    not start_date
+                    or (
+                        asset.creation_date_converted
+                        and asset.creation_date_converted >= start_date  # Removed .date()
                     )
-                    and (
-                        not end_date
-                        or (
-                            asset.creation_date_converted
-                            and asset.creation_date_converted <= end_date.date()
-                        )
+                )
+                and (
+                    not end_date
+                    or (
+                        asset.creation_date_converted
+                        and asset.creation_date_converted <= end_date  # Removed .date()
                     )
-                ]
+                )
+            ]
 
             # Apply status filter if provided
             if status_filter := request.query_params.get("status"):
@@ -4458,7 +4458,6 @@ class AlertDetailView(APIView):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     )
 
-
 class RecentIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4467,11 +4466,15 @@ class RecentIncidentsView(APIView):
         """
         Retrieve two lists: up to 5 incidents with status='1' (Open) and up to 5 incidents
         with status='2' (Closed), ordered by created date (descending), filtered by SOAR
-        tenant IDs and a time period (Today=1, Week=2, Month=3, Year=4). Only accessible
-        by authenticated users with valid tenant permissions and active SOAR integration.
+        tenant IDs and a time period. Only accessible by authenticated users with valid
+        tenant permissions and active SOAR integration.
 
         Query Parameters:
-            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year (default: 3)
+            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year, 5=Quarter,
+                              6=Last 6 months, 7=Last 3 weeks, 8=Last month,
+                              9=Custom range (requires start_date and end_date)
+            start_date (str): Required for CUSTOM_RANGE (format: YYYY-MM-DD)
+            end_date (str): Required for CUSTOM_RANGE (format: YYYY-MM-DD)
 
         Returns:
             Dictionary with two lists: 'open' (status='1') and 'closed' (status='2')
@@ -4515,48 +4518,105 @@ class RecentIncidentsView(APIView):
             except (ValueError, KeyError):
                 return Response(
                     {
-                        "error": "Invalid filter_type. Use 1 (Today), 2 (Week), 3 (Month), or 4 (Year)."
+                        "error": "Invalid filter_type. Use 1-9 as per FilterType enum."
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # Step 5: Determine date filter
             now = timezone.now()
+            start_date = None
+            end_date = None
+
             if filter_type == FilterType.TODAY:
                 start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
             elif filter_type == FilterType.WEEK:
                 start_date = now - timedelta(days=7)
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
-            elif filter_type == FilterType.QUARTER:
-                start_date = now - timedelta(days=89)
             elif filter_type == FilterType.YEAR:
                 start_date = now - timedelta(days=365)
+            elif filter_type == FilterType.QUARTER:
+                start_date = now - timedelta(days=90)
+            elif filter_type == FilterType.LAST_6_MONTHS:
+                start_date = now - timedelta(days=180)
+            elif filter_type == FilterType.LAST_3_WEEKS:
+                start_date = now - timedelta(days=21)
+            elif filter_type == FilterType.LAST_MONTH:
+                start_date = now - timedelta(days=30)
+                end_date = now - timedelta(days=60)  # Last month only
+            elif filter_type == FilterType.CUSTOM_RANGE:
+                start_date_str = request.query_params.get("start_date")
+                end_date_str = request.query_params.get("end_date")
+                
+                if not start_date_str or not end_date_str:
+                    return Response(
+                        {"error": "Custom range requires both start_date and end_date."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                
+                try:
+                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                    
+                    # Ensure end_date is not before start_date
+                    if end_date < start_date:
+                        return Response(
+                            {"error": "end_date cannot be before start_date."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    
+                    # Convert to datetime at start of day
+                    start_date = datetime.combine(start_date, datetime.min.time())
+                    end_date = datetime.combine(end_date, datetime.min.time())
+                    
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-            # Step 6: Query for incidents with status='1' (Open)
+            # For all cases except CUSTOM_RANGE, end_date is current time
+            if filter_type != FilterType.CUSTOM_RANGE and not end_date:
+                end_date = now
+
+            # Step 6: Build the base query
+            base_query = Q(cortex_soar_tenant_id__in=soar_ids)
+            
+            # Add date filtering
+            if start_date:
+                base_query &= Q(created__gte=start_date)
+            if end_date:
+                base_query &= Q(created__lte=end_date)
+
+            # Step 7: Query for incidents with status='1' (Open)
             open_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                status="1", cortex_soar_tenant_id__in=soar_ids, created__gte=start_date
+                base_query & Q(status="1")
             ).order_by("-created")[:5]
 
-            # Step 7: Query for incidents with status='2' (Closed)
+            # Step 8: Query for incidents with status='2' (Closed)
             closed_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                status="2", cortex_soar_tenant_id__in=soar_ids, created__gte=start_date
+                base_query & Q(status="2")
             ).order_by("-created")[:5]
 
-            # Step 8: Serialize both sets of incidents
+            # Step 9: Serialize both sets of incidents
             open_serializer = RecentIncidentsSerializer(open_incidents, many=True)
             closed_serializer = RecentIncidentsSerializer(closed_incidents, many=True)
 
-            # Step 9: Return response with two lists
+            # Step 10: Return response with two lists
             return Response(
-                {"open": open_serializer.data, "closed": closed_serializer.data},
+                {
+                    "open": open_serializer.data,
+                    "closed": closed_serializer.data
+                   
+                },
                 status=status.HTTP_200_OK,
             )
+
         except Exception as e:
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
 
 class AllIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -4567,12 +4627,17 @@ class AllIncidentsView(APIView):
         Retrieve up to 10 incidents filtered by:
         - SOAR tenant
         - True positive logic (ready incidents with proper fields)
-        - optional filter_type (1–4) using created column
+        - optional filter_type (1-9) using created column
         - optional incident_priority (P1, P2, P3, P4)
+        - optional custom date range (requires start_date and end_date)
 
         Query Parameters:
-            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year
+            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year, 5=Quarter,
+                              6=Last 6 months, 7=Last 3 weeks, 8=Last month,
+                              9=Custom range (requires start_date and end_date)
             priority (int): 1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical
+            start_date (str): Required for CUSTOM_RANGE (format: YYYY-MM-DD)
+            end_date (str): Required for CUSTOM_RANGE (format: YYYY-MM-DD)
 
         Returns:
             {
@@ -4611,37 +4676,75 @@ class AllIncidentsView(APIView):
                 try:
                     filter_enum = FilterType(int(filter_type))
                     now = timezone.now()
+                    
                     if filter_enum == FilterType.TODAY:
-                        start_date = now.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
+                        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                        end_date = now
                     elif filter_enum == FilterType.WEEK:
                         start_date = now - timedelta(days=7)
+                        end_date = now
                     elif filter_enum == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
+                        end_date = now
                     elif filter_enum == FilterType.QUARTER:
                         start_date = now - timedelta(days=90)
+                        end_date = now
                     elif filter_enum == FilterType.YEAR:
                         start_date = now - timedelta(days=365)
-                    filters &= Q(created__gte=start_date)
+                        end_date = now
+                    elif filter_enum == FilterType.LAST_6_MONTHS:
+                        start_date = now - timedelta(days=180)
+                        end_date = now
+                    elif filter_enum == FilterType.LAST_3_WEEKS:
+                        start_date = now - timedelta(days=21)
+                        end_date = now
+                    elif filter_enum == FilterType.LAST_MONTH:
+                        start_date = now - timedelta(days=60)
+                        end_date = now - timedelta(days=30)
+                    elif filter_enum == FilterType.CUSTOM_RANGE:
+                        start_date_str = request.query_params.get("start_date")
+                        end_date_str = request.query_params.get("end_date")
+                        
+                        if not start_date_str or not end_date_str:
+                            return Response(
+                                {"error": "Custom range requires both start_date and end_date."},
+                                status=400,
+                            )
+                        
+                        try:
+                            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(
+                                hour=0, minute=0, second=0, microsecond=0
+                            )
+                            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").replace(
+                                hour=23, minute=59, second=59, microsecond=999999
+                            )
+                            
+                            if end_date < start_date:
+                                return Response(
+                                    {"error": "end_date cannot be before start_date."},
+                                    status=400,
+                                )
+                        except ValueError:
+                            return Response(
+                                {"error": "Invalid date format. Use YYYY-MM-DD."},
+                                status=400,
+                            )
+                    
+                    filters &= Q(created__gte=start_date, created__lte=end_date)
                 except Exception:
                     return Response(
-                        {
-                            "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
-                        },
+                        {"error": "Invalid filter_type. Use 1-9 as per FilterType enum."},
                         status=400,
                     )
 
-            # Step 4: Handle incident_priority filter using SlaLevelChoices values
+            # Step 4: Handle incident_priority filter
             priority = request.query_params.get("priority")
             if priority:
                 try:
                     priority_int = int(priority)
-                    # Map to SlaLevelChoices: 1=P4, 2=P3, 3=P2, 4=P1
                     if priority_int not in [1, 2, 3, 4]:
                         raise ValueError
 
-                    # Map integer to priority string for filtering
                     priority_mapping = {
                         4: "P1",  # P1 Critical
                         3: "P2",  # P2 High
@@ -4652,28 +4755,23 @@ class AllIncidentsView(APIView):
                     filters &= Q(incident_priority__icontains=priority_string)
                 except ValueError:
                     return Response(
-                        {
-                            "error": "Invalid priority. Use 1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical."
-                        },
+                        {"error": "Invalid priority. Use 1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical."},
                         status=400,
                     )
 
-            # Step 5: Apply filters
+            # Step 5: Apply filters and get queryset
             incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
 
-            # Step 6: Prepare summary counts based on incident_priority
+            # Step 6: Prepare summary counts
             priority_counts = incidents_qs.values("incident_priority").annotate(
                 count=Count("incident_priority")
             )
 
-            # Initialize summary with priority labels set to 0
             summary = {"P1 Critical": 0, "P2 High": 0, "P3 Medium": 0, "P4 Low": 0}
 
-            # Update counts for priorities present in the data
             for item in priority_counts:
                 priority_value = item["incident_priority"]
                 if priority_value:
-                    # Map priority strings to summary labels
                     if "P1" in priority_value:
                         summary["P1 Critical"] = item["count"]
                     elif "P2" in priority_value:
@@ -4683,7 +4781,7 @@ class AllIncidentsView(APIView):
                     elif "P4" in priority_value:
                         summary["P4 Low"] = item["count"]
 
-            # Step 7: Limit to top 10 incidents
+            # Step 7: Get top 10 incidents
             incidents = incidents_qs.order_by("-created")[:10]
 
             # Step 8: Serialize and return response
@@ -4695,8 +4793,6 @@ class AllIncidentsView(APIView):
         except Exception as e:
             logger.error("Error in AllIncidentsView: %s", str(e))
             return Response({"error": str(e)}, status=500)
-
-
 class IncidentSummaryView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
