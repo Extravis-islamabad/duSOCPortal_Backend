@@ -486,23 +486,25 @@ class GetTenantAssetsList(APIView):
             # Apply date range filters if provided (from filter_type or custom)
             if start_date or end_date:
                 filtered_assets = [
-                asset
-                for asset in filtered_assets
-                if (
-                    not start_date
-                    or (
-                        asset.creation_date_converted
-                        and asset.creation_date_converted >= start_date  # Removed .date()
+                    asset
+                    for asset in filtered_assets
+                    if (
+                        not start_date
+                        or (
+                            asset.creation_date_converted
+                            and asset.creation_date_converted
+                            >= start_date  # Removed .date()
+                        )
                     )
-                )
-                and (
-                    not end_date
-                    or (
-                        asset.creation_date_converted
-                        and asset.creation_date_converted <= end_date  # Removed .date()
+                    and (
+                        not end_date
+                        or (
+                            asset.creation_date_converted
+                            and asset.creation_date_converted
+                            <= end_date  # Removed .date()
+                        )
                     )
-                )
-            ]
+                ]
 
             # Apply status filter if provided
             if status_filter := request.query_params.get("status"):
@@ -4458,6 +4460,7 @@ class AlertDetailView(APIView):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     )
 
+
 class RecentIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -4517,9 +4520,7 @@ class RecentIncidentsView(APIView):
                 filter_type = FilterType(filter_type_value)
             except (ValueError, KeyError):
                 return Response(
-                    {
-                        "error": "Invalid filter_type. Use 1-9 as per FilterType enum."
-                    },
+                    {"error": "Invalid filter_type. Use 1-9 as per FilterType enum."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -4548,28 +4549,30 @@ class RecentIncidentsView(APIView):
             elif filter_type == FilterType.CUSTOM_RANGE:
                 start_date_str = request.query_params.get("start_date")
                 end_date_str = request.query_params.get("end_date")
-                
+
                 if not start_date_str or not end_date_str:
                     return Response(
-                        {"error": "Custom range requires both start_date and end_date."},
+                        {
+                            "error": "Custom range requires both start_date and end_date."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                
+
                 try:
                     start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
                     end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-                    
+
                     # Ensure end_date is not before start_date
                     if end_date < start_date:
                         return Response(
                             {"error": "end_date cannot be before start_date."},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    
+
                     # Convert to datetime at start of day
                     start_date = datetime.combine(start_date, datetime.min.time())
                     end_date = datetime.combine(end_date, datetime.min.time())
-                    
+
                 except ValueError:
                     return Response(
                         {"error": "Invalid date format. Use YYYY-MM-DD."},
@@ -4582,7 +4585,7 @@ class RecentIncidentsView(APIView):
 
             # Step 6: Build the base query
             base_query = Q(cortex_soar_tenant_id__in=soar_ids)
-            
+
             # Add date filtering
             if start_date:
                 base_query &= Q(created__gte=start_date)
@@ -4605,11 +4608,7 @@ class RecentIncidentsView(APIView):
 
             # Step 10: Return response with two lists
             return Response(
-                {
-                    "open": open_serializer.data,
-                    "closed": closed_serializer.data
-                   
-                },
+                {"open": open_serializer.data, "closed": closed_serializer.data},
                 status=status.HTTP_200_OK,
             )
 
@@ -4617,6 +4616,7 @@ class RecentIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class AllIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -4676,9 +4676,11 @@ class AllIncidentsView(APIView):
                 try:
                     filter_enum = FilterType(int(filter_type))
                     now = timezone.now()
-                    
+
                     if filter_enum == FilterType.TODAY:
-                        start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                        start_date = now.replace(
+                            hour=0, minute=0, second=0, microsecond=0
+                        )
                         end_date = now
                     elif filter_enum == FilterType.WEEK:
                         start_date = now - timedelta(days=7)
@@ -4704,21 +4706,23 @@ class AllIncidentsView(APIView):
                     elif filter_enum == FilterType.CUSTOM_RANGE:
                         start_date_str = request.query_params.get("start_date")
                         end_date_str = request.query_params.get("end_date")
-                        
+
                         if not start_date_str or not end_date_str:
                             return Response(
-                                {"error": "Custom range requires both start_date and end_date."},
+                                {
+                                    "error": "Custom range requires both start_date and end_date."
+                                },
                                 status=400,
                             )
-                        
+
                         try:
-                            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(
-                                hour=0, minute=0, second=0, microsecond=0
-                            )
-                            end_date = datetime.strptime(end_date_str, "%Y-%m-%d").replace(
-                                hour=23, minute=59, second=59, microsecond=999999
-                            )
-                            
+                            start_date = datetime.strptime(
+                                start_date_str, "%Y-%m-%d"
+                            ).replace(hour=0, minute=0, second=0, microsecond=0)
+                            end_date = datetime.strptime(
+                                end_date_str, "%Y-%m-%d"
+                            ).replace(hour=23, minute=59, second=59, microsecond=999999)
+
                             if end_date < start_date:
                                 return Response(
                                     {"error": "end_date cannot be before start_date."},
@@ -4729,11 +4733,13 @@ class AllIncidentsView(APIView):
                                 {"error": "Invalid date format. Use YYYY-MM-DD."},
                                 status=400,
                             )
-                    
+
                     filters &= Q(created__gte=start_date, created__lte=end_date)
                 except Exception:
                     return Response(
-                        {"error": "Invalid filter_type. Use 1-9 as per FilterType enum."},
+                        {
+                            "error": "Invalid filter_type. Use 1-9 as per FilterType enum."
+                        },
                         status=400,
                     )
 
@@ -4755,7 +4761,9 @@ class AllIncidentsView(APIView):
                     filters &= Q(incident_priority__icontains=priority_string)
                 except ValueError:
                     return Response(
-                        {"error": "Invalid priority. Use 1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical."},
+                        {
+                            "error": "Invalid priority. Use 1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical."
+                        },
                         status=400,
                     )
 
@@ -4793,6 +4801,8 @@ class AllIncidentsView(APIView):
         except Exception as e:
             logger.error("Error in AllIncidentsView: %s", str(e))
             return Response({"error": str(e)}, status=500)
+
+
 class IncidentSummaryView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
