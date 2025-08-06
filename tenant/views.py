@@ -1827,7 +1827,6 @@ class DashboardView(APIView):
             raise ValueError("Invalid date format")
 
 
-
 class IncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1838,63 +1837,63 @@ class IncidentsView(APIView):
         """
         now = make_aware(datetime.now())
         today = now.date()
-        
+
         try:
             filter_type_int = int(filter_type_value)
-            
+
             if filter_type_int == FilterType.TODAY.value:
                 return today, today
-                
+
             elif filter_type_int == FilterType.WEEK.value:
                 # Last 7 days
                 start_date = today - timedelta(days=7)
                 return start_date, today
-                
+
             elif filter_type_int == FilterType.MONTH.value:
                 # Current month
                 start_date = today.replace(day=1)
                 return start_date, today
-                
+
             elif filter_type_int == FilterType.YEAR.value:
                 # Current year
                 start_date = today.replace(month=1, day=1)
                 return start_date, today
-                
+
             elif filter_type_int == FilterType.QUARTER.value:
                 # Current quarter
                 current_quarter = (today.month - 1) // 3 + 1
                 quarter_start_month = (current_quarter - 1) * 3 + 1
                 start_date = today.replace(month=quarter_start_month, day=1)
                 return start_date, today
-                
+
             elif filter_type_int == FilterType.LAST_6_MONTHS.value:
                 # Last 6 months
                 start_date = (today.replace(day=1) - timedelta(days=180)).replace(day=1)
                 return start_date, today
-                
+
             elif filter_type_int == FilterType.LAST_3_WEEKS.value:
                 # Last 3 weeks (21 days)
                 start_date = today - timedelta(days=21)
                 return start_date, today
-                
+
             elif filter_type_int == FilterType.LAST_MONTH.value:
                 # Previous month
                 if today.month == 1:
-                    start_date = today.replace(year=today.year-1, month=12, day=1)
-                    end_date = today.replace(year=today.year-1, month=12, day=31)
+                    start_date = today.replace(year=today.year - 1, month=12, day=1)
+                    end_date = today.replace(year=today.year - 1, month=12, day=31)
                 else:
-                    start_date = today.replace(month=today.month-1, day=1)
+                    start_date = today.replace(month=today.month - 1, day=1)
                     # Get last day of previous month
                     end_date = today.replace(day=1) - timedelta(days=1)
                 return start_date, end_date
-                
+
             elif filter_type_int == FilterType.CUSTOM_RANGE.value:
                 # Custom range should be handled by start_date/end_date parameters
                 return None, None
-                
+
             else:
                 return None, None
-                
+
         except (ValueError, AttributeError):
             return None, None
 
@@ -1942,9 +1941,11 @@ class IncidentsView(APIView):
         mitre_technique_filter = request.query_params.get("mitre_technique")
         config_item_filter = request.query_params.get("configuration_item")
         filter_type = request.query_params.get("filter", "all")
-        
+
         # Date filter parameters
-        date_filter_type = request.query_params.get("filter_type")  # New parameter for FilterType enum
+        date_filter_type = request.query_params.get(
+            "filter_type"
+        )  # New parameter for FilterType enum
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
         occurred_start_str = request.query_params.get("occurred_start")
@@ -2056,22 +2057,29 @@ class IncidentsView(APIView):
 
             # Handle date_filter_type (FilterType enum)
             if date_filter_type:
-                filter_start_date, filter_end_date = self._get_date_range_for_filter_type(date_filter_type)
-                
+                (
+                    filter_start_date,
+                    filter_end_date,
+                ) = self._get_date_range_for_filter_type(date_filter_type)
+
                 if filter_start_date is not None and filter_end_date is not None:
                     # Apply the filter type date range to created field
                     queryset = queryset.filter(
                         created__date__gte=filter_start_date,
-                        created__date__lte=filter_end_date
+                        created__date__lte=filter_end_date,
                     )
                 elif date_filter_type != str(FilterType.CUSTOM_RANGE.value):
                     return Response(
-                        {"error": f"Invalid date_filter_type: {date_filter_type}. Must be 1-9."},
+                        {
+                            "error": f"Invalid date_filter_type: {date_filter_type}. Must be 1-9."
+                        },
                         status=400,
                     )
 
             # Handle custom date ranges (only if not using predefined filter type or if using CUSTOM_RANGE)
-            if not date_filter_type or date_filter_type == str(FilterType.CUSTOM_RANGE.value):
+            if not date_filter_type or date_filter_type == str(
+                FilterType.CUSTOM_RANGE.value
+            ):
                 if start_date_str:
                     try:
                         start_date = make_aware(
@@ -2231,6 +2239,7 @@ class IncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
