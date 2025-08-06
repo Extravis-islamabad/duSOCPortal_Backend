@@ -279,6 +279,7 @@ class TestView(APIView):
         # sync_event_log_sources.delay()
         return Response({"message": "Hello, world!"})
 
+
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -296,12 +297,12 @@ class GetTenantAssetsList(APIView):
     #     """Determine asset status based on last event time"""
     #     if not asset.last_event_date_converted:
     #         return "ERROR"
-        
+
     #     # Convert last_event_date_converted to datetime at midnight for comparison
     #     last_event_datetime = timezone.make_aware(
     #         datetime.combine(asset.last_event_date_converted, datetime.min.time())
     #     )
-        
+
     #     if (now - last_event_datetime) <= timedelta(days=1):
     #         return "SUCCESS"
     #     return "ERROR"
@@ -603,14 +604,12 @@ class GetTenantAssetsList(APIView):
 
         except ValueError as e:
             logger.error(f"Value error in GetTenantAssetsList: {str(e)}")
-            return Response(
-                {"error": str(e)}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error in GetTenantAssetsList: {str(e)}", exc_info=True)
             return Response(
-                {"error": "An unexpected error occurred."}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": "An unexpected error occurred."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     def _get_asset_status(self, asset, now):
