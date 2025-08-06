@@ -5,6 +5,7 @@ from tenant.views import (
     AlertListView,
     AllIncidentsView,
     DashboardView,
+    DownloadIncidentsView,
     DuCortexSOARTenantsListView,
     DuIbmQradarTenantsListView,
     DuITSMTenantsListView,
@@ -198,4 +199,9 @@ urlpatterns = [
         name="source-ip-geolocations",
     ),
     path("file-type-choices/", FileTypeChoicesView.as_view(), name="file-type-choices"),
+    path(
+        "incidents/download/",
+        DownloadIncidentsView.as_view(),
+        name="download-incidents",
+    ),
 ]

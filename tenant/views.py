@@ -1,9 +1,11 @@
+import io
 import json
 import time
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
+import pandas as pd
 from django.db.models import (
     Avg,
     Count,
@@ -16,10 +18,13 @@ from django.db.models import (
     Sum,
 )
 from django.db.models.functions import TruncDate, TruncDay, TruncHour
+from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import make_aware
 from loguru import logger
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
@@ -1884,19 +1889,22 @@ class IncidentsView(APIView):
 
             elif filter_type_int == FilterType.MONTH.value:
                 # Current month
-                start_date = today.replace(day=1)
+                start_date = today - timedelta(days=30)
+                # start_date = today.replace(day=1)
                 return start_date, today
 
             elif filter_type_int == FilterType.YEAR.value:
                 # Current year
-                start_date = today.replace(month=1, day=1)
+                start_date = today - timedelta(days=365)
+                # start_date = today.replace(month=1, day=1)
                 return start_date, today
 
             elif filter_type_int == FilterType.QUARTER.value:
                 # Current quarter
-                current_quarter = (today.month - 1) // 3 + 1
-                quarter_start_month = (current_quarter - 1) * 3 + 1
-                start_date = today.replace(month=quarter_start_month, day=1)
+                start_date = today - timedelta(days=90)
+                # current_quarter = (today.month - 1) // 3 + 1
+                # quarter_start_month = (current_quarter - 1) * 3 + 1
+                # start_date = today.replace(month=quarter_start_month, day=1)
                 return start_date, today
 
             elif filter_type_int == FilterType.LAST_6_MONTHS.value:
@@ -7329,3 +7337,319 @@ class FileTypeChoicesView(APIView):
             {"id": choice.value, "name": choice.label} for choice in FileTypeChoices
         ]
         return Response(choices)
+
+
+class DownloadIncidentsView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+    """
+    Download incidents data in PDF or Excel format based on IncidentsView logic.
+    Filters out false positives and supports date range filtering.
+    """
+
+    def get(self, request):
+        try:
+            # Step 1: Get current tenant
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        # Step 2: Check for active SOAR integration
+        soar_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.CORTEX_SOAR,
+            status=True,
+        )
+
+        if not soar_integrations.exists():
+            return Response(
+                {"error": "No active SOAR integration configured for tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Step 3: Get SOAR tenant IDs
+        soar_tenants = tenant.company.soar_tenants.all()
+        if not soar_tenants:
+            return Response({"error": "No SOAR tenants found."}, status=404)
+
+        soar_ids = [t.id for t in soar_tenants]
+
+        # Step 4: Parse query parameters
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+        file_type = request.query_params.get("file_type")
+
+        # Step 5: Validate required parameters
+        if not start_date_str or not end_date_str:
+            return Response(
+                {"error": "Both start_date and end_date are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not file_type:
+            return Response(
+                {"error": "file_type parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Step 6: Validate file_type
+        try:
+            file_type_choice = FileTypeChoices(int(file_type))
+        except ValueError:
+            valid_choices = [choice.value for choice in FileTypeChoices]
+            return Response(
+                {
+                    "error": f"Invalid file_type. Must be one of: {', '.join(valid_choices)}"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Step 7: Parse and validate dates
+        date_format = "%Y-%m-%d"
+        try:
+            start_date = datetime.strptime(start_date_str, date_format).date()
+            end_date = datetime.strptime(end_date_str, date_format).date()
+        except ValueError:
+            return Response(
+                {"error": "Invalid date format. Use YYYY-MM-DD."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Step 8: Validate date range
+        if end_date < start_date:
+            return Response(
+                {"error": "end_date cannot be before start_date."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Step 9: Build filters (exclude false positives, include only true positives)
+        filters = Q(cortex_soar_tenant__in=soar_ids)
+        filters &= (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(itsm_sync_status__iexact="Ready")
+            & Q(incident_priority__isnull=False)
+            & ~Q(incident_priority__exact="")
+        )
+
+        # Step 10: Apply date filters
+        filters &= Q(created__date__gte=start_date)
+        filters &= Q(created__date__lte=end_date)
+
+        # Step 11: Query incidents
+        try:
+            queryset = (
+                DUCortexSOARIncidentFinalModel.objects.filter(filters)
+                .values(
+                    "id",
+                    "db_id",
+                    "account",
+                    "name",
+                    "status",
+                    "incident_priority",
+                    "incident_phase",
+                    "created",
+                    "owner",
+                    "playbook_id",
+                    "occured",
+                    # "sla",
+                    "mitre_tactic",
+                    "mitre_technique",
+                    "configuration_item",
+                )
+                .order_by("-created")
+            )
+
+            # Step 12: Process incidents for offense data
+            incidents = []
+            # offense_db_ids = {
+            #     int(part)
+            #     for row in queryset
+            #     if row["name"]
+            #     for part in [row["name"].split()[0]]
+            #     if part.isdigit()
+            # }
+
+            # Bulk fetch related offenses
+            # offenses = IBMQradarOffense.objects.filter(db_id__in=offense_db_ids)
+            # offense_map = {str(o.db_id): o.id for o in offenses}
+
+            for row in queryset:
+                name = row.get("name") or ""
+                parts = name.split()
+                parts[0] if parts else None
+                # offense_id = offense_map.get(offense_db_id) if offense_db_id else None
+
+                description = (
+                    name.strip().split(" ", 1)[1]
+                    if len(name.strip().split(" ", 1)) > 1
+                    else name
+                )
+
+                incidents.append(
+                    {
+                        "ID": str(row["db_id"]),
+                        "Account": row["account"],
+                        "Name": row["name"],
+                        "Description": description,
+                        "Status": row["status"],
+                        "Priority": row["incident_priority"],
+                        "Phase": row["incident_phase"],
+                        "Assignee": row["owner"],
+                        "Playbook": row["playbook_id"],
+                        "Created": row["occured"].isoformat()
+                        if row["occured"]
+                        else "N/A",
+                        # "SLA": row["sla"],
+                        "MITRE Tactic": row["mitre_tactic"],
+                        "MITRE Technique": row["mitre_technique"],
+                        "Configuration Item": row["configuration_item"],
+                        # "Offense ID": offense_id,
+                        # "Offense DB ID": offense_db_id,
+                    }
+                )
+
+            if not incidents:
+                return Response(
+                    {"error": "No incidents found for the specified date range."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Step 13: Generate file based on file_type
+            if file_type_choice == FileTypeChoices.PDF:
+                return self._generate_pdf(incidents, start_date, end_date)
+            elif file_type_choice == FileTypeChoices.EXCEL:
+                return self._generate_excel(incidents, start_date, end_date)
+            else:
+                return Response(
+                    {"error": "Unsupported file type."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        except Exception as e:
+            logger.error("Error in DownloadIncidentsView: %s", str(e))
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def _generate_pdf(self, incidents, start_date, end_date):
+        """Generate PDF file with incidents data"""
+        try:
+            buffer = io.BytesIO()
+            p = canvas.Canvas(buffer, pagesize=letter)
+            width, height = letter
+
+            # Title
+            p.setFont("Helvetica-Bold", 16)
+            p.drawString(50, height - 50, "Incidents Report")
+
+            # Date range
+            p.setFont("Helvetica", 12)
+            p.drawString(50, height - 80, f"Date Range: {start_date} to {end_date}")
+            p.drawString(50, height - 100, f"Total Incidents: {len(incidents)}")
+
+            # Table headers
+            y_position = height - 140
+            p.setFont("Helvetica-Bold", 8)
+            headers = [
+                "ID",
+                "Account",
+                "Name",
+                "Priority",
+                "Status",
+                "Assignee",
+                "Created",
+            ]
+            x_positions = [50, 100, 150, 300, 370, 420, 480]
+
+            for i, header in enumerate(headers):
+                p.drawString(x_positions[i], y_position, header)
+
+            # Table data
+            p.setFont("Helvetica", 8)
+            y_position -= 20
+
+            for incident in incidents:
+                if y_position < 50:  # Start new page
+                    p.showPage()
+                    y_position = height - 50
+                    p.setFont("Helvetica", 8)
+
+                # Truncate long text to fit columns
+                data = [
+                    str(incident["ID"])[:8],
+                    str(incident["Account"])[:10],
+                    str(incident["Name"])[:25],
+                    str(incident["Priority"])[:8],
+                    str(incident["Status"])[:8],
+                    str(incident["Assignee"])[:10],
+                    str(incident["Created"])[:16],
+                ]
+
+                for i, value in enumerate(data):
+                    p.drawString(x_positions[i], y_position, value or "N/A")
+
+                y_position -= 15
+
+            p.save()
+            buffer.seek(0)
+
+            response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+            filename = f"incidents_report_{start_date}_to_{end_date}.pdf"
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+            return response
+
+        except Exception as e:
+            logger.error(f"Error generating PDF: {str(e)}")
+            return Response(
+                {"error": "Failed to generate PDF file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _generate_excel(self, incidents, start_date, end_date):
+        """Generate Excel file with incidents data"""
+        try:
+            # Convert to DataFrame
+            df = pd.DataFrame(incidents)
+
+            # Create Excel file in memory
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                df.to_excel(writer, sheet_name="Incidents", index=False)
+
+                # Get the worksheet to apply formatting
+                writer.sheets["Incidents"]
+
+                # Auto-adjust column widths
+                # for column in worksheet.columns:
+                #     max_length = 0
+                #     column_letter = column[0].column_letter
+                #     for cell in column:
+                #         try:
+                #             if len(str(cell.value)) > max_length:
+                #                 max_length = len(str(cell.value))  # nosec
+                #         except Exception:
+                #             pass
+                #     adjusted_width = min(max_length + 2, 50)  # nosec
+                #     worksheet.column_dimensions[column_letter].width = adjusted_width
+
+            buffer.seek(0)
+
+            response = HttpResponse(
+                buffer.getvalue(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            filename = f"incidents_report_{start_date}_to_{end_date}.xlsx"
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+            return response
+
+        except Exception as e:
+            logger.error(f"Error generating Excel: {str(e)}")
+            return Response(
+                {"error": "Failed to generate Excel file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
