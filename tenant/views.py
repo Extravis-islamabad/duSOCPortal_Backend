@@ -279,10 +279,32 @@ class TestView(APIView):
         # sync_event_log_sources.delay()
         return Response({"message": "Hello, world!"})
 
-
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
+
+    def _parse_date(self, date_str):
+        """Parse date string into date object"""
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("Invalid date format. Use YYYY-MM-DD.")
+
+    def _get_asset_status(self, asset, now):
+        """Determine asset status based on last event time"""
+        if not asset.last_event_date_converted:
+            return "ERROR"
+        
+        # Convert last_event_date_converted to datetime at midnight for comparison
+        last_event_datetime = timezone.make_aware(
+            datetime.combine(asset.last_event_date_converted, datetime.min.time())
+        )
+        
+        if (now - last_event_datetime) <= timedelta(days=1):
+            return "SUCCESS"
+        return "ERROR"
 
     def get(self, request):
         """
@@ -356,27 +378,28 @@ class GetTenantAssetsList(APIView):
 
             # Step 5: Determine date range based on filter_type
             now = timezone.now()
+            today = now.date()
             start_date = None
             end_date = None
 
             if filter_type:
                 if filter_type == FilterType.TODAY:
-                    start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    start_date = today
                 elif filter_type == FilterType.WEEK:
-                    start_date = now - timedelta(days=7)
+                    start_date = today - timedelta(days=7)
                 elif filter_type == FilterType.MONTH:
-                    start_date = now - timedelta(days=30)
+                    start_date = today - timedelta(days=30)
                 elif filter_type == FilterType.YEAR:
-                    start_date = now - timedelta(days=365)
+                    start_date = today - timedelta(days=365)
                 elif filter_type == FilterType.QUARTER:
-                    start_date = now - timedelta(days=90)
+                    start_date = today - timedelta(days=90)
                 elif filter_type == FilterType.LAST_6_MONTHS:
-                    start_date = now - timedelta(days=180)
+                    start_date = today - timedelta(days=180)
                 elif filter_type == FilterType.LAST_3_WEEKS:
-                    start_date = now - timedelta(days=21)
+                    start_date = today - timedelta(days=21)
                 elif filter_type == FilterType.LAST_MONTH:
-                    start_date = now - timedelta(days=30)
-                    end_date = now - timedelta(days=30)  # Exactly one month ago
+                    end_date = today - timedelta(days=30)
+                    start_date = end_date - timedelta(days=30)
                 elif filter_type == FilterType.CUSTOM_RANGE:
                     start_date = self._parse_date(
                         request.query_params.get("start_date")
@@ -389,6 +412,11 @@ class GetTenantAssetsList(APIView):
                             },
                             status=status.HTTP_400_BAD_REQUEST,
                         )
+                    if start_date > end_date:
+                        return Response(
+                            {"error": "start_date must be before end_date."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
 
             # Step 6: Get ALL assets first for total counts (unfiltered)
             all_assets = IBMQradarAssests.objects.filter(base_filter).select_related(
@@ -398,7 +426,6 @@ class GetTenantAssetsList(APIView):
             # Calculate TOTAL active/inactive counts (unfiltered)
             total_active = 0
             total_inactive = 0
-            now = timezone.now()
 
             for asset in all_assets:
                 asset_status = self._get_asset_status(asset, now)
@@ -477,9 +504,9 @@ class GetTenantAssetsList(APIView):
                         for asset in filtered_assets
                         if asset.last_event_date_converted == filter_date
                     ]
-                except ValueError:
+                except ValueError as e:
                     return Response(
-                        {"error": "Invalid last_event_date format. Use YYYY-MM-DD."},
+                        {"error": str(e)},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -492,16 +519,14 @@ class GetTenantAssetsList(APIView):
                         not start_date
                         or (
                             asset.creation_date_converted
-                            and asset.creation_date_converted
-                            >= start_date  # Removed .date()
+                            and asset.creation_date_converted >= start_date
                         )
                     )
                     and (
                         not end_date
                         or (
                             asset.creation_date_converted
-                            and asset.creation_date_converted
-                            <= end_date  # Removed .date()
+                            and asset.creation_date_converted <= end_date
                         )
                     )
                 ]
@@ -525,7 +550,7 @@ class GetTenantAssetsList(APIView):
 
             # Sort assets by creation date (newest first)
             filtered_assets.sort(
-                key=lambda x: x.creation_date_converted or datetime.min.date(),
+                key=lambda x: x.creation_date_converted or date.min,
                 reverse=True,
             )
 
@@ -576,10 +601,16 @@ class GetTenantAssetsList(APIView):
 
             return Response(response_data)
 
-        except Exception as e:
-            logger.error(f"Error in GetTenantAssetsList: {str(e)}")
+        except ValueError as e:
+            logger.error(f"Value error in GetTenantAssetsList: {str(e)}")
             return Response(
-                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": str(e)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Error in GetTenantAssetsList: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "An unexpected error occurred."}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     def _get_asset_status(self, asset, now):
