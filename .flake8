@@ -9,6 +9,7 @@ extend-ignore =
     E712, # comparison to True should be 'if cond is True:' or 'if cond:'
     ; F401, # imported but unused
     B608, #hardcoded_sql_expressions
+    B110, #try_except_pass
 exclude =
     .git,
     _pycache_,
