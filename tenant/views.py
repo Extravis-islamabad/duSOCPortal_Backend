@@ -1,7 +1,7 @@
 import json
 import time
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db.models import (
@@ -283,28 +283,28 @@ class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
-    def _parse_date(self, date_str):
-        """Parse date string into date object"""
-        if not date_str:
-            return None
-        try:
-            return datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            raise ValueError("Invalid date format. Use YYYY-MM-DD.")
+    # def _parse_date(self, date_str):
+    #     """Parse date string into date object"""
+    #     if not date_str:
+    #         return None
+    #     try:
+    #         return datetime.strptime(date_str, "%Y-%m-%d").date()
+    #     except ValueError:
+    #         raise ValueError("Invalid date format. Use YYYY-MM-DD.")
 
-    def _get_asset_status(self, asset, now):
-        """Determine asset status based on last event time"""
-        if not asset.last_event_date_converted:
-            return "ERROR"
+    # def _get_asset_status(self, asset, now):
+    #     """Determine asset status based on last event time"""
+    #     if not asset.last_event_date_converted:
+    #         return "ERROR"
         
-        # Convert last_event_date_converted to datetime at midnight for comparison
-        last_event_datetime = timezone.make_aware(
-            datetime.combine(asset.last_event_date_converted, datetime.min.time())
-        )
+    #     # Convert last_event_date_converted to datetime at midnight for comparison
+    #     last_event_datetime = timezone.make_aware(
+    #         datetime.combine(asset.last_event_date_converted, datetime.min.time())
+    #     )
         
-        if (now - last_event_datetime) <= timedelta(days=1):
-            return "SUCCESS"
-        return "ERROR"
+    #     if (now - last_event_datetime) <= timedelta(days=1):
+    #         return "SUCCESS"
+    #     return "ERROR"
 
     def get(self, request):
         """
