@@ -59,6 +59,7 @@ from tenant.models import (
     DuITSMTenants,
     DUSoarNotes,
     EventCountLog,
+    FileTypeChoices,
     IBMQradarAssests,
     IBMQradarEPS,
     IBMQradarEventCollector,
@@ -7178,3 +7179,17 @@ class SourceIPGeoLocationListView(APIView):
         records = SourceIPGeoLocation.objects.all().order_by("-created_at")[:50]
         serializer = SourceIPGeoLocationSerializer(records, many=True)
         return Response(serializer.data)
+
+
+class FileTypeChoicesView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+    """
+    Returns all file type choices.
+    """
+
+    def get(self, request):
+        choices = [
+            {"id": choice.value, "name": choice.label} for choice in FileTypeChoices
+        ]
+        return Response(choices)

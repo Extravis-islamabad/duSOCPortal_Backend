@@ -11,6 +11,7 @@ from tenant.views import (
     EPSCountValuesByDomainAPIView,
     EPSGraphAPIView,
     EventCollectorsListAPIView,
+    FileTypeChoicesView,
     GetTenantAssetsList,
     IncidentDetailView,
     IncidentReportView,
@@ -196,4 +197,5 @@ urlpatterns = [
         SourceIPGeoLocationListView.as_view(),
         name="source-ip-geolocations",
     ),
+    path("file-type-choices/", FileTypeChoicesView.as_view(), name="file-type-choices"),
 ]

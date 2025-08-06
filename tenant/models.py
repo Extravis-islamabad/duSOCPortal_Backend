@@ -670,6 +670,11 @@ class VolumeTypeChoices(models.IntegerChoices):
     GB_PER_DAY = 2, "GB/D"
 
 
+class FileTypeChoices(models.IntegerChoices):
+    PDF = 1, "PDF"
+    EXCEL = 2, "EXCEL"
+
+
 class TenantQradarMapping(models.Model):
     company = models.ForeignKey(
         Company,
