@@ -23,6 +23,7 @@ class DuIbmQradarTenants(models.Model):
 
     class Meta:
         db_table = "du_ibm_qradar_tenants"
+        unique_together = ("db_id", "integration")
 
     def __str__(self):
         return self.name
@@ -219,6 +220,7 @@ class IBMQradarEventCollector(models.Model):
 
     class Meta:
         db_table = "du_ibm_qradar_event_collector"
+        unique_together = ("db_id", "integration")
 
     def __str__(self):
         return self.name
@@ -242,6 +244,7 @@ class IBMQradarLogSourceTypes(models.Model):
     class Meta:
         db_table = "ibm_qradar_log_source_types"
         ordering = ["-created_at"]
+        unique_together = ("db_id", "integration")
 
 
 class IBMQradarAssetsGroup(models.Model):
@@ -268,6 +271,7 @@ class IBMQradarAssetsGroup(models.Model):
 
     class Meta:
         db_table = "ibm_qradar_assets_group"
+        unique_together = ("db_id", "integration")
 
     def __str__(self):
         return self.name
@@ -328,6 +332,7 @@ class IBMQradarAssests(models.Model):
 
     class Meta:
         db_table = "du_ibm_qradar_assets"
+        unique_together = ("db_id", "integration")
 
     def save(self, *args, **kwargs):
         # Helper to convert timestamp string to date
@@ -460,6 +465,7 @@ class IBMQradarOffense(models.Model):
 
     class Meta:
         db_table = "du_ibm_qradar_offenses"
+        unique_together = ("db_id", "integration")
 
     def save(self, *args, **kwargs):
         def parse_ts(ts):
