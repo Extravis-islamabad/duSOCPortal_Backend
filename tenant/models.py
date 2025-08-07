@@ -502,6 +502,7 @@ class DuITSMTenants(models.Model):
 
     class Meta:
         db_table = "du_itsm_tenants"
+        unique_together = ("db_id", "integration")
 
     def __str__(self):
         return self.name
@@ -537,6 +538,7 @@ class DuITSMFinalTickets(models.Model):
 
     class Meta:
         db_table = "du_itsm_final_tickets"
+        unique_together = ("db_id", "integration")
 
     def __str__(self):
         return f"{self.short_description}"
