@@ -7343,8 +7343,8 @@ class FileTypeChoicesView(APIView):
 
 
 class DownloadIncidentsView(APIView):
-    # authentication_classes = [JWTAuthentication]
-    # permission_classes = [IsTenant]
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
     """
     Download incidents data in PDF or Excel format based on IncidentsView logic.
     Filters out false positives and supports date range filtering.
