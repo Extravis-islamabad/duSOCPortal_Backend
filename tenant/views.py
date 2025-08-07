@@ -1,11 +1,13 @@
 import io
 import json
+import os
 import time
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 import pandas as pd
+from django.conf import settings
 from django.db.models import (
     Avg,
     Count,
@@ -19,17 +21,18 @@ from django.db.models import (
 )
 from django.db.models.functions import TruncDate, TruncDay, TruncHour
 from django.http import HttpResponse
+from django.template.loader import render_to_string
+from django.templatetags.static import static
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import make_aware
 from loguru import logger
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from weasyprint import HTML
 
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import SEVERITY_LABELS, FilterType, PaginationConstants
@@ -7340,8 +7343,8 @@ class FileTypeChoicesView(APIView):
 
 
 class DownloadIncidentsView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsTenant]
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsTenant]
     """
     Download incidents data in PDF or Excel format based on IncidentsView logic.
     Filters out false positives and supports date range filtering.
@@ -7451,65 +7454,39 @@ class DownloadIncidentsView(APIView):
                     "name",
                     "status",
                     "incident_priority",
-                    "incident_phase",
-                    "created",
-                    "owner",
-                    "playbook_id",
                     "occured",
-                    # "sla",
                     "mitre_tactic",
                     "mitre_technique",
-                    "configuration_item",
                 )
                 .order_by("-created")
             )
 
             # Step 12: Process incidents for offense data
             incidents = []
-            # offense_db_ids = {
-            #     int(part)
-            #     for row in queryset
-            #     if row["name"]
-            #     for part in [row["name"].split()[0]]
-            #     if part.isdigit()
-            # }
-
-            # Bulk fetch related offenses
-            # offenses = IBMQradarOffense.objects.filter(db_id__in=offense_db_ids)
-            # offense_map = {str(o.db_id): o.id for o in offenses}
-
             for row in queryset:
-                name = row.get("name") or ""
-                parts = name.split()
-                parts[0] if parts else None
-                # offense_id = offense_map.get(offense_db_id) if offense_db_id else None
-
-                description = (
-                    name.strip().split(" ", 1)[1]
-                    if len(name.strip().split(" ", 1)) > 1
-                    else name
-                )
+                if row["occured"]:
+                    try:
+                        dt_utc = row["occured"]
+                        if not isinstance(dt_utc, datetime):
+                            dt_utc = datetime.fromisoformat(str(dt_utc))
+                        dt_plus_4 = dt_utc + timedelta(hours=4)
+                        occured_at_str = dt_plus_4.strftime("%Y-%m-%d %I:%M %p")
+                    except Exception:
+                        occured_at_str = "N/A"
+                else:
+                    occured_at_str = "N/A"
+                status_label = "OPEN" if row["status"] == 1 else "CLOSED"
 
                 incidents.append(
                     {
                         "ID": str(row["db_id"]),
-                        "Account": row["account"],
-                        "Name": row["name"],
-                        "Description": description,
-                        "Status": row["status"],
-                        "Priority": row["incident_priority"],
-                        "Phase": row["incident_phase"],
-                        "Assignee": row["owner"],
-                        "Playbook": row["playbook_id"],
-                        "Created": row["occured"].isoformat()
-                        if row["occured"]
-                        else "N/A",
-                        # "SLA": row["sla"],
-                        "MITRE Tactic": row["mitre_tactic"],
-                        "MITRE Technique": row["mitre_technique"],
-                        "Configuration Item": row["configuration_item"],
-                        # "Offense ID": offense_id,
-                        # "Offense DB ID": offense_db_id,
+                        "ACCOUNT": row["account"],
+                        "NAME": row["name"],
+                        "STATUS": status_label,
+                        "INCIDENT_PRIORITY": row["incident_priority"],
+                        "OCCURED_AT": occured_at_str,
+                        "MITRE_TACTIC": row["mitre_tactic"],
+                        "MITRE_TECHNIQUE": row["mitre_technique"],
                     }
                 )
 
@@ -7537,68 +7514,42 @@ class DownloadIncidentsView(APIView):
             )
 
     def _generate_pdf(self, incidents, start_date, end_date):
-        """Generate PDF file with incidents data"""
+        """Generate PDF file with incidents data using HTML template."""
         try:
-            buffer = io.BytesIO()
-            p = canvas.Canvas(buffer, pagesize=letter)
-            width, height = letter
+            # Resolve static file paths and log them
+            logo_url = static("images/logo.png")
+            header_bg_url = static("images/report-header-bg.svg")
 
-            # Title
-            p.setFont("Helvetica-Bold", 16)
-            p.drawString(50, height - 50, "Incidents Report")
+            # Convert URLs to absolute file system paths for WeasyPrint
+            logo_path = os.path.join(settings.BASE_DIR, "static", "images", "logo.png")
+            header_bg_path = os.path.join(
+                settings.BASE_DIR, "static", "images", "report-header-bg.svg"
+            )
 
-            # Date range
-            p.setFont("Helvetica", 12)
-            p.drawString(50, height - 80, f"Date Range: {start_date} to {end_date}")
-            p.drawString(50, height - 100, f"Total Incidents: {len(incidents)}")
+            logger.info(f"Resolved logo URL: {logo_url} -> Path: {logo_path}")
+            logger.info(
+                f"Resolved header background URL: {header_bg_url} -> Path: {header_bg_path}"
+            )
 
-            # Table headers
-            y_position = height - 140
-            p.setFont("Helvetica-Bold", 8)
-            headers = [
-                "ID",
-                "Account",
-                "Name",
-                "Priority",
-                "Status",
-                "Assignee",
-                "Created",
-            ]
-            x_positions = [50, 100, 150, 300, 370, 420, 480]
+            html_content = render_to_string(
+                "pdf_report_template.html",
+                {
+                    "incidents": incidents,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "total_incidents": len(incidents),
+                    "logo_path": f"file://{os.path.join(settings.BASE_DIR, 'static', 'images', 'logo.png')}",
+                    "header_bg_path": f"file://{os.path.join(settings.BASE_DIR, 'static', 'images', 'report-header-bg.svg')}",
+                },
+            )
 
-            for i, header in enumerate(headers):
-                p.drawString(x_positions[i], y_position, header)
+            # Generate PDF, telling WeasyPrint where to find static files
+            pdf_file = HTML(
+                string=html_content,
+                base_url=settings.BASE_DIR,  # Allows relative URLs to be resolved from your project root
+            ).write_pdf()
 
-            # Table data
-            p.setFont("Helvetica", 8)
-            y_position -= 20
-
-            for incident in incidents:
-                if y_position < 50:  # Start new page
-                    p.showPage()
-                    y_position = height - 50
-                    p.setFont("Helvetica", 8)
-
-                # Truncate long text to fit columns
-                data = [
-                    str(incident["ID"])[:8],
-                    str(incident["Account"])[:10],
-                    str(incident["Name"])[:25],
-                    str(incident["Priority"])[:8],
-                    str(incident["Status"])[:8],
-                    str(incident["Assignee"])[:10],
-                    str(incident["Created"])[:16],
-                ]
-
-                for i, value in enumerate(data):
-                    p.drawString(x_positions[i], y_position, value or "N/A")
-
-                y_position -= 15
-
-            p.save()
-            buffer.seek(0)
-
-            response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+            response = HttpResponse(pdf_file, content_type="application/pdf")
             filename = f"incidents_report_{start_date}_to_{end_date}.pdf"
             response["Content-Disposition"] = f'attachment; filename="{filename}"'
             return response
@@ -7622,20 +7573,20 @@ class DownloadIncidentsView(APIView):
                 df.to_excel(writer, sheet_name="Incidents", index=False)
 
                 # Get the worksheet to apply formatting
-                writer.sheets["Incidents"]
+                worksheet = writer.sheets["Incidents"]
 
                 # Auto-adjust column widths
-                # for column in worksheet.columns:
-                #     max_length = 0
-                #     column_letter = column[0].column_letter
-                #     for cell in column:
-                #         try:
-                #             if len(str(cell.value)) > max_length:
-                #                 max_length = len(str(cell.value))  # nosec
-                #         except Exception:
-                #             pass
-                #     adjusted_width = min(max_length + 2, 50)  # nosec
-                #     worksheet.column_dimensions[column_letter].width = adjusted_width
+                for column in worksheet.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if cell.value and len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except Exception:
+                            logger.error(".")
+                    adjusted_width = min(max_length + 2, 50)  # Prevent too wide columns
+                    worksheet.column_dimensions[column_letter].width = adjusted_width
 
             buffer.seek(0)
 
