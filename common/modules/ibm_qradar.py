@@ -216,15 +216,31 @@ class IBMQradar:
         start = time.time()
         endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_DOMAIN_ENDPOINT}"
         try:
-            response = requests.get(
-                endpoint,
-                auth=HTTPBasicAuth(
-                    self.username,
-                    self.password,
-                ),
-                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=SSLConstants.TIMEOUT,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                    proxies=proxies,
+                )
+            else:
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                )
             if response.status_code != 200:
                 logger.warning(
                     f"IBMQRadar._get_domains() return the status code {response.status_code}"
@@ -256,15 +272,31 @@ class IBMQradar:
         start = time.time()
         endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_EVENT_COLLECTOR_ENDPOINT}"
         try:
-            response = requests.get(
-                endpoint,
-                auth=HTTPBasicAuth(
-                    self.username,
-                    self.password,
-                ),
-                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=SSLConstants.TIMEOUT,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                    proxies=proxies,
+                )
+            else:
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                )
             if response.status_code != 200:
                 logger.warning(
                     f"IBMQRadar._get_event_collectors() return the status code {response.status_code}"
@@ -300,15 +332,31 @@ class IBMQradar:
             f"{self.base_url}/{IBMQradarConstants.IBM_LOG_SOURCES_TYPES_ENDPOINT}"
         )
         try:
-            response = requests.get(
-                endpoint,
-                auth=HTTPBasicAuth(
-                    self.username,
-                    self.password,
-                ),
-                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=SSLConstants.TIMEOUT,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                    proxies=proxies,
+                )
+            else:
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                )
             if response.status_code != 200:
                 logger.warning(
                     f"IBMQRadar._get_log_sources_types() return the status code {response.status_code}"
@@ -428,7 +476,7 @@ class IBMQradar:
                         "child_group_ids",
                         "integration_id",
                     ],
-                    unique_fields=["db_id"],
+                    unique_fields=["db_id", "integration"],
                 )
                 logger.info(f"Inserted/Updated {len(records)} asset group records.")
                 logger.success(
@@ -545,7 +593,7 @@ class IBMQradar:
                     records,
                     update_conflicts=True,
                     update_fields=["name"],
-                    unique_fields=["db_id"],
+                    unique_fields=["db_id", "integration"],
                 )
                 logger.info(f"Inserted the domains records: {len(records)}")
                 logger.success(
@@ -586,7 +634,7 @@ class IBMQradar:
                     records,
                     update_conflicts=True,
                     update_fields=["name", "host_id", "component_name"],
-                    unique_fields=["db_id"],
+                    unique_fields=["db_id", "integration"],
                 )
             logger.info(f"Inserted event collector records: {len(records)}")
             logger.success(
@@ -692,7 +740,7 @@ class IBMQradar:
                         "integration_id",
                         "group_ids",
                     ],
-                    unique_fields=["db_id"],
+                    unique_fields=["db_id", "integration"],
                 )
             logger.info(f"Inserted event log records: {len(records)}")
             logger.success(
@@ -721,15 +769,31 @@ class IBMQradar:
         logger.info(f"IBMQRadar._get_offenses() started: {start}")
         endpoint = f"{self.base_url}/{IBMQradarConstants.IBM_OFFENSES_ENDPOINT}"
         try:
-            response = requests.get(
-                endpoint,
-                auth=HTTPBasicAuth(
-                    self.username,
-                    self.password,
-                ),
-                verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
-                timeout=SSLConstants.TIMEOUT,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                    proxies=proxies,
+                )
+            else:
+                response = requests.get(
+                    endpoint,
+                    auth=HTTPBasicAuth(
+                        self.username,
+                        self.password,
+                    ),
+                    verify=SSLConstants.VERIFY,  # TODO : Handle this to TRUE in production
+                    timeout=SSLConstants.TIMEOUT,
+                )
             if response.status_code != 200:
                 logger.warning(
                     f"IBMQRadar._get_offenses() return the status code {response.status_code}"
@@ -954,7 +1018,7 @@ class IBMQradar:
                         "categories",
                         "rules",
                     ],
-                    unique_fields=["db_id"],
+                    unique_fields=["db_id", "integration"],
                 )
 
                 # Set many-to-many relationships for assests
@@ -992,7 +1056,7 @@ class IBMQradar:
                     records,
                     update_conflicts=True,
                     update_fields=["name", "version"],
-                    unique_fields=["db_id"],
+                    unique_fields=["db_id", "integration"],
                 )
                 logger.info(f"Inserted the domains records: {len(records)}")
                 logger.success(

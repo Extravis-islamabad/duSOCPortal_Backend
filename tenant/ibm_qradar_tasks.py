@@ -466,7 +466,7 @@ def sync_event_log_assets_groups_parent():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
     for result in results:
-        sync_event_log_assets(
+        sync_event_log_assets.delay(
             username=result.username,
             password=result.password,
             ip_address=result.ip_address,
