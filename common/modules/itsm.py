@@ -7,7 +7,7 @@ import requests
 from django.db import transaction
 from loguru import logger
 
-from common.constants import ITSMConstants, SSLConstants
+from common.constants import EnvConstants, ITSMConstants, SSLConstants
 from tenant.models import DuITSMFinalTickets, DuITSMTenants
 
 
@@ -124,13 +124,27 @@ class ITSM:
             params = {"input_data": json.dumps(input_data)}
 
             try:
-                response = requests.get(
-                    endpoint,
-                    headers=self.headers,
-                    params=params,
-                    verify=SSLConstants.VERIFY,
-                    timeout=timeout,
-                )
+                if EnvConstants.LOCAL:
+                    proxies = {
+                        "http": "http://127.0.0.1:8080",
+                        "https": "http://127.0.0.1:8080",
+                    }
+                    response = requests.get(
+                        endpoint,
+                        headers=self.headers,
+                        params=params,
+                        verify=SSLConstants.VERIFY,
+                        timeout=timeout,
+                        proxies=proxies,
+                    )
+                else:
+                    response = requests.get(
+                        endpoint,
+                        headers=self.headers,
+                        params=params,
+                        verify=SSLConstants.VERIFY,
+                        timeout=timeout,
+                    )
             except Exception as e:
                 logger.error(f"ITSM._get_accounts() failed with exception: {str(e)}")
                 break
@@ -192,7 +206,7 @@ class ITSM:
                     records,
                     update_conflicts=True,
                     update_fields=["name"],
-                    unique_fields=["db_id"],
+                    unique_fields=["db_id", "integration"],
                 )
                 logger.info(f"Inserted the accounts records: {len(records)}")
                 logger.success(
@@ -225,13 +239,27 @@ class ITSM:
             params = {"input_data": json.dumps(input_data)}
 
             try:
-                response = requests.get(
-                    endpoint,
-                    headers=self.headers,
-                    params=params,
-                    verify=SSLConstants.VERIFY,  # self-signed cert assumed
-                    timeout=SSLConstants.TIMEOUT,
-                )
+                if EnvConstants.LOCAL:
+                    proxies = {
+                        "http": "http://127.0.0.1:8080",
+                        "https": "http://127.0.0.1:8080",
+                    }
+                    response = requests.get(
+                        endpoint,
+                        headers=self.headers,
+                        params=params,
+                        verify=SSLConstants.VERIFY,  # self-signed cert assumed
+                        timeout=SSLConstants.TIMEOUT,
+                        proxies=proxies,
+                    )
+                else:
+                    response = requests.get(
+                        endpoint,
+                        headers=self.headers,
+                        params=params,
+                        verify=SSLConstants.VERIFY,  # self-signed cert assumed
+                        timeout=SSLConstants.TIMEOUT,
+                    )
             except Exception as e:
                 logger.error(f"ITSM._get_requests() failed with exception: {str(e)}")
                 return
@@ -437,7 +465,7 @@ class ITSM:
                         "status",
                         "updated_at",
                     ],
-                    unique_fields=["db_id"],
+                    unique_fields=["db_id", "integration"],
                 )
             logger.info(
                 f"Inserted/Updated {len(tickets)} tickets in {time.time() - start:.2f}s"
