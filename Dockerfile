@@ -12,6 +12,14 @@ RUN apt-get update && apt-get install -y \
 && rm -rf /var/lib/apt/lists/*
 
 
+RUN apt-get update && apt-get install -y \
+    libgobject-2.0-0 \
+    libglib2.0-0 \
+    libgirepository-1.0-1 \
+    gir1.2-glib-2.0 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # FOR THE LDAPs
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
