@@ -19,7 +19,6 @@ RUN apt-get update && apt-get install -y \
     libgdk-pixbuf2.0-0 \
     libcairo2 \
     libffi-dev \
-    libgobject-2.0-0 \
     libglib2.0-0 \
     shared-mime-info \
     fonts-liberation \
