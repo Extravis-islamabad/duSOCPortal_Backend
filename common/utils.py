@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 import time
 
 import ldap
@@ -297,3 +298,10 @@ class LDAP:
                 f"An error occurred in LDAP.fetch_all_ldap_users(): {str(e)}"
             )
             return []
+
+
+def extract_use_case(name):
+    # Remove leading numbers and optional org code like "ADGM-"
+    cleaned = re.sub(r"^\d+\s+", "", name)  # remove leading numeric ID and spaces
+    cleaned = re.sub(r"^[A-Z]+-", "", cleaned)  # remove leading org code and dash
+    return cleaned.strip()

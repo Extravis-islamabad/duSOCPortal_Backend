@@ -38,6 +38,7 @@ from weasyprint import HTML
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import SEVERITY_LABELS, FilterType, PaginationConstants
 from common.modules.cyware import Cyware
+from common.utils import extract_use_case
 from integration.models import (
     CredentialTypes,
     Integration,
@@ -7802,12 +7803,36 @@ class DetailedIncidentReport(APIView):
             "integrated_assets": total_assets,
             "reporting_assets": active_assets,
         }
+
+        incident_data = DUCortexSOARIncidentFinalModel.objects.filter(filters).values(
+            "name", "incident_priority"
+        )
+
+        # Extract use_case and keep priority
+        use_case_priority_pairs = [
+            (extract_use_case(item["name"]), item["incident_priority"])
+            for item in incident_data
+        ]
+
+        # Count frequency by (use_case, incident_priority) pair
+        use_case_counts = Counter(use_case_priority_pairs)
+
+        # Top 5 by count
+        top_5_use_cases = use_case_counts.most_common(5)
+
+        # Convert to list of dicts for JSON
+        top_5_use_cases_data = [
+            {"use_case": uc, "incident_priority": priority, "count": cnt}
+            for (uc, priority), cnt in top_5_use_cases
+        ]
+
         data = {
             "severity_of_incidents": severity_of_incidents,
             "total_incidents_raised": total_incidents_raised,
             "device_coverage": device_coverage,
             "log_source_stats": log_source_stats_list,
             "sla_stats": priority_wise_counts,
+            "top_use_cases": top_5_use_cases_data,
         }
 
         return Response(data, status=status.HTTP_200_OK)
