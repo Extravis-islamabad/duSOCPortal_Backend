@@ -105,7 +105,6 @@ from tenant.serializers import (
     DuITSMTenantsSerializer,
     DuITSMTicketsSerializer,
     IBMQradarAssestsSerializer,
-    IBMQradarEPSSerializer,
     IBMQradarEventCollectorSerializer,
     RecentIncidentsSerializer,
     SourceIPGeoLocationSerializer,
@@ -3704,73 +3703,73 @@ class TenantAssetsEPSAPIView(APIView):
             )
 
 
-class EPSCountValuesByDomainAPIView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsTenant]
+# class EPSCountValuesByDomainAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
 
-    def get(self, request):
-        try:
-            tenant = Tenant.objects.get(tenant=request.user)
-        except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found."}, status=404)
+#     def get(self, request):
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
 
-        siem_integrations = tenant.company.integrations.filter(
-            integration_type=IntegrationTypes.SIEM_INTEGRATION,
-            siem_subtype=SiemSubTypes.IBM_QRADAR,
-            status=True,
-        )
-        if not siem_integrations.exists():
-            return Response(
-                {"error": "No active SEIM integration configured for tenant."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        try:
-            # Step 1: Retrieve collector IDs from TenantQradarMapping
-            qradar_tenant_ids = TenantQradarMapping.objects.filter(
-                company=tenant.company
-            ).values_list("qradar_tenant__id", flat=True)
+#         siem_integrations = tenant.company.integrations.filter(
+#             integration_type=IntegrationTypes.SIEM_INTEGRATION,
+#             siem_subtype=SiemSubTypes.IBM_QRADAR,
+#             status=True,
+#         )
+#         if not siem_integrations.exists():
+#             return Response(
+#                 {"error": "No active SEIM integration configured for tenant."},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+#         try:
+#             # Step 1: Retrieve collector IDs from TenantQradarMapping
+#             qradar_tenant_ids = TenantQradarMapping.objects.filter(
+#                 company=tenant.company
+#             ).values_list("qradar_tenant__id", flat=True)
 
-            if not qradar_tenant_ids:
-                return Response(
-                    {"error": "No mappings found for the tenant."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
+#             if not qradar_tenant_ids:
+#                 return Response(
+#                     {"error": "No mappings found for the tenant."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
 
-            eps_entries = IBMQradarEPS.objects.filter(domain__in=qradar_tenant_ids)
-            sum_eps = eps_entries.aggregate(total_eps=Sum("eps"))["total_eps"] or 0
-            serializer = IBMQradarEPSSerializer(
-                eps_entries, many=True, context={"request": request}
-            )
+#             eps_entries = IBMQradarEPS.objects.filter(domain__in=qradar_tenant_ids)
+#             sum_eps = eps_entries.aggregate(total_eps=Avg("eps"))["total_eps"] or 0
+#             serializer = IBMQradarEPSSerializer(
+#                 eps_entries, many=True, context={"request": request}
+#             )
 
-            mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
+#             mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
 
-            contracted_volume = mapping.contracted_volume if mapping else None
-            contracted_volume_type = mapping.contracted_volume_type if mapping else None
-            contracted_volume_type_display = (
-                mapping.get_contracted_volume_type_display() if mapping else None
-            )
+#             contracted_volume = mapping.contracted_volume if mapping else None
+#             contracted_volume_type = mapping.contracted_volume_type if mapping else None
+#             contracted_volume_type_display = (
+#                 mapping.get_contracted_volume_type_display() if mapping else None
+#             )
 
-            # Step 4: Return combined response
-            return Response(
-                {
-                    "contracted_volume": contracted_volume,
-                    "contracted_volume_type": contracted_volume_type,
-                    "contracted_volume_type_display": contracted_volume_type_display,
-                    "sum_eps": sum_eps,
-                    "eps_data": serializer.data,
-                },
-                status=200,
-            )
-        except Exception:
-            return Response(
-                {"error": "Invalid tenant or related data not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        except Exception as e:
-            return Response(
-                {"error": f"An error occurred: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+#             # Step 4: Return combined response
+#             return Response(
+#                 {
+#                     "contracted_volume": contracted_volume,
+#                     "contracted_volume_type": contracted_volume_type,
+#                     "contracted_volume_type_display": contracted_volume_type_display,
+#                     "sum_eps": sum_eps,
+#                     "eps_data": serializer.data,
+#                 },
+#                 status=200,
+#             )
+#         except Exception:
+#             return Response(
+#                 {"error": "Invalid tenant or related data not found."},
+#                 status=status.HTTP_404_NOT_FOUND,
+#             )
+#         except Exception as e:
+#             return Response(
+#                 {"error": f"An error occurred: {str(e)}"},
+#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             )
 
 
 class EPSGraphAPIView(APIView):
@@ -3811,11 +3810,11 @@ class EPSGraphAPIView(APIView):
             start_time = dubai_midnight.astimezone(pytz_timezone("UTC"))
             time_trunc = TruncHour("created_at")
         elif filter_enum == FilterType.WEEK:
-            start_time = now - timedelta(days=6)
+            start_time = now - timedelta(days=7)
             time_trunc = TruncDay("created_at")
         elif filter_enum == FilterType.MONTH:
             # Get start of current month and show 4 weeks (28 days back from now)
-            start_time = now - timedelta(days=28)
+            start_time = now - timedelta(days=30)
             time_trunc = TruncWeek("created_at")  # Group by week to get 4 data points
         elif filter_enum == FilterType.QUARTER:
             # Show 3 full months - current month and 2 previous months
@@ -7668,6 +7667,7 @@ class DetailedIncidentReport(APIView):
         # false_postive_filter = Q(itsm_sync_status__iexact="Done")
 
         now = timezone.now().date()
+        # now_dubai = timezone.now()
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
 
@@ -7688,9 +7688,19 @@ class DetailedIncidentReport(APIView):
                 filter_type = FilterType(int(filter_type))
                 if filter_type == FilterType.TODAY:
                     filters &= Q(created__date=now)
+                    # dubai_tz = pytz_timezone("Asia/Dubai")
+                    # dubai_now = now_dubai.astimezone(dubai_tz)
+                    # dubai_midnight = dubai_now.replace(
+                    #     hour=0, minute=0, second=0, microsecond=0
+                    # )
+                    # # Convert back to UTC for filtering the UTC-based DB
+                    # start_time = dubai_midnight.astimezone(pytz_timezone("UTC"))
+                    # time_trunc = TruncHour("created_at")
                 elif filter_type == FilterType.WEEK:
                     start_date = now - timedelta(days=7)
                     filters &= Q(created__date__gte=start_date)
+                    # start_time = start_date
+                    # time_trunc = TruncDay("created_at")
                 elif filter_type == FilterType.MONTH:
                     start_date = now - timedelta(days=30)
                     filters &= Q(created__date__gte=start_date)
@@ -7700,6 +7710,33 @@ class DetailedIncidentReport(APIView):
                 elif filter_type == FilterType.YEAR:
                     start_date = now - timedelta(days=365)
                     filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.CUSTOM_RANGE:
+                    start_date_str = request.query_params.get("start_date")
+                    end_date_str = request.query_params.get("end_date")
+                    if start_date_str and end_date_str:
+                        try:
+                            start_date = datetime.strptime(
+                                start_date_str, "%Y-%m-%d"
+                            ).date()
+                            end_date = datetime.strptime(
+                                end_date_str, "%Y-%m-%d"
+                            ).date()
+                            filters &= Q(created__date__gte=start_date) & Q(
+                                created__date__lte=end_date
+                            )
+                            if start_date > end_date:
+                                return Response(
+                                    {
+                                        "error": "Start date cannot be greater than end date."
+                                    },
+                                    status=400,
+                                )
+                        except ValueError:
+                            return Response(
+                                {"error": "Invalid date format. Use YYYY-MM-DD."},
+                                status=400,
+                            )
+
             except Exception:
                 return Response({"error": "Invalid filter_type."}, status=400)
 
@@ -7826,6 +7863,10 @@ class DetailedIncidentReport(APIView):
             for (uc, priority), cnt in top_5_use_cases
         ]
 
+        # qradar_tenant_ids = tenant.company.qradar_mappings.values_list(
+        #     "qradar_tenant__id", flat=True
+        # )
+        # filter_kwargs = {"domain_id__in": qradar_tenant_ids}
         data = {
             "severity_of_incidents": severity_of_incidents,
             "total_incidents_raised": total_incidents_raised,
