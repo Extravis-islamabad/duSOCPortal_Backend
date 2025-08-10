@@ -3810,11 +3810,11 @@ class EPSGraphAPIView(APIView):
             start_time = dubai_midnight.astimezone(pytz_timezone("UTC"))
             time_trunc = TruncHour("created_at")
         elif filter_enum == FilterType.WEEK:
-            start_time = now - timedelta(days=7)
+            start_time = now - timedelta(days=6)
             time_trunc = TruncDay("created_at")
         elif filter_enum == FilterType.MONTH:
             # Get start of current month and show 4 weeks (28 days back from now)
-            start_time = now - timedelta(days=30)
+            start_time = now - timedelta(days=28)
             time_trunc = TruncWeek("created_at")  # Group by week to get 4 data points
         elif filter_enum == FilterType.QUARTER:
             # Show 3 full months - current month and 2 previous months
