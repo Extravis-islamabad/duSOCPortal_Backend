@@ -5,6 +5,7 @@ from tenant.views import (
     AlertListView,
     AllIncidentsView,
     DashboardView,
+    DetailedIncidentReport,
     DownloadIncidentsView,
     DuCortexSOARTenantsListView,
     DuIbmQradarTenantsListView,
@@ -203,5 +204,8 @@ urlpatterns = [
         "incidents/download/",
         DownloadIncidentsView.as_view(),
         name="download-incidents",
+    ),
+    path(
+        "api/detailed_report/", DetailedIncidentReport.as_view(), name="detailed_report"
     ),
 ]

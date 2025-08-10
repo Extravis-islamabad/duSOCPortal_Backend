@@ -48,7 +48,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.ibm_qradar_tasks import sync_event_log_assets_groups_parent
+from tenant.itsm_tasks import sync_itsm_tenants_tickets
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -243,7 +243,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_event_log_assets_groups_parent()
+        sync_itsm_tenants_tickets()
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
@@ -7604,3 +7604,143 @@ class DownloadIncidentsView(APIView):
                 {"error": "Failed to generate Excel file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class DetailedIncidentReport(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        try:
+            # Step 1: Get current tenant
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        # Step 2: Check for active SOAR integration
+        soar_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.CORTEX_SOAR,
+            status=True,
+        )
+
+        if not soar_integrations.exists():
+            return Response(
+                {"error": "No active SOAR integration configured for tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Step 3: Get SOAR tenant IDs
+        soar_tenants = tenant.company.soar_tenants.all()
+        if not soar_tenants:
+            return Response({"error": "No SOAR tenants found."}, status=404)
+
+        soar_ids = [t.id for t in soar_tenants]
+
+        siem_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SIEM_INTEGRATION,
+            siem_subtype=SiemSubTypes.IBM_QRADAR,
+            status=True,
+        )
+        if not siem_integrations.exists():
+            return Response(
+                {"error": "No active SIEM integration configured for tenant."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        collector_ids = (
+            TenantQradarMapping.objects.filter(company=tenant.company)
+            .prefetch_related("event_collectors")
+            .values_list("event_collectors__id", flat=True)
+        )
+        if not collector_ids:
+            return Response(
+                {"detail": "No Event Collectors mapped to this tenant."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        filter_type = request.query_params.get("filter_type", FilterType.TODAY.value)
+        if filter_type is not None:
+            try:
+                filter_type = int(filter_type)
+            except ValueError:
+                return Response({"error": "Invalid filter_type."}, status=400)
+
+        filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(itsm_sync_status__iexact="Ready")
+            & Q(incident_priority__isnull=False)
+            & ~Q(incident_priority__exact="")
+        )
+
+        # false_postive_filter = Q(itsm_sync_status__iexact="Done")
+
+        now = timezone.now().date()
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                filters &= Q(created__date__gte=start_date) & Q(
+                    created__date__lte=end_date
+                )
+            except ValueError:
+                return Response(
+                    {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
+                )
+
+        elif filter_type:
+            try:
+                filter_type = FilterType(int(filter_type))
+                if filter_type == FilterType.TODAY:
+                    filters &= Q(created__date=now)
+                elif filter_type == FilterType.WEEK:
+                    start_date = now - timedelta(days=7)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.MONTH:
+                    start_date = now - timedelta(days=30)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.QUARTER:
+                    start_date = now - timedelta(days=90)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.YEAR:
+                    start_date = now - timedelta(days=365)
+                    filters &= Q(created__date__gte=start_date)
+            except Exception:
+                return Response({"error": "Invalid filter_type."}, status=400)
+
+        # incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+        # true_positive_filters = true_positive_filters & filters
+        priority_wise_counts = (
+            DUCortexSOARIncidentFinalModel.objects.filter(
+                filters  # filter by your given timeframe
+            )
+            .values("incident_priority")  # group by priority
+            .annotate(count=Count("id"))  # count incidents
+            .order_by("-count")  # optional: highest first
+        )
+        if not priority_wise_counts:
+            return Response({"error": "No incidents found."}, status=404)
+        severity_of_incidents = priority_wise_counts
+        # filters = filters | false_postive_filter
+        incident_counts = DUCortexSOARIncidentFinalModel.objects.filter(
+            filters
+        ).aggregate(
+            total=Count("id"),
+            # open_count=Count("id", filter=Q(status="1")),
+            closed_count=Count("id", filter=Q(status="2")),
+        )
+
+        total_incidents_raised = incident_counts
+        data = {
+            "severity_of_incidents": severity_of_incidents,
+            "total_incidents_raised": total_incidents_raised,
+        }
+        return Response(data, status=status.HTTP_200_OK)
