@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import time
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
@@ -291,29 +292,6 @@ class TestView(APIView):
 class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
-
-    # def _parse_date(self, date_str):
-    #     """Parse date string into date object"""
-    #     if not date_str:
-    #         return None
-    #     try:
-    #         return datetime.strptime(date_str, "%Y-%m-%d").date()
-    #     except ValueError:
-    #         raise ValueError("Invalid date format. Use YYYY-MM-DD.")
-
-    # def _get_asset_status(self, asset, now):
-    #     """Determine asset status based on last event time"""
-    #     if not asset.last_event_date_converted:
-    #         return "ERROR"
-
-    #     # Convert last_event_date_converted to datetime at midnight for comparison
-    #     last_event_datetime = timezone.make_aware(
-    #         datetime.combine(asset.last_event_date_converted, datetime.min.time())
-    #     )
-
-    #     if (now - last_event_datetime) <= timedelta(days=1):
-    #         return "SUCCESS"
-    #     return "ERROR"
 
     def get(self, request):
         """
@@ -632,14 +610,21 @@ class GetTenantAssetsList(APIView):
         # If no last event time, it's ERROR
         if not asset.last_event_time:
             return "ERROR"
-
+        time_threshold_minutes = 24 * 60
         try:
+            group = asset.groups.first()
+            if group and group.description:
+                # Extract the first integer before the word "hour" (case-insensitive)
+                match = re.search(r"(\d+)\s*hour", group.description, re.IGNORECASE)
+                if match:
+                    extracted_hours = int(match.group(1))
+                    time_threshold_minutes = extracted_hours * 60
             last_event_timestamp = int(asset.last_event_time) / 1000
             last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
             last_event_time = timezone.make_aware(last_event_time)
-            time_diff = (now - last_event_time).total_seconds() / 60
+            time_diff_minutes = (now - last_event_time).total_seconds() / 60
 
-            return "ERROR" if time_diff > 15 else "SUCCESS"
+            return "ERROR" if time_diff_minutes > time_threshold_minutes else "SUCCESS"
         except (ValueError, TypeError):
             return "ERROR"
 
