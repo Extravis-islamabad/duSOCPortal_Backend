@@ -70,6 +70,7 @@ from tenant.models import (
     EventCountLog,
     FileTypeChoices,
     IBMQradarAssests,
+    IBMQradarAssetsGroup,
     IBMQradarEPS,
     IBMQradarEventCollector,
     IBMQradarOffense,
@@ -7701,19 +7702,25 @@ class DetailedIncidentReport(APIView):
             except Exception:
                 return Response({"error": "Invalid filter_type."}, status=400)
 
-        # incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
-        # true_positive_filters = true_positive_filters & filters
         priority_wise_counts = (
-            DUCortexSOARIncidentFinalModel.objects.filter(
-                filters  # filter by your given timeframe
+            DUCortexSOARIncidentFinalModel.objects.filter(filters)
+            .values("incident_priority")
+            .annotate(
+                total=Count("id"),
+                open_count=Count("id", filter=Q(status="1")),  # status 1 = open
+                closed_count=Count("id", filter=Q(status="2")),  # status 2 = closed
             )
-            .values("incident_priority")  # group by priority
-            .annotate(count=Count("id"))  # count incidents
-            .order_by("-count")  # optional: highest first
+            .order_by("-total")
         )
+
         if not priority_wise_counts:
             return Response({"error": "No incidents found."}, status=404)
-        severity_of_incidents = priority_wise_counts
+
+        severity_of_incidents = [
+            {"incident_priority": row["incident_priority"], "total": row["total"]}
+            for row in priority_wise_counts
+        ]
+
         # filters = filters | false_postive_filter
         incident_counts = DUCortexSOARIncidentFinalModel.objects.filter(
             filters
@@ -7724,8 +7731,83 @@ class DetailedIncidentReport(APIView):
         )
 
         total_incidents_raised = incident_counts
+
+        # Existing assets query
+        assets_qs = IBMQradarAssests.objects.filter(
+            event_collector_id__in=collector_ids
+        )
+        assets_qs = assets_qs.select_related("log_source_type")  # reduce queries
+        assets = list(assets_qs)
+
+        # Bulk fetch groups
+        all_group_ids = set()
+        for asset in assets:
+            if asset.group_ids:
+                all_group_ids.update(asset.group_ids)
+        groups = IBMQradarAssetsGroup.objects.filter(db_id__in=all_group_ids)
+        group_map = {g.db_id: g for g in groups}
+
+        now_dt = timezone.now()
+
+        # Totals
+        total_assets = len(assets)
+        active_assets = 0
+
+        # Per log_source_type counters
+        log_source_stats = defaultdict(
+            lambda: {"integrated": 0, "reporting": 0, "non_reporting": 0}
+        )
+
+        for asset in assets:
+            log_source_name = (
+                asset.log_source_type.name if asset.log_source_type else "Unknown"
+            )
+            log_source_stats[log_source_name]["integrated"] += 1
+
+            # Default threshold 24h unless overridden by group description
+            threshold_minutes = 24 * 60
+            if asset.group_ids:
+                for gid in asset.group_ids:
+                    if gid in group_map and group_map[gid].description:
+                        match = re.search(
+                            r"(\d+)\s*hour", group_map[gid].description, re.IGNORECASE
+                        )
+                        if match:
+                            threshold_minutes = int(match.group(1)) * 60
+                            break
+
+            is_reporting = False
+            if asset.enabled and asset.last_event_time:
+                try:
+                    last_event_timestamp = int(asset.last_event_time) / 1000
+                    last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
+                    last_event_time = timezone.make_aware(last_event_time)
+                    time_diff_minutes = (now_dt - last_event_time).total_seconds() / 60
+                    if time_diff_minutes <= threshold_minutes:
+                        is_reporting = True
+                except (ValueError, TypeError):
+                    pass
+
+            if is_reporting:
+                log_source_stats[log_source_name]["reporting"] += 1
+                active_assets += 1
+            else:
+                log_source_stats[log_source_name]["non_reporting"] += 1
+
+        # Convert defaultdict to list for JSON
+        log_source_stats_list = [
+            {"log_source_type": k, **v} for k, v in log_source_stats.items()
+        ]
+        device_coverage = {
+            "integrated_assets": total_assets,
+            "reporting_assets": active_assets,
+        }
         data = {
             "severity_of_incidents": severity_of_incidents,
             "total_incidents_raised": total_incidents_raised,
+            "device_coverage": device_coverage,
+            "log_source_stats": log_source_stats_list,
+            "sla_stats": priority_wise_counts,
         }
+
         return Response(data, status=status.HTTP_200_OK)
