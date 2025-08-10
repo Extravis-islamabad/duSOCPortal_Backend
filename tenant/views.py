@@ -7951,6 +7951,23 @@ class DetailedIncidentReport(APIView):
                 }
             )
 
+        # if tenant.company.is_default_sla:
+        #     logger.info("SLA source: DefaultSoarSlaMetric")
+        #     sla_metrics = DefaultSoarSlaMetric.objects.all()
+        # else:
+        #     logger.info("SLA source: SoarTenantSlaMetric")
+        #     sla_metrics = SoarTenantSlaMetric.objects.filter(
+        #         soar_tenant__in=soar_tenants, company=tenant.company
+        #     )
+
+        # sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+        # priority_map = {
+        #     "P1 Critical": SlaLevelChoices.P1,
+        #     "P2 High": SlaLevelChoices.P2,
+        #     "P3 Medium": SlaLevelChoices.P3,
+        #     "P4 Low": SlaLevelChoices.P4,
+        # }
         data = {
             "severity_of_incidents": severity_of_incidents,
             "total_incidents_raised": total_incidents_raised,
@@ -7959,6 +7976,7 @@ class DetailedIncidentReport(APIView):
             "sla_stats": priority_wise_counts,
             "top_use_cases": top_5_use_cases_data,
             "eps_data": eps_data,
+            # "sla_metrics":sla_f_metrics
         }
 
         return Response(data, status=status.HTTP_200_OK)
