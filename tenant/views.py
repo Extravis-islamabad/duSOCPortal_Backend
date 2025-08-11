@@ -20,7 +20,13 @@ from django.db.models import (
     Q,
     Sum,
 )
-from django.db.models.functions import TruncDate, TruncDay, TruncHour
+from django.db.models.functions import (
+    TruncDate,
+    TruncDay,
+    TruncHour,
+    TruncMonth,
+    TruncWeek,
+)
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.templatetags.static import static
@@ -7592,13 +7598,64 @@ class DownloadIncidentsView(APIView):
             )
 
 
+def get_incidents_trend(filter_type, filters):
+    if filter_type == FilterType.WEEK:
+        time_trunc = TruncDay("occured")
+    elif filter_type == FilterType.MONTH:
+        time_trunc = TruncWeek("occured")
+    elif filter_type == FilterType.QUARTER:
+        time_trunc = TruncMonth("occured")
+    elif filter_type == FilterType.YEAR:
+        time_trunc = TruncMonth("occured")
+    elif filter_type == FilterType.CUSTOM_RANGE:
+        time_trunc = TruncDate("occured")
+
+    incident_trend_qs = (
+        DUCortexSOARIncidentFinalModel.objects.filter(filters)
+        .annotate(interval=time_trunc)
+        .values("interval")
+        .annotate(
+            reported=Count("id"),
+            resolved=Count("id", filter=Q(status="2")),
+        )
+        .order_by("interval")
+    )
+
+    incident_closure_trends = []
+    skip_once_done = False
+    for entry in incident_trend_qs:
+        if filter_type == FilterType.MONTH:
+            # Week format
+            if len(incident_trend_qs) > 5 and not skip_once_done:
+                skip_once_done = True
+                continue
+            week_num = len(incident_closure_trends) + 1
+            interval_str = f"Week {week_num} ({entry['interval'].strftime('%Y-%m-%d')})"
+        elif filter_type == FilterType.QUARTER:
+            interval_str = entry["interval"].strftime("%B %Y")
+        elif filter_type == FilterType.YEAR:
+            interval_str = entry["interval"].strftime("%B")
+        else:
+            interval_str = entry["interval"].strftime("%Y-%m-%d")
+
+        incident_closure_trends.append(
+            {
+                "interval": interval_str,
+                "reported": entry["reported"],
+                "resolved": entry["resolved"],
+                "pending": entry["reported"] - entry["resolved"],
+            }
+        )
+
+    return incident_closure_trends
+
+
 class DetailedIncidentReport(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
     def get(self, request):
         from django.db.models.functions import TruncMonth, TruncWeek
-        from pytz import timezone as pytz_timezone
 
         try:
             # Step 1: Get current tenant
@@ -7648,7 +7705,7 @@ class DetailedIncidentReport(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        filter_type = request.query_params.get("filter_type", FilterType.TODAY.value)
+        filter_type = request.query_params.get("filter_type", FilterType.WEEK.value)
         if filter_type is not None:
             try:
                 filter_type = int(filter_type)
@@ -7670,114 +7727,93 @@ class DetailedIncidentReport(APIView):
         # false_postive_filter = Q(itsm_sync_status__iexact="Done")
 
         now = timezone.now()
-        now_dubai = timezone.now()
+        # start_time = end_time = None
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
 
-        if start_date_str and end_date_str:
-            try:
-                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-                filters &= Q(created__date__gte=start_date) & Q(
-                    created__date__lte=end_date
+        try:
+            filter_type = FilterType(int(filter_type))
+            if filter_type == FilterType.WEEK:
+                start_date = now - timedelta(days=7)
+                filters &= Q(created__date__gte=start_date)
+                start_time = now - timedelta(days=6)
+                time_trunc = TruncDay("created_at")
+            elif filter_type == FilterType.MONTH:
+                start_date = now - timedelta(days=30)
+                filters &= Q(created__date__gte=start_date)
+                start_time = now - timedelta(days=28)
+                time_trunc = TruncWeek("created_at")
+            elif filter_type == FilterType.QUARTER:
+                start_date = now - timedelta(days=90)
+                filters &= Q(created__date__gte=start_date)
+                start_of_current_month = now.replace(
+                    day=1, hour=0, minute=0, second=0, microsecond=0
                 )
-            except ValueError:
-                return Response(
-                    {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
+                # Go back 2 months from start of current month
+                if start_of_current_month.month >= 3:
+                    start_time = start_of_current_month.replace(
+                        month=start_of_current_month.month - 2
+                    )
+                else:
+                    # Handle year boundary
+                    year = (
+                        start_of_current_month.year - 1
+                        if start_of_current_month.month <= 2
+                        else start_of_current_month.year
+                    )
+                    month = (
+                        start_of_current_month.month + 10
+                        if start_of_current_month.month <= 2
+                        else start_of_current_month.month - 2
+                    )
+                    start_time = start_of_current_month.replace(year=year, month=month)
+                time_trunc = TruncMonth("created_at")
+            elif filter_type == FilterType.YEAR:
+                start_date = now - timedelta(days=365)
+                filters &= Q(created__date__gte=start_date)
+                start_time = now.replace(
+                    month=1, day=1, hour=0, minute=0, second=0, microsecond=0
                 )
-
-        elif filter_type:
-            try:
-                filter_type = FilterType(int(filter_type))
-                if filter_type == FilterType.TODAY:
-                    filters &= Q(created__date=now)
-                    dubai_tz = pytz_timezone("Asia/Dubai")
-                    dubai_now = now_dubai.astimezone(dubai_tz)
-                    dubai_midnight = dubai_now.replace(
-                        hour=0, minute=0, second=0, microsecond=0
-                    )
-                    # Convert back to UTC for filtering the UTC-based DB
-                    start_time = dubai_midnight.astimezone(pytz_timezone("UTC"))
-                    time_trunc = TruncHour("created_at")
-                elif filter_type == FilterType.WEEK:
-                    start_date = now - timedelta(days=7)
-                    filters &= Q(created__date__gte=start_date)
-                    start_time = now - timedelta(days=6)
-                    time_trunc = TruncDay("created_at")
-                elif filter_type == FilterType.MONTH:
-                    start_date = now - timedelta(days=30)
-                    filters &= Q(created__date__gte=start_date)
-                    start_time = now - timedelta(days=28)
-                    time_trunc = TruncWeek("created_at")
-                elif filter_type == FilterType.QUARTER:
-                    start_date = now - timedelta(days=90)
-                    filters &= Q(created__date__gte=start_date)
-                    start_of_current_month = now.replace(
-                        day=1, hour=0, minute=0, second=0, microsecond=0
-                    )
-                    # Go back 2 months from start of current month
-                    if start_of_current_month.month >= 3:
-                        start_time = start_of_current_month.replace(
-                            month=start_of_current_month.month - 2
+                time_trunc = TruncMonth("created_at")
+            elif filter_type == FilterType.CUSTOM_RANGE:
+                start_date_str = request.query_params.get("start_date")
+                end_date_str = request.query_params.get("end_date")
+                if start_date_str and end_date_str:
+                    try:
+                        start_date = datetime.strptime(
+                            start_date_str, "%Y-%m-%d"
+                        ).date()
+                        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                        filters &= Q(created__date__gte=start_date) & Q(
+                            created__date__lte=end_date
                         )
-                    else:
-                        # Handle year boundary
-                        year = (
-                            start_of_current_month.year - 1
-                            if start_of_current_month.month <= 2
-                            else start_of_current_month.year
-                        )
-                        month = (
-                            start_of_current_month.month + 10
-                            if start_of_current_month.month <= 2
-                            else start_of_current_month.month - 2
-                        )
-                        start_time = start_of_current_month.replace(
-                            year=year, month=month
-                        )
-                    time_trunc = TruncMonth("created_at")
-                elif filter_type == FilterType.YEAR:
-                    start_date = now - timedelta(days=365)
-                    filters &= Q(created__date__gte=start_date)
-                    start_time = now.replace(
-                        month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-                    )
-                    time_trunc = TruncMonth("created_at")
-                elif filter_type == FilterType.CUSTOM_RANGE:
-                    start_date_str = request.query_params.get("start_date")
-                    end_date_str = request.query_params.get("end_date")
-                    if start_date_str and end_date_str:
-                        try:
-                            start_date = datetime.strptime(
-                                start_date_str, "%Y-%m-%d"
-                            ).date()
-                            end_date = datetime.strptime(
-                                end_date_str, "%Y-%m-%d"
-                            ).date()
-                            filters &= Q(created__date__gte=start_date) & Q(
-                                created__date__lte=end_date
-                            )
-                            if start_date > end_date:
-                                return Response(
-                                    {
-                                        "error": "Start date cannot be greater than end date."
-                                    },
-                                    status=400,
-                                )
-                            start_time = datetime.strptime(start_date_str, "%Y-%m-%d")
-                            end_time = datetime.strptime(
-                                end_date_str, "%Y-%m-%d"
-                            ) + timedelta(days=1)
-                        except ValueError:
+                        if start_date > end_date:
                             return Response(
-                                {"error": "Invalid date format. Use YYYY-MM-DD."},
+                                {
+                                    "error": "Start date cannot be greater than end date."
+                                },
                                 status=400,
                             )
-                        time_trunc = TruncDate("created_at")
-                else:
-                    return Response({"error": "Unsupported filter"}, status=400)
-            except Exception:
-                return Response({"error": "Invalid filter_type."}, status=400)
+                        time_to_check = end_date - start_date
+                        if time_to_check.days < 7:
+                            return Response(
+                                {"error": "Custom range must be at least 7 days."},
+                                status=400,
+                            )
+                        start_time = datetime.strptime(start_date_str, "%Y-%m-%d")
+                        end_time = datetime.strptime(
+                            end_date_str, "%Y-%m-%d"
+                        ) + timedelta(days=1)
+                    except ValueError:
+                        return Response(
+                            {"error": "Invalid date format. Use YYYY-MM-DD."},
+                            status=400,
+                        )
+                    time_trunc = TruncDate("created_at")
+            else:
+                return Response({"error": "Unsupported filter"}, status=400)
+        except Exception:
+            return Response({"error": "Invalid filter_type."}, status=400)
 
         priority_wise_counts = (
             DUCortexSOARIncidentFinalModel.objects.filter(filters)
@@ -7793,12 +7829,23 @@ class DetailedIncidentReport(APIView):
         if not priority_wise_counts:
             return Response({"error": "No incidents found."}, status=404)
 
+        all_severities = {
+            SlaLevelChoices.P1.label: 0,
+            SlaLevelChoices.P2.label: 0,
+            SlaLevelChoices.P3.label: 0,
+            SlaLevelChoices.P4.label: 0,
+        }
+
+        # Fill in counts from query result
+        for row in priority_wise_counts:
+            all_severities[row["incident_priority"]] = row["total"]
+
+        # Convert to desired list format
         severity_of_incidents = [
-            {"incident_priority": row["incident_priority"], "total": row["total"]}
-            for row in priority_wise_counts
+            {"incident_priority": priority, "total": total}
+            for priority, total in all_severities.items()
         ]
 
-        # filters = filters | false_postive_filter
         incident_counts = DUCortexSOARIncidentFinalModel.objects.filter(
             filters
         ).aggregate(
@@ -7922,9 +7969,9 @@ class DetailedIncidentReport(APIView):
         )
         eps_data = []
         for entry in eps_data_raw:
-            if filter_type == FilterType.TODAY:
-                interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
-            elif filter_type == FilterType.MONTH:
+            # if filter_type == FilterType.TODAY:
+            #     interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            if filter_type == FilterType.MONTH:
                 # Format as "Week 1", "Week 2", etc.
                 week_num = len(eps_data) + 1
                 interval_str = f"Week {week_num}"
@@ -7951,23 +7998,8 @@ class DetailedIncidentReport(APIView):
                 }
             )
 
-        # if tenant.company.is_default_sla:
-        #     logger.info("SLA source: DefaultSoarSlaMetric")
-        #     sla_metrics = DefaultSoarSlaMetric.objects.all()
-        # else:
-        #     logger.info("SLA source: SoarTenantSlaMetric")
-        #     sla_metrics = SoarTenantSlaMetric.objects.filter(
-        #         soar_tenant__in=soar_tenants, company=tenant.company
-        #     )
+        incident_closure_trends = get_incidents_trend(filter_type, filters)
 
-        # sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
-
-        # priority_map = {
-        #     "P1 Critical": SlaLevelChoices.P1,
-        #     "P2 High": SlaLevelChoices.P2,
-        #     "P3 Medium": SlaLevelChoices.P3,
-        #     "P4 Low": SlaLevelChoices.P4,
-        # }
         data = {
             "severity_of_incidents": severity_of_incidents,
             "total_incidents_raised": total_incidents_raised,
@@ -7976,6 +8008,7 @@ class DetailedIncidentReport(APIView):
             "sla_stats": priority_wise_counts,
             "top_use_cases": top_5_use_cases_data,
             "eps_data": eps_data,
+            "incident_clousure_trend": incident_closure_trends
             # "sla_metrics":sla_f_metrics
         }
 
