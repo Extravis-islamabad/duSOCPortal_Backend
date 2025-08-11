@@ -1149,10 +1149,15 @@ class CywareAlertDetailsSerializer(serializers.ModelSerializer):
 
     card_category = CywareCategoriesSerializer(read_only=True)
 
+    updated_at = serializers.SerializerMethodField()
+
     class Meta:
         model = CywareAlertDetails
 
         fields = "__all__"
+
+    def get_updated_at(self, obj):
+        return obj.alert.updated_at if obj.alert else None
 
 
 class CywareCategoriesSerializer(serializers.ModelSerializer):
@@ -1205,10 +1210,15 @@ class CywareTenantAlertDetailsSerializer(serializers.ModelSerializer):
 
     card_category = CywareTenantCategorySerializer(read_only=True)
 
+    updated_at = serializers.SerializerMethodField()
+
     class Meta:
         model = CywareTenantAlertDetails
 
         fields = "__all__"
+
+    def get_updated_at(self, obj):
+        return obj.alert.updated_at if obj.alert else None
 
 
 class CywareTenantCategorySerializer(serializers.ModelSerializer):
