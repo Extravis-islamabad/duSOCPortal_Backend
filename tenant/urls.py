@@ -5,6 +5,7 @@ from tenant.views import (
     AlertListView,
     AllIncidentsView,
     DashboardView,
+    DetailedEPSReportAPIView,
     DetailedIncidentReport,
     DownloadIncidentsView,
     DuCortexSOARTenantsListView,
@@ -207,4 +208,5 @@ urlpatterns = [
     path(
         "api/detailed_report/", DetailedIncidentReport.as_view(), name="detailed_report"
     ),
+    path("api/eps-report/", DetailedEPSReportAPIView.as_view(), name="eps-report"),
 ]
