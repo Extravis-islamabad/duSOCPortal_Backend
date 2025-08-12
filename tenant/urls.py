@@ -4,6 +4,7 @@ from tenant.views import (
     AlertDetailView,
     AlertListView,
     AllIncidentsView,
+    ConsolidatedReport,
     DashboardView,
     DetailedEPSReportAPIView,
     DetailedIncidentReport,
@@ -209,4 +210,9 @@ urlpatterns = [
         "api/detailed_report/", DetailedIncidentReport.as_view(), name="detailed_report"
     ),
     path("api/eps-report/", DetailedEPSReportAPIView.as_view(), name="eps-report"),
+    path(
+        "api/consolidated-report/",
+        ConsolidatedReport.as_view(),
+        name="consolidated-report",
+    ),
 ]
