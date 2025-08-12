@@ -7655,7 +7655,7 @@ class DetailedIncidentReport(APIView):
     permission_classes = [IsTenant]
 
     def get(self, request):
-        from django.db.models.functions import TruncMonth, TruncWeek
+        pass
 
         try:
             # Step 1: Get current tenant
@@ -7682,28 +7682,6 @@ class DetailedIncidentReport(APIView):
             return Response({"error": "No SOAR tenants found."}, status=404)
 
         soar_ids = [t.id for t in soar_tenants]
-
-        siem_integrations = tenant.company.integrations.filter(
-            integration_type=IntegrationTypes.SIEM_INTEGRATION,
-            siem_subtype=SiemSubTypes.IBM_QRADAR,
-            status=True,
-        )
-        if not siem_integrations.exists():
-            return Response(
-                {"error": "No active SIEM integration configured for tenant."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        collector_ids = (
-            TenantQradarMapping.objects.filter(company=tenant.company)
-            .prefetch_related("event_collectors")
-            .values_list("event_collectors__id", flat=True)
-        )
-        if not collector_ids:
-            return Response(
-                {"detail": "No Event Collectors mapped to this tenant."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
 
         filter_type = request.query_params.get("filter_type", FilterType.WEEK.value)
         if filter_type is not None:
@@ -7736,45 +7714,15 @@ class DetailedIncidentReport(APIView):
             if filter_type == FilterType.WEEK:
                 start_date = now - timedelta(days=7)
                 filters &= Q(created__date__gte=start_date)
-                start_time = now - timedelta(days=6)
-                time_trunc = TruncDay("created_at")
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
                 filters &= Q(created__date__gte=start_date)
-                start_time = now - timedelta(days=28)
-                time_trunc = TruncWeek("created_at")
             elif filter_type == FilterType.QUARTER:
                 start_date = now - timedelta(days=90)
                 filters &= Q(created__date__gte=start_date)
-                start_of_current_month = now.replace(
-                    day=1, hour=0, minute=0, second=0, microsecond=0
-                )
-                # Go back 2 months from start of current month
-                if start_of_current_month.month >= 3:
-                    start_time = start_of_current_month.replace(
-                        month=start_of_current_month.month - 2
-                    )
-                else:
-                    # Handle year boundary
-                    year = (
-                        start_of_current_month.year - 1
-                        if start_of_current_month.month <= 2
-                        else start_of_current_month.year
-                    )
-                    month = (
-                        start_of_current_month.month + 10
-                        if start_of_current_month.month <= 2
-                        else start_of_current_month.month - 2
-                    )
-                    start_time = start_of_current_month.replace(year=year, month=month)
-                time_trunc = TruncMonth("created_at")
             elif filter_type == FilterType.YEAR:
                 start_date = now - timedelta(days=365)
                 filters &= Q(created__date__gte=start_date)
-                start_time = now.replace(
-                    month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-                )
-                time_trunc = TruncMonth("created_at")
             elif filter_type == FilterType.CUSTOM_RANGE:
                 start_date_str = request.query_params.get("start_date")
                 end_date_str = request.query_params.get("end_date")
@@ -7800,16 +7748,11 @@ class DetailedIncidentReport(APIView):
                                 {"error": "Custom range must be at least 7 days."},
                                 status=400,
                             )
-                        start_time = datetime.strptime(start_date_str, "%Y-%m-%d")
-                        end_time = datetime.strptime(
-                            end_date_str, "%Y-%m-%d"
-                        ) + timedelta(days=1)
                     except ValueError:
                         return Response(
                             {"error": "Invalid date format. Use YYYY-MM-DD."},
                             status=400,
                         )
-                    time_trunc = TruncDate("created_at")
             else:
                 return Response({"error": "Unsupported filter"}, status=400)
         except Exception:
@@ -7856,77 +7799,6 @@ class DetailedIncidentReport(APIView):
 
         total_incidents_raised = incident_counts
 
-        # Existing assets query
-        assets_qs = IBMQradarAssests.objects.filter(
-            event_collector_id__in=collector_ids
-        )
-        assets_qs = assets_qs.select_related("log_source_type")  # reduce queries
-        assets = list(assets_qs)
-
-        # Bulk fetch groups
-        all_group_ids = set()
-        for asset in assets:
-            if asset.group_ids:
-                all_group_ids.update(asset.group_ids)
-        groups = IBMQradarAssetsGroup.objects.filter(db_id__in=all_group_ids)
-        group_map = {g.db_id: g for g in groups}
-
-        now_dt = timezone.now()
-
-        # Totals
-        total_assets = len(assets)
-        active_assets = 0
-
-        # Per log_source_type counters
-        log_source_stats = defaultdict(
-            lambda: {"integrated": 0, "reporting": 0, "non_reporting": 0}
-        )
-
-        for asset in assets:
-            log_source_name = (
-                asset.log_source_type.name if asset.log_source_type else "Unknown"
-            )
-            log_source_stats[log_source_name]["integrated"] += 1
-
-            # Default threshold 24h unless overridden by group description
-            threshold_minutes = 24 * 60
-            if asset.group_ids:
-                for gid in asset.group_ids:
-                    if gid in group_map and group_map[gid].description:
-                        match = re.search(
-                            r"(\d+)\s*hour", group_map[gid].description, re.IGNORECASE
-                        )
-                        if match:
-                            threshold_minutes = int(match.group(1)) * 60
-                            break
-
-            is_reporting = False
-            if asset.enabled and asset.last_event_time:
-                try:
-                    last_event_timestamp = int(asset.last_event_time) / 1000
-                    last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
-                    last_event_time = timezone.make_aware(last_event_time)
-                    time_diff_minutes = (now_dt - last_event_time).total_seconds() / 60
-                    if time_diff_minutes <= threshold_minutes:
-                        is_reporting = True
-                except (ValueError, TypeError):
-                    pass
-
-            if is_reporting:
-                log_source_stats[log_source_name]["reporting"] += 1
-                active_assets += 1
-            else:
-                log_source_stats[log_source_name]["non_reporting"] += 1
-
-        # Convert defaultdict to list for JSON
-        log_source_stats_list = [
-            {"log_source_type": k, **v} for k, v in log_source_stats.items()
-        ]
-        device_coverage = {
-            "integrated_assets": total_assets,
-            "reporting_assets": active_assets,
-        }
-
         incident_data = DUCortexSOARIncidentFinalModel.objects.filter(filters).values(
             "name", "incident_priority"
         )
@@ -7949,65 +7821,13 @@ class DetailedIncidentReport(APIView):
             for (uc, priority), cnt in top_5_use_cases
         ]
 
-        qradar_tenant_ids = tenant.company.qradar_mappings.values_list(
-            "qradar_tenant__id", flat=True
-        )
-
-        filter_kwargs = {"domain_id__in": qradar_tenant_ids}
-        if filter_type == FilterType.CUSTOM_RANGE:
-            filter_kwargs["created_at__range"] = (start_time, end_time)
-        else:
-            filter_kwargs["created_at__gte"] = start_time
-
-        # Query EPS data
-        eps_data_raw = (
-            IBMQradarEPS.objects.filter(**filter_kwargs)
-            .annotate(interval=time_trunc)
-            .values("interval", "domain__name")
-            .annotate(average_eps=Avg("average_eps"))
-            .order_by("interval")
-        )
-        eps_data = []
-        for entry in eps_data_raw:
-            # if filter_type == FilterType.TODAY:
-            #     interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
-            if filter_type == FilterType.MONTH:
-                # Format as "Week 1", "Week 2", etc.
-                week_num = len(eps_data) + 1
-                interval_str = f"Week {week_num}"
-                date_of_week = entry["interval"].strftime("%Y-%m-%d")
-                interval_str += f" ({date_of_week})"
-            elif filter_type == FilterType.QUARTER:
-                # Format as month names
-                interval_str = entry["interval"].strftime("%B %Y")
-            elif filter_type == FilterType.YEAR:
-                # Format as month names
-                interval_str = entry["interval"].strftime("%B")
-            else:
-                interval_str = entry["interval"].strftime("%Y-%m-%d")
-
-            eps_data.append(
-                {
-                    "interval": interval_str,
-                    "average_eps": float(
-                        Decimal(entry["average_eps"]).quantize(
-                            Decimal("0.01"), rounding=ROUND_HALF_UP
-                        )
-                    ),
-                    "domain": entry["domain__name"],
-                }
-            )
-
         incident_closure_trends = get_incidents_trend(filter_type, filters)
 
         data = {
             "severity_of_incidents": severity_of_incidents,
             "total_incidents_raised": total_incidents_raised,
-            "device_coverage": device_coverage,
-            "log_source_stats": log_source_stats_list,
             "sla_stats": priority_wise_counts,
             "top_use_cases": top_5_use_cases_data,
-            "eps_data": eps_data,
             "incident_clousure_trend": incident_closure_trends
             # "sla_metrics":sla_f_metrics
         }
