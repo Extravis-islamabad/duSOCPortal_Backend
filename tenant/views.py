@@ -8407,3 +8407,267 @@ class DetailedEPSReportAPIView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class AssetReportView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        """
+        Asset Report endpoint providing device coverage statistics and log source breakdown
+
+        Provides comprehensive asset reporting with:
+        - Device coverage statistics (from ConsolidatedReport)
+        - Per log source type statistics
+
+        Query Parameters:
+            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year, 5=Quarter,
+                              6=Last 6 months, 7=Last 3 weeks, 8=Last month,
+                              9=Custom range (requires start_date and end_date)
+            start_date (YYYY-MM-DD): For custom range filter
+            end_date (YYYY-MM-DD): For custom range filter
+
+        Returns:
+            {
+                "device_coverage": {
+                    "integrated_assets": total_count,
+                    "reporting_assets": active_count
+                },
+                "log_source_stats": [
+                    {
+                        "log_source_type": "source_name",
+                        "integrated": count,
+                        "reporting": count,
+                        "non_reporting": count
+                    }
+                ]
+            }
+        """
+        try:
+            # Step 1: Validate tenant
+            tenant = Tenant.objects.select_related("tenant").get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            # Step 2: Check for active SIEM integration
+            siem_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SIEM_INTEGRATION,
+                siem_subtype=SiemSubTypes.IBM_QRADAR,
+                status=True,
+            )
+            if not siem_integrations.exists():
+                return Response(
+                    {"error": "No active SIEM integration configured for tenant."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Step 3: Get mapped collector IDs
+            collector_ids = (
+                TenantQradarMapping.objects.filter(company=tenant.company)
+                .prefetch_related("event_collectors")
+                .values_list("event_collectors__id", flat=True)
+            )
+            if not collector_ids:
+                return Response(
+                    {"detail": "No Event Collectors mapped to this tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Base filter for tenant's assets
+            base_filter = Q(event_collector_id__in=collector_ids)
+
+            # Step 4: Get filter_type from query params
+            filter_type_param = request.query_params.get(
+                "filter_type", FilterType.TODAY.value
+            )
+            filter_type = None
+            if filter_type_param:
+                try:
+                    filter_type_value = int(filter_type_param)
+                    filter_type = FilterType(filter_type_value)
+                except (ValueError, KeyError):
+                    return Response(
+                        {"error": "Invalid filter_type value."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Step 5: Determine date range based on filter_type
+            now = timezone.now()
+            today = now.date()
+            start_date = None
+            end_date = None
+
+            if filter_type:
+                if filter_type == FilterType.TODAY:
+                    start_date = today
+                elif filter_type == FilterType.WEEK:
+                    start_date = today - timedelta(days=7)
+                elif filter_type == FilterType.MONTH:
+                    start_date = today - timedelta(days=30)
+                elif filter_type == FilterType.YEAR:
+                    start_date = today - timedelta(days=365)
+                elif filter_type == FilterType.QUARTER:
+                    start_date = today - timedelta(days=90)
+                elif filter_type == FilterType.LAST_6_MONTHS:
+                    start_date = today - timedelta(days=180)
+                elif filter_type == FilterType.LAST_3_WEEKS:
+                    start_date = today - timedelta(days=21)
+                elif filter_type == FilterType.LAST_MONTH:
+                    end_date = today - timedelta(days=30)
+                    start_date = end_date - timedelta(days=30)
+                elif filter_type == FilterType.CUSTOM_RANGE:
+                    start_date = self._parse_date(
+                        request.query_params.get("start_date")
+                    )
+                    end_date = self._parse_date(request.query_params.get("end_date"))
+                    if not start_date or not end_date:
+                        return Response(
+                            {
+                                "error": "Custom range requires both start_date and end_date."
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    if start_date > end_date:
+                        return Response(
+                            {"error": "start_date must be before end_date."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+            # Step 6: Get ALL assets for device coverage calculations
+            all_assets = IBMQradarAssests.objects.filter(base_filter).select_related(
+                "event_collector", "log_source_type"
+            )
+
+            # Device Coverage Logic (from ConsolidatedReport)
+            # Bulk fetch groups for status calculation
+            all_group_ids = set()
+            for asset in all_assets:
+                if asset.group_ids:
+                    all_group_ids.update(asset.group_ids)
+            groups = IBMQradarAssetsGroup.objects.filter(db_id__in=all_group_ids)
+            group_map = {g.db_id: g for g in groups}
+
+            now_dt = timezone.now()
+
+            # Totals for device coverage
+            total_assets = len(all_assets)
+            active_assets = 0
+
+            # Per log_source_type counters
+            log_source_stats = defaultdict(
+                lambda: {"integrated": 0, "reporting": 0, "non_reporting": 0}
+            )
+
+            # Calculate device coverage and log source stats
+            for asset in all_assets:
+                log_source_name = (
+                    asset.log_source_type.name if asset.log_source_type else "Unknown"
+                )
+                log_source_stats[log_source_name]["integrated"] += 1
+
+                # Default threshold 24h unless overridden by group description
+                threshold_minutes = 24 * 60
+                if asset.group_ids:
+                    for gid in asset.group_ids:
+                        if gid in group_map and group_map[gid].description:
+                            match = re.search(
+                                r"(\d+)\s*hour",
+                                group_map[gid].description,
+                                re.IGNORECASE,
+                            )
+                            if match:
+                                threshold_minutes = int(match.group(1)) * 60
+                                break
+
+                is_reporting = False
+                if asset.enabled and asset.last_event_time:
+                    try:
+                        last_event_timestamp = int(asset.last_event_time) / 1000
+                        last_event_time = datetime.utcfromtimestamp(
+                            last_event_timestamp
+                        )
+                        last_event_time = timezone.make_aware(last_event_time)
+                        time_diff_minutes = (
+                            now_dt - last_event_time
+                        ).total_seconds() / 60
+                        if time_diff_minutes <= threshold_minutes:
+                            is_reporting = True
+                    except (ValueError, TypeError):
+                        pass
+
+                if is_reporting:
+                    log_source_stats[log_source_name]["reporting"] += 1
+                    active_assets += 1
+                else:
+                    log_source_stats[log_source_name]["non_reporting"] += 1
+
+            # Convert defaultdict to list for JSON
+            log_source_stats_list = [
+                {"log_source_type": k, **v} for k, v in log_source_stats.items()
+            ]
+
+            device_coverage = {
+                "integrated_assets": total_assets,
+                "reporting_assets": active_assets,
+            }
+
+            # Prepare combined response without pagination and serialized asset data
+            response_data = {
+                "device_coverage": device_coverage,
+                "log_source_stats": log_source_stats_list,
+            }
+
+            return Response(response_data)
+
+        except ValueError as e:
+            logger.error(f"Value error in AssetReportView: {str(e)}")
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error in AssetReportView: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "An unexpected error occurred."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _get_asset_status(self, asset, now):
+        """
+        Determine asset status based on enabled flag and last event time
+        FIXED: Consistent logic for both counting and filtering
+        """
+        # If asset is not enabled, it's always ERROR
+        if not asset.enabled:
+            return "ERROR"
+
+        # If no last event time, it's ERROR
+        if not asset.last_event_time:
+            return "ERROR"
+        time_threshold_minutes = 24 * 60
+        try:
+            group = asset.groups.first()
+            if group and group.description:
+                # Extract the first integer before the word "hour" (case-insensitive)
+                match = re.search(r"(\d+)\s*hour", group.description, re.IGNORECASE)
+                if match:
+                    extracted_hours = int(match.group(1))
+                    time_threshold_minutes = extracted_hours * 60
+            last_event_timestamp = int(asset.last_event_time) / 1000
+            last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
+            last_event_time = timezone.make_aware(last_event_time)
+            time_diff_minutes = (now - last_event_time).total_seconds() / 60
+
+            return "ERROR" if time_diff_minutes > time_threshold_minutes else "SUCCESS"
+        except (ValueError, TypeError):
+            return "ERROR"
+
+    def _parse_date(self, date_str):
+        """Safe date parsing from string"""
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("Invalid date format")
