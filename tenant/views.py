@@ -8362,12 +8362,17 @@ class DetailedEPSReportAPIView(APIView):
                 .first()
             )
             peak_eps_time = (
-                peak_row.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-                if peak_row and peak_row.created_at
-                else None
+                peak_row.created_at if peak_row and peak_row.created_at else None
             )
+
+            peak_dt = peak_eps_time + timedelta(hours=4)
+            peak_str = peak_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
             if filter_enum == FilterType.TODAY:
-                interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                interval = entry["interval"]
+                new_dt = interval + timedelta(hours=4)
+                interval_str = new_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                # interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
             elif filter_enum == FilterType.MONTH:
                 # Format as "Week 1", "Week 2", etc.
                 week_num = len(eps_data) + 1
@@ -8397,7 +8402,7 @@ class DetailedEPSReportAPIView(APIView):
                             Decimal("0.01"), rounding=ROUND_HALF_UP
                         )
                     ),
-                    "peak_eps_time": peak_eps_time,
+                    "peak_eps_time": peak_str,
                 }
             )
 
