@@ -679,7 +679,7 @@ class VolumeTypeChoices(models.IntegerChoices):
 
 
 class FileTypeChoices(models.IntegerChoices):
-    PDF = 1, "PDF"
+    # PDF = 1, "PDF"
     EXCEL = 2, "EXCEL"
 
 
