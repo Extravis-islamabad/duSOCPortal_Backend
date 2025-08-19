@@ -509,16 +509,18 @@ class CortexSOAR:
         entries = entries.get("entries")
 
         for rec in entries:
-            content = rec.get("contents", "")
-            if not self.is_structured_note(content):
+            # content = rec.get("contents", "")
+            # if not self.is_structured_note(content):
+            #     continue
+            falg = rec.get("note", False)
+            if not falg:
                 continue
-
             try:
                 db_id_str = rec.get("id")  # , "").split("@")[0]
                 db_id = db_id_str
             except (IndexError, ValueError):
                 continue  # Skip malformed db_id
-
+            content = rec.get("contents")
             records.append(
                 DUSoarNotes(
                     db_id=db_id,
