@@ -8149,14 +8149,27 @@ class ConsolidatedReport(APIView):
             IBMQradarEPS.objects.filter(**filter_kwargs)
             .annotate(interval=time_trunc)
             .values("interval", "domain__name")
-            .annotate(average_eps=Avg("average_eps"))
+            .annotate(average_eps=Avg("average_eps"), peak_eps=Max("peak_eps"))
             .order_by("interval")
         )
         eps_data = []
         for entry in eps_data_raw:
-            # if filter_type == FilterType.TODAY:
-            #     interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
-            if filter_type == FilterType.MONTH:
+            interval_value = entry["interval"]
+            peak_row = (
+                IBMQradarEPS.objects.filter(**filter_kwargs)
+                .annotate(interval=time_trunc)
+                .filter(interval=interval_value, peak_eps=entry["peak_eps"])
+                .order_by("created_at")  # get earliest if multiple match
+                .first()
+            )
+            peak_eps_time = (
+                peak_row.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                if peak_row and peak_row.created_at
+                else None
+            )
+            if filter_type == FilterType.TODAY:
+                interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            elif filter_type == FilterType.MONTH:
                 # Format as "Week 1", "Week 2", etc.
                 week_num = len(eps_data) + 1
                 interval_str = f"Week {week_num}"
@@ -8180,6 +8193,12 @@ class ConsolidatedReport(APIView):
                         )
                     ),
                     "domain": entry["domain__name"],
+                    "peak_eps": float(
+                        Decimal(entry["peak_eps"]).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                    "peak_eps_time": peak_eps_time,
                 }
             )
 
@@ -8210,7 +8229,7 @@ class DetailedEPSReportAPIView(APIView):
 
         try:
             filter_value = int(
-                request.query_params.get("filter_type", FilterType.WEEK.value)
+                request.query_params.get("filter_type", FilterType.TODAY.value)
             )
             filter_enum = FilterType(filter_value)
         except (ValueError, KeyError):
@@ -8327,16 +8346,29 @@ class DetailedEPSReportAPIView(APIView):
             IBMQradarEPS.objects.filter(**filter_kwargs)
             .annotate(interval=time_trunc)
             .values("interval", "domain__name")
-            .annotate(average_eps=Avg("average_eps"))
+            .annotate(average_eps=Avg("average_eps"), peak_eps=Max("peak_eps"))
             .order_by("interval")
         )
 
         # Format EPS data with improved interval formatting
         eps_data = []
         for entry in eps_data_raw:
-            # if filter_type == FilterType.TODAY:
-            #     interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
-            if filter_enum == FilterType.MONTH:
+            interval_value = entry["interval"]
+            peak_row = (
+                IBMQradarEPS.objects.filter(**filter_kwargs)
+                .annotate(interval=time_trunc)
+                .filter(interval=interval_value, peak_eps=entry["peak_eps"])
+                .order_by("created_at")  # get earliest if multiple match
+                .first()
+            )
+            peak_eps_time = (
+                peak_row.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                if peak_row and peak_row.created_at
+                else None
+            )
+            if filter_enum == FilterType.TODAY:
+                interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            elif filter_enum == FilterType.MONTH:
                 # Format as "Week 1", "Week 2", etc.
                 week_num = len(eps_data) + 1
                 interval_str = f"Week {week_num}"
@@ -8360,6 +8392,12 @@ class DetailedEPSReportAPIView(APIView):
                         )
                     ),
                     "domain": entry["domain__name"],
+                    "peak_eps": float(
+                        Decimal(entry["peak_eps"]).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                    "peak_eps_time": peak_eps_time,
                 }
             )
 
