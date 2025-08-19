@@ -56,7 +56,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.itsm_tasks import sync_itsm_tenants_tickets
+from tenant.ibm_qradar_tasks import sync_ibm_tenant_eps
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -251,7 +251,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_itsm_tenants_tickets()
+        sync_ibm_tenant_eps()
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
@@ -7467,7 +7467,7 @@ class DownloadIncidentsView(APIView):
                         occured_at_str = "N/A"
                 else:
                     occured_at_str = "N/A"
-                status_label = "OPEN" if row["status"] == 1 else "CLOSED"
+                status_label = "OPEN" if int(row["status"]) == 1 else "CLOSED"
 
                 incidents.append(
                     {
