@@ -7489,9 +7489,9 @@ class DownloadIncidentsView(APIView):
                 )
 
             # Step 13: Generate file based on file_type
-            if file_type_choice == FileTypeChoices.PDF:
-                return self._generate_pdf(incidents, start_date, end_date)
-            elif file_type_choice == FileTypeChoices.EXCEL:
+            # if file_type_choice == FileTypeChoices.PDF:
+            #     return self._generate_pdf(incidents, start_date, end_date)
+            if file_type_choice == FileTypeChoices.EXCEL:
                 return self._generate_excel(incidents, start_date, end_date)
             else:
                 return Response(
