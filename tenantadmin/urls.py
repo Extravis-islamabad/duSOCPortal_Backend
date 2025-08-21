@@ -9,6 +9,7 @@ from tenantadmin.views import (
     DeleteTenantByCompanyView,
     DistinctCompaniesAPIView,
     IncidentPrioritySummaryAPIView,
+    IncidentStatusSummaryAPIView,
     NonActiveTenantsAPIView,
     ReactivateTenantUsersAPIView,
     SlaLevelsAPIView,
@@ -73,6 +74,11 @@ urlpatterns = [
         "incident_priority_summary/",
         IncidentPrioritySummaryAPIView.as_view(),
         name="incident-priority-summary",
+    ),
+    path(
+        "incident_status_summary/",
+        IncidentStatusSummaryAPIView.as_view(),
+        name="incident-status-summary",
     ),
     path("api-version/", APIVersionAPIView.as_view(), name="api-version"),
 ]

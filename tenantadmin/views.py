@@ -774,6 +774,148 @@ class IncidentPrioritySummaryAPIView(APIView):
         ]
 
 
+class IncidentStatusSummaryAPIView(APIView):
+    """
+    APIView to return incident status summary for all tenants or a specific company.
+    Returns count of open and closed incidents.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        company_id = request.query_params.get("company_id")
+
+        logger.info(
+            f"Incident status summary requested by user: {request.user.username}, "
+            f"company_id: {company_id}"
+        )
+
+        try:
+            if company_id:
+                # Get incidents for specific company
+                try:
+                    company = Company.objects.get(
+                        id=company_id, created_by=request.user
+                    )
+                    companies = [company]
+                except Company.DoesNotExist:
+                    return Response(
+                        {"error": "Company not found or unauthorized."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                # Get incidents for all companies owned by this admin
+                companies = Company.objects.filter(created_by=request.user)
+                if not companies.exists():
+                    return Response(
+                        {
+                            "message": "No companies found.",
+                            "summary": self._get_empty_status_summary(),
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+
+            # Calculate incident status summary
+            summary = self._calculate_incident_status_summary(companies)
+
+            logger.success(
+                f"Incident status summary calculated successfully for {len(companies)} companies"
+            )
+
+            return Response(summary, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error calculating incident status summary: {str(e)}")
+            return Response(
+                {
+                    "error": "Internal server error while calculating incident status summary."
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _get_empty_status_summary(self):
+        """Return empty status summary structure"""
+        return {
+            "companies_count": 0,
+            "companies_summary": [],
+        }
+
+    def _calculate_incident_status_summary(self, companies):
+        """Calculate incident status summary per company"""
+        companies_summary = []
+
+        for company in companies:
+            # Get all SOAR tenant IDs for this company
+            soar_ids = company.soar_tenants.values_list("id", flat=True)
+
+            if not soar_ids:
+                # Company has no SOAR tenants
+                companies_summary.append(
+                    {
+                        "company_id": company.id,
+                        "company_name": company.company_name,
+                        "open_incidents": 0,
+                        "closed_incidents": 0,
+                        "total_incidents": 0,
+                    }
+                )
+                continue
+
+            # Build base filter for company's SOAR tenants with true/false positive logic
+            base_filters = self._get_valid_incidents_filter(soar_ids)
+
+            # Count open incidents (status = "1" or phases not in closed states)
+            open_filters = base_filters & (Q(status="1"))
+            open_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                open_filters
+            ).count()
+
+            # Count closed incidents (status = "2" or phases in closed states)
+            closed_filters = base_filters & (Q(status="2"))
+            closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                closed_filters
+            ).count()
+
+            total_count = open_count + closed_count
+
+            companies_summary.append(
+                {
+                    "company_id": company.id,
+                    "company_name": company.company_name,
+                    "open_incidents": open_count,
+                    "closed_incidents": closed_count,
+                    "total_incidents": total_count,
+                }
+            )
+
+        return {
+            "companies_count": len(companies),
+            "companies_summary": companies_summary,
+        }
+
+    def _get_valid_incidents_filter(self, soar_ids):
+        """Get filter for incidents that match true positive OR false positive logic"""
+        base_filters = Q(cortex_soar_tenant__in=soar_ids)
+
+        # True Positive Logic: Ready incidents with proper fields
+        true_positive_filters = base_filters & (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(itsm_sync_status__iexact="Ready")
+        )
+
+        # False Positive Logic: Done incidents
+        false_positive_filters = base_filters & Q(itsm_sync_status__iexact="Done")
+
+        # Combine true positive OR false positive
+        return true_positive_filters | false_positive_filters
+
+
 class APIVersionAPIView(APIView):
     """
     APIView to return the current API version information.
