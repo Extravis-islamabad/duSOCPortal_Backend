@@ -20,6 +20,7 @@ from tenantadmin.views import (
     TenantDetailAPIView,
     TenantInactiveView,
     TenantsByCompanyAPIView,
+    TenantSLAMatrixAPIView,
     VolumeTypeChoicesAPIView,
 )
 
@@ -79,6 +80,11 @@ urlpatterns = [
         "incident_status_summary/",
         IncidentStatusSummaryAPIView.as_view(),
         name="incident-status-summary",
+    ),
+    path(
+        "tenant_sla_matrix/",
+        TenantSLAMatrixAPIView.as_view(),
+        name="tenant-sla-matrix",
     ),
     path("api-version/", APIVersionAPIView.as_view(), name="api-version"),
 ]

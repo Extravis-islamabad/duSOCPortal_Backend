@@ -20,10 +20,12 @@ from tenant.itsm_tasks import sync_itsm
 from tenant.models import (
     Company,
     CustomerEPS,
+    DefaultSoarSlaMetric,
     DUCortexSOARIncidentFinalModel,
     IBMQradarAssests,
     IBMQradarAssetsGroup,
     SlaLevelChoices,
+    SoarTenantSlaMetric,
     Tenant,
     TenantQradarMapping,
     VolumeTypeChoices,
@@ -914,6 +916,321 @@ class IncidentStatusSummaryAPIView(APIView):
 
         # Combine true positive OR false positive
         return true_positive_filters | false_positive_filters
+
+
+class TenantSLAMatrixAPIView(APIView):
+    """
+    APIView to return SLA metrics matrix for a specific company or all companies.
+    Returns SLA compliance data for incidents across different priority levels.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        company_id = request.query_params.get("company_id")
+
+        logger.info(
+            f"Tenant SLA Matrix requested by user: {request.user.username}, "
+            f"company_id: {company_id}"
+        )
+
+        try:
+            if company_id:
+                # Get SLA matrix for specific company
+                try:
+                    company = Company.objects.get(
+                        id=company_id, created_by=request.user
+                    )
+                    companies = [company]
+                except Company.DoesNotExist:
+                    return Response(
+                        {"error": "Company not found or unauthorized."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                # Get SLA matrix for all companies owned by this admin
+                companies = Company.objects.filter(created_by=request.user)
+                if not companies.exists():
+                    return Response(
+                        {
+                            "message": "No companies found.",
+                            "companies": [],
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+
+            # Calculate SLA matrix for each company
+            companies_sla_data = []
+            for company in companies:
+                company_sla_data = self._calculate_company_sla_matrix(company)
+                companies_sla_data.append(company_sla_data)
+
+            response_data = {
+                "companies_count": len(companies),
+                "companies": companies_sla_data,
+            }
+
+            logger.success(
+                f"Tenant SLA Matrix calculated successfully for {len(companies)} companies"
+            )
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error calculating Tenant SLA Matrix: {str(e)}")
+            return Response(
+                {"error": "Internal server error while calculating Tenant SLA Matrix."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _calculate_company_sla_matrix(self, company):
+        """Calculate SLA matrix for a specific company"""
+        # Get all SOAR tenant IDs for this company
+        soar_ids = company.soar_tenants.values_list("id", flat=True)
+
+        if not soar_ids:
+            # Company has no SOAR tenants, return empty data
+            return {
+                "company_id": company.id,
+                "company_name": company.company_name,
+                "is_default_sla": company.is_default_sla,
+                "sla_metrics": self._get_empty_sla_metrics(),
+            }
+
+        # Determine if company uses default SLA metrics or custom ones
+        is_default = company.is_default_sla
+        if is_default:
+            sla_metrics = DefaultSoarSlaMetric.objects.all()
+        else:
+            sla_metrics = SoarTenantSlaMetric.objects.filter(
+                soar_tenant__in=soar_ids, company=company
+            )
+
+        # Create a dictionary of SLA metrics by level for quick lookup
+        sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+        # Get valid incidents (true positive OR false positive)
+        filters = self._get_valid_incidents_filter(soar_ids)
+        filters &= Q(
+            incident_priority__in=[
+                SlaLevelChoices.P1.label,
+                SlaLevelChoices.P2.label,
+                SlaLevelChoices.P3.label,
+                SlaLevelChoices.P4.label,
+            ]
+        )
+
+        # We need TTA, TTN, and TTDN fields to calculate SLA compliance
+        filters &= (
+            Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+        )
+
+        incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+            filters
+        ).select_related()
+
+        # Initialize SLA metrics structure for all priority levels
+        sla_metrics_data = {}
+        for priority_level in [
+            SlaLevelChoices.P1,
+            SlaLevelChoices.P2,
+            SlaLevelChoices.P3,
+            SlaLevelChoices.P4,
+        ]:
+            sla_metrics_data[priority_level.label] = {
+                "priority": priority_level.label,
+                "priority_name": priority_level.name,
+                "total_incidents": 0,
+                "tta": {
+                    "sla_minutes": sla_metrics_dict.get(priority_level, {}).tta_minutes
+                    if sla_metrics_dict.get(priority_level)
+                    else None,
+                    "compliant_count": 0,
+                    "breached_count": 0,
+                    "compliance_percentage": 0,
+                },
+                "ttn": {
+                    "sla_minutes": sla_metrics_dict.get(priority_level, {}).ttn_minutes
+                    if sla_metrics_dict.get(priority_level)
+                    else None,
+                    "compliant_count": 0,
+                    "breached_count": 0,
+                    "compliance_percentage": 0,
+                },
+                "ttdn": {
+                    "sla_minutes": sla_metrics_dict.get(priority_level, {}).ttdn_minutes
+                    if sla_metrics_dict.get(priority_level)
+                    else None,
+                    "compliant_count": 0,
+                    "breached_count": 0,
+                    "compliance_percentage": 0,
+                },
+                "overall_compliance": {
+                    "fully_compliant_count": 0,
+                    "partially_compliant_count": 0,
+                    "non_compliant_count": 0,
+                    "compliance_percentage": 0,
+                },
+            }
+
+        # Process incidents and calculate metrics
+        for incident in incidents:
+            priority = incident.incident_priority
+            # Skip if priority doesn't match any of our defined levels
+            if priority not in sla_metrics_data:
+                continue
+
+            # Find the corresponding SLA level
+            sla_level = None
+            for level in [
+                SlaLevelChoices.P1,
+                SlaLevelChoices.P2,
+                SlaLevelChoices.P3,
+                SlaLevelChoices.P4,
+            ]:
+                if priority == level.label:
+                    sla_level = level
+                    break
+
+            if not sla_level or sla_level not in sla_metrics_dict:
+                continue
+
+            sla = sla_metrics_dict[sla_level]
+            metric_data = sla_metrics_data[priority]
+            metric_data["total_incidents"] += 1
+
+            # Count the number of SLA breaches for this incident
+            breach_count = 0
+
+            # Calculate TTA compliance
+            tta_delta = (incident.incident_tta - incident.occured).total_seconds() / 60
+            if tta_delta <= sla.tta_minutes:
+                metric_data["tta"]["compliant_count"] += 1
+            else:
+                metric_data["tta"]["breached_count"] += 1
+                breach_count += 1
+
+            # Calculate TTN compliance
+            ttn_delta = (incident.incident_ttn - incident.occured).total_seconds() / 60
+            if ttn_delta <= sla.ttn_minutes:
+                metric_data["ttn"]["compliant_count"] += 1
+            else:
+                metric_data["ttn"]["breached_count"] += 1
+                breach_count += 1
+
+            # Calculate TTDN compliance
+            ttdn_delta = (
+                incident.incident_ttdn - incident.occured
+            ).total_seconds() / 60
+            if ttdn_delta <= sla.ttdn_minutes:
+                metric_data["ttdn"]["compliant_count"] += 1
+            else:
+                metric_data["ttdn"]["breached_count"] += 1
+                breach_count += 1
+
+            # Update overall compliance statistics
+            if breach_count == 0:
+                metric_data["overall_compliance"]["fully_compliant_count"] += 1
+            elif (
+                breach_count < 3
+            ):  # Partially compliant if at least one metric is compliant
+                metric_data["overall_compliance"]["partially_compliant_count"] += 1
+            else:  # All metrics breached
+                metric_data["overall_compliance"]["non_compliant_count"] += 1
+
+        # Calculate percentages for all metrics
+        for priority, data in sla_metrics_data.items():
+            total = data["total_incidents"]
+            if total > 0:
+                # Calculate compliance percentages for each metric
+                data["tta"]["compliance_percentage"] = round(
+                    (data["tta"]["compliant_count"] / total) * 100, 2
+                )
+                data["ttn"]["compliance_percentage"] = round(
+                    (data["ttn"]["compliant_count"] / total) * 100, 2
+                )
+                data["ttdn"]["compliance_percentage"] = round(
+                    (data["ttdn"]["compliant_count"] / total) * 100, 2
+                )
+
+                # Calculate overall compliance percentage based on fully compliant incidents
+                data["overall_compliance"]["compliance_percentage"] = round(
+                    (data["overall_compliance"]["fully_compliant_count"] / total) * 100,
+                    2,
+                )
+
+        return {
+            "company_id": company.id,
+            "company_name": company.company_name,
+            "is_default_sla": is_default,
+            "sla_metrics": list(sla_metrics_data.values()),
+        }
+
+    def _get_valid_incidents_filter(self, soar_ids):
+        """Get filter for incidents that match true positive OR false positive logic"""
+        base_filters = Q(cortex_soar_tenant__in=soar_ids)
+
+        # True Positive Logic: Ready incidents with proper fields
+        true_positive_filters = base_filters & (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(itsm_sync_status__iexact="Ready")
+        )
+
+        # False Positive Logic: Done incidents
+        false_positive_filters = base_filters & Q(itsm_sync_status__iexact="Done")
+
+        # Combine true positive OR false positive
+        return true_positive_filters | false_positive_filters
+
+    def _get_empty_sla_metrics(self):
+        """Return empty SLA metrics structure for all priority levels"""
+        empty_metrics = []
+        for priority_level in [
+            SlaLevelChoices.P1,
+            SlaLevelChoices.P2,
+            SlaLevelChoices.P3,
+            SlaLevelChoices.P4,
+        ]:
+            empty_metrics.append(
+                {
+                    "priority": priority_level.label,
+                    "priority_name": priority_level.name,
+                    "total_incidents": 0,
+                    "tta": {
+                        "sla_minutes": None,
+                        "compliant_count": 0,
+                        "breached_count": 0,
+                        "compliance_percentage": 0,
+                    },
+                    "ttn": {
+                        "sla_minutes": None,
+                        "compliant_count": 0,
+                        "breached_count": 0,
+                        "compliance_percentage": 0,
+                    },
+                    "ttdn": {
+                        "sla_minutes": None,
+                        "compliant_count": 0,
+                        "breached_count": 0,
+                        "compliance_percentage": 0,
+                    },
+                    "overall_compliance": {
+                        "fully_compliant_count": 0,
+                        "partially_compliant_count": 0,
+                        "non_compliant_count": 0,
+                        "compliance_percentage": 0,
+                    },
+                }
+            )
+        return empty_metrics
 
 
 class APIVersionAPIView(APIView):
