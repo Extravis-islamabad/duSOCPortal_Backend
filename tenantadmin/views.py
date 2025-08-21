@@ -260,44 +260,6 @@ class TenantsByCompanyAPIView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
-# class DistinctCompaniesAPIView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAdminUser]
-
-#     def get(self, request):
-#         companies = Company.objects.filter(
-#             created_by=request.user,
-#         ).distinct()
-
-#         result = []
-#         for company in companies:
-#             tenant_count = company.tenants.filter(
-#                 tenant__is_active=True,
-#                 tenant__is_deleted=False,
-#             ).count()
-#             if tenant_count == 0:
-#                 continue
-#             result.append(
-#                 {
-#                     "id": company.id,
-#                     "name": company.company_name,
-#                     "phone_number": company.phone_number,
-#                     "industry": company.industry,
-#                     "country": company.country,
-#                     "tenant_count": tenant_count,
-#                     "profile_picture": request.build_absolute_uri(
-#                         company.profile_picture.url
-#                     )
-#                     if company.profile_picture
-#                     else None,
-#                     "created_at": company.created_at,
-#                     "updated_at": company.updated_at,
-#                 }
-#             )
-
-#         return Response({"companies": result}, status=200)
-
-
 class DistinctCompaniesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]

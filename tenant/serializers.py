@@ -1268,6 +1268,7 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
     # sla = serializers.SerializerMethodField()
     asset_count = serializers.SerializerMethodField()
     active_integrations = serializers.SerializerMethodField()
+    integrated_tools = serializers.SerializerMethodField()
 
     class Meta:
         model = Company
@@ -1285,6 +1286,7 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
             # "sla",
             "asset_count",
             "active_integrations",
+            "integrated_tools",
             "created_at",
             "updated_at",
         ]
@@ -1340,6 +1342,9 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
 
     def get_active_integrations(self, obj):
         return obj.integrations.count()
+
+    def get_integrated_tools(self, obj):
+        return list(obj.integrations.values_list("instance_name", flat=True))
 
 
 class NonActiveCompanySerializer(serializers.ModelSerializer):
