@@ -1,5 +1,9 @@
 # authentication/views.py
+import re
+from datetime import datetime
+
 from django.db.models import Count, Q
+from django.utils import timezone
 from loguru import logger
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
@@ -16,8 +20,11 @@ from tenant.itsm_tasks import sync_itsm
 from tenant.models import (
     Company,
     CustomerEPS,
+    IBMQradarAssests,
+    IBMQradarAssetsGroup,
     SlaLevelChoices,
     Tenant,
+    TenantQradarMapping,
     VolumeTypeChoices,
 )
 from tenant.serializers import (  # TenantUpdateSerializer,
@@ -419,6 +426,173 @@ class CheckCompanyNameExistView(APIView):
             {"message": "Company name is available."},
             status=status.HTTP_200_OK,
         )
+
+
+class AssetsSummaryAPIView(APIView):
+    """
+    APIView to return assets summary for all tenants or a specific company.
+    Returns total, active (reporting), and non-reporting assets.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        company_id = request.query_params.get("company_id")
+        logger.info(
+            f"Assets summary requested by user: {request.user.username}, company_id: {company_id}"
+        )
+
+        try:
+            if company_id:
+                # Get assets for specific company
+                try:
+                    company = Company.objects.get(
+                        id=company_id, created_by=request.user
+                    )
+                    companies = [company]
+                except Company.DoesNotExist:
+                    return Response(
+                        {"error": "Company not found or unauthorized."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                # Get assets for all companies owned by this admin
+                companies = Company.objects.filter(created_by=request.user)
+                if not companies.exists():
+                    return Response(
+                        {
+                            "message": "No companies found.",
+                            "summary": self._get_empty_summary(),
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+
+            # Calculate assets summary
+            summary = self._calculate_assets_summary(companies)
+
+            logger.success(
+                f"Assets summary calculated successfully for {len(companies)} companies"
+            )
+
+            return Response(summary, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error calculating assets summary: {str(e)}")
+            return Response(
+                {"error": "Internal server error while calculating assets summary."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _get_empty_summary(self):
+        """Return empty summary structure"""
+        return {
+            "companies_count": 0,
+            "companies_summary": [],
+        }
+
+    def _calculate_assets_summary(self, companies):
+        """Calculate assets summary per company"""
+        companies_summary = []
+        now_dt = timezone.now()
+
+        for company in companies:
+            # Get all event collector IDs for this company
+            collector_ids = TenantQradarMapping.objects.filter(
+                company=company
+            ).values_list("event_collectors__id", flat=True)
+
+            if not collector_ids:
+                # Company has no QRadar mappings
+                companies_summary.append(
+                    {
+                        "company_id": company.id,
+                        "company_name": company.company_name,
+                        "integrated_assets": 0,
+                        "active_assets": 0,
+                        "no_reporting_assets": 0,
+                    }
+                )
+                continue
+
+            # Get assets for this company's collectors
+            assets_qs = IBMQradarAssests.objects.filter(
+                event_collector_id__in=collector_ids
+            ).select_related("log_source_type")
+
+            assets = list(assets_qs)
+            company_integrated_assets = len(assets)
+            company_active_assets = 0
+            company_no_reporting_assets = 0
+
+            # Bulk fetch asset groups for threshold determination
+            all_group_ids = set()
+            for asset in assets:
+                if asset.group_ids:
+                    all_group_ids.update(asset.group_ids)
+
+            groups = IBMQradarAssetsGroup.objects.filter(db_id__in=all_group_ids)
+            group_map = {g.db_id: g for g in groups}
+
+            # Process each asset
+            for asset in assets:
+                # Determine if asset is reporting
+                is_reporting = self._is_asset_reporting(asset, group_map, now_dt)
+
+                if is_reporting:
+                    company_active_assets += 1
+                else:
+                    company_no_reporting_assets += 1
+
+            # Add to company summary
+            companies_summary.append(
+                {
+                    "company_id": company.id,
+                    "company_name": company.company_name,
+                    "integrated_assets": company_integrated_assets,
+                    "active_assets": company_active_assets,
+                    "no_reporting_assets": company_no_reporting_assets,
+                }
+            )
+
+        return {
+            "companies_count": len(companies),
+            "companies_summary": companies_summary,
+        }
+
+    def _is_asset_reporting(self, asset, group_map, now_dt):
+        """Determine if an asset is currently reporting based on last event time"""
+        # Asset must be enabled to be considered reporting
+        if not asset.enabled:
+            return False
+
+        # Asset must have last_event_time to be considered reporting
+        if not asset.last_event_time:
+            return False
+
+        # Default threshold is 24 hours unless overridden by group description
+        threshold_minutes = 24 * 60
+
+        # Check if any group has a custom threshold
+        if asset.group_ids:
+            for gid in asset.group_ids:
+                if gid in group_map and group_map[gid].description:
+                    match = re.search(
+                        r"(\d+)\s*hour", group_map[gid].description, re.IGNORECASE
+                    )
+                    if match:
+                        threshold_minutes = int(match.group(1)) * 60
+                        break
+
+        # Check if last event time is within threshold
+        try:
+            last_event_timestamp = int(asset.last_event_time) / 1000
+            last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
+            last_event_time = timezone.make_aware(last_event_time)
+            time_diff_minutes = (now_dt - last_event_time).total_seconds() / 60
+            return time_diff_minutes <= threshold_minutes
+        except (ValueError, TypeError):
+            return False
 
 
 class APIVersionAPIView(APIView):

@@ -2,6 +2,7 @@ from django.urls import path
 
 from tenantadmin.views import (
     APIVersionAPIView,
+    AssetsSummaryAPIView,
     CheckCompanyNameExistView,
     CompanyTenantSettingsUpdateAPIView,
     CustomerEPSAPIView,
@@ -66,5 +67,6 @@ urlpatterns = [
     path("sla_levels/", SlaLevelsAPIView.as_view(), name="sla_levels"),
     path("customer_eps/", CustomerEPSAPIView.as_view(), name="customer-eps"),
     path("check_company/", CheckCompanyNameExistView.as_view(), name="check-company"),
+    path("assets_summary/", AssetsSummaryAPIView.as_view(), name="assets-summary"),
     path("api-version/", APIVersionAPIView.as_view(), name="api-version"),
 ]
