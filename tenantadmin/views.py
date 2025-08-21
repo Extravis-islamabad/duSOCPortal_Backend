@@ -20,6 +20,7 @@ from tenant.itsm_tasks import sync_itsm
 from tenant.models import (
     Company,
     CustomerEPS,
+    DUCortexSOARIncidentFinalModel,
     IBMQradarAssests,
     IBMQradarAssetsGroup,
     SlaLevelChoices,
@@ -593,6 +594,184 @@ class AssetsSummaryAPIView(APIView):
             return time_diff_minutes <= threshold_minutes
         except (ValueError, TypeError):
             return False
+
+
+class IncidentPrioritySummaryAPIView(APIView):
+    """
+    APIView to return incident priority summary for all tenants or a specific company.
+    Returns count of true positive and false positive incidents grouped by priority.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        company_id = request.query_params.get("company_id")
+        priority = request.query_params.get("priority")  # 1, 2, 3, 4
+
+        logger.info(
+            f"Incident priority summary requested by user: {request.user.username}, "
+            f"company_id: {company_id}, priority: {priority}"
+        )
+
+        try:
+            if company_id:
+                # Get incidents for specific company
+                try:
+                    company = Company.objects.get(
+                        id=company_id, created_by=request.user
+                    )
+                    companies = [company]
+                except Company.DoesNotExist:
+                    return Response(
+                        {"error": "Company not found or unauthorized."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                # Get incidents for all companies owned by this admin
+                companies = Company.objects.filter(created_by=request.user)
+                if not companies.exists():
+                    return Response(
+                        {
+                            "message": "No companies found.",
+                            "summary": self._get_empty_incident_summary(),
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+
+            # Calculate incident priority summary
+            summary = self._calculate_incident_priority_summary(companies, priority)
+
+            logger.success(
+                f"Incident priority summary calculated successfully for {len(companies)} companies"
+            )
+
+            return Response(summary, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error calculating incident priority summary: {str(e)}")
+            return Response(
+                {
+                    "error": "Internal server error while calculating incident priority summary."
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _get_empty_incident_summary(self):
+        """Return empty incident summary structure"""
+        return {
+            "companies_count": 0,
+            "companies_summary": [],
+        }
+
+    def _calculate_incident_priority_summary(self, companies, priority_filter):
+        """Calculate incident priority summary per company"""
+        companies_summary = []
+
+        for company in companies:
+            # Get all SOAR tenant IDs for this company
+            soar_ids = company.soar_tenants.values_list("id", flat=True)
+
+            if not soar_ids:
+                # Company has no SOAR tenants
+                companies_summary.append(
+                    {
+                        "company_id": company.id,
+                        "company_name": company.company_name,
+                        "priority_summary": self._get_empty_priority_breakdown(),
+                    }
+                )
+                continue
+
+            # Build base filter for company's SOAR tenants
+            base_filters = Q(cortex_soar_tenant__in=soar_ids)
+
+            # Apply priority filter if specified
+            if priority_filter:
+                priority_mapping = {
+                    "1": "P4",  # P4 Low
+                    "2": "P3",  # P3 Medium
+                    "3": "P2",  # P2 High
+                    "4": "P1",  # P1 Critical
+                }
+                if priority_filter in priority_mapping:
+                    priority_string = priority_mapping[priority_filter]
+                    base_filters &= Q(incident_priority__icontains=priority_string)
+
+            # Get priority breakdown for this company
+            priority_summary = self._get_priority_breakdown(base_filters)
+
+            companies_summary.append(
+                {
+                    "company_id": company.id,
+                    "company_name": company.company_name,
+                    "priority_summary": priority_summary,
+                }
+            )
+
+        return {
+            "companies_count": len(companies),
+            "companies_summary": companies_summary,
+        }
+
+    def _get_priority_breakdown(self, base_filters):
+        """Get total incident counts by priority (only true positive OR false positive)"""
+        priority_breakdown = []
+
+        # Define priority mappings
+        priorities = [
+            {"priority": "P1 Critical", "filter_key": "P1"},
+            {"priority": "P2 High", "filter_key": "P2"},
+            {"priority": "P3 Medium", "filter_key": "P3"},
+            {"priority": "P4 Low", "filter_key": "P4"},
+        ]
+
+        for priority_info in priorities:
+            priority_name = priority_info["priority"]
+            priority_key = priority_info["filter_key"]
+
+            # Filter for this specific priority
+            priority_filters = base_filters & Q(
+                incident_priority__icontains=priority_key
+            )
+
+            # True Positive Logic: Ready incidents with proper fields
+            true_positive_filters = priority_filters & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+            )
+
+            # False Positive Logic: Done incidents
+            false_positive_filters = priority_filters & Q(
+                itsm_sync_status__iexact="Done"
+            )
+
+            # Combine true positive OR false positive (using union to avoid duplicates)
+            combined_filters = true_positive_filters | false_positive_filters
+
+            total_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                combined_filters
+            ).count()
+
+            priority_breakdown.append(
+                {"priority": priority_name, "total_count": total_count}
+            )
+
+        return priority_breakdown
+
+    def _get_empty_priority_breakdown(self):
+        """Return empty priority breakdown structure"""
+        return [
+            {"priority": "P1 Critical", "total_count": 0},
+            {"priority": "P2 High", "total_count": 0},
+            {"priority": "P3 Medium", "total_count": 0},
+            {"priority": "P4 Low", "total_count": 0},
+        ]
 
 
 class APIVersionAPIView(APIView):

@@ -8,6 +8,7 @@ from tenantadmin.views import (
     CustomerEPSAPIView,
     DeleteTenantByCompanyView,
     DistinctCompaniesAPIView,
+    IncidentPrioritySummaryAPIView,
     NonActiveTenantsAPIView,
     ReactivateTenantUsersAPIView,
     SlaLevelsAPIView,
@@ -68,5 +69,10 @@ urlpatterns = [
     path("customer_eps/", CustomerEPSAPIView.as_view(), name="customer-eps"),
     path("check_company/", CheckCompanyNameExistView.as_view(), name="check-company"),
     path("assets_summary/", AssetsSummaryAPIView.as_view(), name="assets-summary"),
+    path(
+        "incident_priority_summary/",
+        IncidentPrioritySummaryAPIView.as_view(),
+        name="incident-priority-summary",
+    ),
     path("api-version/", APIVersionAPIView.as_view(), name="api-version"),
 ]
