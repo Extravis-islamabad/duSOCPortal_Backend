@@ -303,12 +303,6 @@ class GetTenantAssetsList(APIView):
     def get(self, request):
         """
         Retrieve IBM QRadar assets with status counts and pagination
-        Returns counts based on filter_type if provided, otherwise returns total counts
-
-        Query Parameters:
-            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year, 5=Quarter,
-                              6=Last 6 months, 7=Last 3 weeks, 8=Last month,
-                              9=Custom range (requires start_date and end_date)
 
         Returns:
             {
@@ -357,62 +351,8 @@ class GetTenantAssetsList(APIView):
             # Base filter for tenant's assets
             base_filter = Q(event_collector_id__in=collector_ids)
 
-            # Step 4: Get filter_type from query params
-            filter_type_param = request.query_params.get("filter_type")
-            filter_type = None
-            if filter_type_param:
-                try:
-                    filter_type_value = int(filter_type_param)
-                    filter_type = FilterType(filter_type_value)
-                except (ValueError, KeyError):
-                    return Response(
-                        {"error": "Invalid filter_type value."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            # Step 5: Determine date range based on filter_type
+            # Step 4: Get ALL assets first for total counts (unfiltered)
             now = timezone.now()
-            today = now.date()
-            start_date = None
-            end_date = None
-
-            if filter_type:
-                if filter_type == FilterType.TODAY:
-                    start_date = today
-                elif filter_type == FilterType.WEEK:
-                    start_date = today - timedelta(days=7)
-                elif filter_type == FilterType.MONTH:
-                    start_date = today - timedelta(days=30)
-                elif filter_type == FilterType.YEAR:
-                    start_date = today - timedelta(days=365)
-                elif filter_type == FilterType.QUARTER:
-                    start_date = today - timedelta(days=90)
-                elif filter_type == FilterType.LAST_6_MONTHS:
-                    start_date = today - timedelta(days=180)
-                elif filter_type == FilterType.LAST_3_WEEKS:
-                    start_date = today - timedelta(days=21)
-                elif filter_type == FilterType.LAST_MONTH:
-                    end_date = today - timedelta(days=30)
-                    start_date = end_date - timedelta(days=30)
-                elif filter_type == FilterType.CUSTOM_RANGE:
-                    start_date = self._parse_date(
-                        request.query_params.get("start_date")
-                    )
-                    end_date = self._parse_date(request.query_params.get("end_date"))
-                    if not start_date or not end_date:
-                        return Response(
-                            {
-                                "error": "Custom range requires both start_date and end_date."
-                            },
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-                    if start_date > end_date:
-                        return Response(
-                            {"error": "start_date must be before end_date."},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-
-            # Step 6: Get ALL assets first for total counts (unfiltered)
             all_assets = IBMQradarAssests.objects.filter(base_filter).select_related(
                 "event_collector", "log_source_type"
             )
@@ -504,27 +444,6 @@ class GetTenantAssetsList(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Apply date range filters if provided (from filter_type or custom)
-            if start_date or end_date:
-                filtered_assets = [
-                    asset
-                    for asset in filtered_assets
-                    if (
-                        not start_date
-                        or (
-                            asset.creation_date_converted
-                            and asset.creation_date_converted >= start_date
-                        )
-                    )
-                    and (
-                        not end_date
-                        or (
-                            asset.creation_date_converted
-                            and asset.creation_date_converted <= end_date
-                        )
-                    )
-                ]
-
             # Apply status filter if provided
             if status_filter := request.query_params.get("status"):
                 status_filter = status_filter.upper()
@@ -571,22 +490,13 @@ class GetTenantAssetsList(APIView):
                 serialized_data.append(asset_data)
 
             # Prepare response - ensure total is always sum of active + inactive
-            if filter_type:
-                response_data = {
-                    "count": len(filtered_assets),
-                    "total_assets": filtered_active + filtered_inactive,
-                    "active_assets": filtered_active,
-                    "inactive_assets": filtered_inactive,
-                    "results": serialized_data,
-                }
-            else:
-                response_data = {
-                    "count": len(filtered_assets),
-                    "total_assets": total_active + total_inactive,
-                    "active_assets": total_active,
-                    "inactive_assets": total_inactive,
-                    "results": serialized_data,
-                }
+            response_data = {
+                "count": len(filtered_assets),
+                "total_assets": total_active + total_inactive,
+                "active_assets": total_active,
+                "inactive_assets": total_inactive,
+                "results": serialized_data,
+            }
 
             # Add pagination links if needed
             if getattr(paginator, "page", None):
@@ -8484,64 +8394,6 @@ class AssetReportView(APIView):
 
             # Base filter for tenant's assets
             base_filter = Q(event_collector_id__in=collector_ids)
-
-            # Step 4: Get filter_type from query params
-            filter_type_param = request.query_params.get(
-                "filter_type", FilterType.TODAY.value
-            )
-            filter_type = None
-            if filter_type_param:
-                try:
-                    filter_type_value = int(filter_type_param)
-                    filter_type = FilterType(filter_type_value)
-                except (ValueError, KeyError):
-                    return Response(
-                        {"error": "Invalid filter_type value."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            # Step 5: Determine date range based on filter_type
-            now = timezone.now()
-            today = now.date()
-            start_date = None
-            end_date = None
-
-            if filter_type:
-                if filter_type == FilterType.TODAY:
-                    start_date = today
-                elif filter_type == FilterType.WEEK:
-                    start_date = today - timedelta(days=7)
-                elif filter_type == FilterType.MONTH:
-                    start_date = today - timedelta(days=30)
-                elif filter_type == FilterType.YEAR:
-                    start_date = today - timedelta(days=365)
-                elif filter_type == FilterType.QUARTER:
-                    start_date = today - timedelta(days=90)
-                elif filter_type == FilterType.LAST_6_MONTHS:
-                    start_date = today - timedelta(days=180)
-                elif filter_type == FilterType.LAST_3_WEEKS:
-                    start_date = today - timedelta(days=21)
-                elif filter_type == FilterType.LAST_MONTH:
-                    end_date = today - timedelta(days=30)
-                    start_date = end_date - timedelta(days=30)
-                elif filter_type == FilterType.CUSTOM_RANGE:
-                    start_date = self._parse_date(
-                        request.query_params.get("start_date")
-                    )
-                    end_date = self._parse_date(request.query_params.get("end_date"))
-                    if not start_date or not end_date:
-                        return Response(
-                            {
-                                "error": "Custom range requires both start_date and end_date."
-                            },
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-                    if start_date > end_date:
-                        return Response(
-                            {"error": "start_date must be before end_date."},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-
             # Step 6: Get ALL assets for device coverage calculations
             all_assets = IBMQradarAssests.objects.filter(base_filter).select_related(
                 "event_collector", "log_source_type"
