@@ -5702,9 +5702,9 @@ class SLASeverityMetricsView(APIView):
                     response_data[level.label]["tta_successful_incidents"] += 1
                 else:
                     response_data[level.label]["tta_breached_incidents"] += 1
-                    response_data[level.label]["tta_breached_incidents_list"].append(
-                        {"db_id": inc.db_id, "id": inc.id}
-                    )
+                    # response_data[level.label]["tta_breached_incidents_list"].append(
+                    #     {"db_id": inc.db_id, "id": inc.id}
+                    # )
 
                 # Calculate TTN metrics
                 ttn_delta = (inc.incident_ttn - occured).total_seconds() / 60
