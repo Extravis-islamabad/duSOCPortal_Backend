@@ -1,8 +1,15 @@
-# authentication/views.py
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 
-from django.db.models import Count, Q
+from django.db.models import Avg, Count, Max, Q
+from django.db.models.functions import (
+    TruncDate,
+    TruncDay,
+    TruncHour,
+    TruncMonth,
+    TruncWeek,
+)
 from django.utils import timezone
 from loguru import logger
 from rest_framework import status
@@ -13,7 +20,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.models import User
 from authentication.permissions import IsAdminUser
-from common.constants import APIConstants, PaginationConstants
+from common.constants import APIConstants, FilterType, PaginationConstants
 from tenant.cortex_soar_tasks import sync_soar_data
 from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
 from tenant.itsm_tasks import sync_itsm
@@ -24,6 +31,7 @@ from tenant.models import (
     DUCortexSOARIncidentFinalModel,
     IBMQradarAssests,
     IBMQradarAssetsGroup,
+    IBMQradarEPS,
     SlaLevelChoices,
     SoarTenantSlaMetric,
     Tenant,
@@ -1231,6 +1239,576 @@ class TenantSLAMatrixAPIView(APIView):
                 }
             )
         return empty_metrics
+
+
+class IncidentCompletionStatusAPIView(APIView):
+    """
+    APIView to return incident completion status by priority for a specific company.
+    Shows total incidents and completed incidents (SLA compliant) for each priority level.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        company_id = request.query_params.get("company_id")
+
+        if not company_id:
+            return Response(
+                {"error": "company_id query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        logger.info(
+            f"Incident completion status requested by user: {request.user.username}, "
+            f"company_id: {company_id}"
+        )
+
+        try:
+            # Get company owned by this admin
+            try:
+                company = Company.objects.get(id=company_id, created_by=request.user)
+            except Company.DoesNotExist:
+                return Response(
+                    {"error": "Company not found or unauthorized."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Get all SOAR tenant IDs for this company
+            soar_ids = company.soar_tenants.values_list("id", flat=True)
+            if not soar_ids:
+                return Response(
+                    {
+                        "message": "No SOAR tenants found for this company.",
+                        "completion_status": self._get_empty_completion_status(),
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            # Build base filter for true positive and false positive incidents
+            true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
+
+            false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+                itsm_sync_status__iexact="Done"
+            )
+
+            base_filters = true_positive_filters | false_positive_filters
+
+            # Apply additional date filters if provided
+            filters = self._apply_date_filters(request, base_filters)
+
+            # Get incidents
+            incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+
+            # Get SLA metrics for the company
+            completion_status = self._calculate_completion_status(company, incidents)
+
+            logger.success(
+                f"Incident completion status calculated successfully for company {company.company_name}"
+            )
+
+            return Response(completion_status, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error calculating incident completion status: {str(e)}")
+            return Response(
+                {
+                    "error": "Internal server error while calculating incident completion status."
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _apply_date_filters(self, request, base_filters):
+        """Apply date filtering logic similar to SLA severity incidents view"""
+        filters = base_filters
+        now = timezone.now().date()
+        filter_type = request.query_params.get("filter_type")
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                filters &= Q(created__date__gte=start_date) & Q(
+                    created__date__lte=end_date
+                )
+            except ValueError:
+                # Invalid date format, but don't fail the request, just ignore the filter
+                pass
+        elif filter_type:
+            try:
+                filter_type = FilterType(int(filter_type))
+                if filter_type == FilterType.TODAY:
+                    filters &= Q(created__date=now)
+                elif filter_type == FilterType.WEEK:
+                    start_date = now - timedelta(days=7)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.MONTH:
+                    start_date = now - timedelta(days=30)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.QUARTER:
+                    start_date = now - timedelta(days=90)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.YEAR:
+                    start_date = now - timedelta(days=365)
+                    filters &= Q(created__date__gte=start_date)
+            except Exception as e:
+                logger.error(f"Error applying date filters: {str(e)}")
+                # Don't fail the request, just ignore the filter
+
+        return filters
+
+    def _calculate_completion_status(self, company, incidents):
+        """Calculate completion status for each priority level"""
+        # Get SLA metrics
+        if company.is_default_sla:
+            sla_metrics = DefaultSoarSlaMetric.objects.all()
+        else:
+            sla_metrics = SoarTenantSlaMetric.objects.filter(company=company)
+
+        sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
+
+        # Priority mappings
+        priority_to_sla_map = {
+            "P1 Critical": SlaLevelChoices.P1,
+            "P2 High": SlaLevelChoices.P2,
+            "P3 Medium": SlaLevelChoices.P3,
+            "P4 Low": SlaLevelChoices.P4,
+        }
+        sla_to_label_map = {
+            SlaLevelChoices.P1: "p1_critical",
+            SlaLevelChoices.P2: "p2_high",
+            SlaLevelChoices.P3: "p3_medium",
+            SlaLevelChoices.P4: "p4_low",
+        }
+
+        # Initialize counts
+        completion_counts = {
+            "p1_critical": {
+                "total_incidents": 0,
+                "completed_incidents": 0,
+                "completion_percentage": 0,
+            },
+            "p2_high": {
+                "total_incidents": 0,
+                "completed_incidents": 0,
+                "completion_percentage": 0,
+            },
+            "p3_medium": {
+                "total_incidents": 0,
+                "completed_incidents": 0,
+                "completion_percentage": 0,
+            },
+            "p4_low": {
+                "total_incidents": 0,
+                "completed_incidents": 0,
+                "completion_percentage": 0,
+            },
+        }
+
+        # Process each incident
+        for incident in incidents:
+            sla_level = priority_to_sla_map.get(incident.incident_priority)
+            if not sla_level:
+                continue
+
+            sla_metric = sla_metrics_dict.get(sla_level)
+            if not sla_metric:
+                continue
+
+            label = sla_to_label_map[sla_level]
+            created = incident.created
+            is_completed = True  # Assume completed until we find a breach
+
+            # Check if all SLA metrics are met (similar to SLA severity incidents)
+            if incident.incident_tta:
+                if (
+                    incident.incident_tta - created
+                ).total_seconds() / 60 > sla_metric.tta_minutes:
+                    is_completed = False
+            if incident.incident_ttn:
+                if (
+                    incident.incident_ttn - created
+                ).total_seconds() / 60 > sla_metric.ttn_minutes:
+                    is_completed = False
+            if incident.incident_ttdn:
+                if (
+                    incident.incident_ttdn - created
+                ).total_seconds() / 60 > sla_metric.ttdn_minutes:
+                    is_completed = False
+
+            completion_counts[label]["total_incidents"] += 1
+            if is_completed:
+                completion_counts[label]["completed_incidents"] += 1
+
+        # Calculate completion percentages
+        for priority_data in completion_counts.values():
+            total = priority_data["total_incidents"]
+            if total > 0:
+                priority_data["completion_percentage"] = round(
+                    (priority_data["completed_incidents"] / total) * 100, 2
+                )
+
+        # Calculate overall statistics
+        total_incidents = sum(
+            data["total_incidents"] for data in completion_counts.values()
+        )
+        total_completed = sum(
+            data["completed_incidents"] for data in completion_counts.values()
+        )
+        overall_completion_percentage = (
+            round((total_completed / total_incidents) * 100, 2)
+            if total_incidents > 0
+            else 0
+        )
+
+        return {
+            "company_id": company.id,
+            "company_name": company.company_name,
+            "is_default_sla": company.is_default_sla,
+            "total_incidents": total_incidents,
+            "total_completed_incidents": total_completed,
+            "overall_completion_percentage": overall_completion_percentage,
+            "priority_breakdown": completion_counts,
+            "completion_status": "good"
+            if overall_completion_percentage >= 80
+            else "needs_attention",
+        }
+
+    def _get_empty_completion_status(self):
+        """Return empty completion status structure"""
+        return {
+            "p1_critical": {
+                "total_incidents": 0,
+                "completed_incidents": 0,
+                "completion_percentage": 0,
+            },
+            "p2_high": {
+                "total_incidents": 0,
+                "completed_incidents": 0,
+                "completion_percentage": 0,
+            },
+            "p3_medium": {
+                "total_incidents": 0,
+                "completed_incidents": 0,
+                "completion_percentage": 0,
+            },
+            "p4_low": {
+                "total_incidents": 0,
+                "completed_incidents": 0,
+                "completion_percentage": 0,
+            },
+        }
+
+
+class EPSUtilizationAPIView(APIView):
+    """
+    APIView to return EPS utilization graph data for a specific company.
+    Returns time-series EPS data with contractual volume information.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        company_id = request.query_params.get("company_id")
+
+        if not company_id:
+            return Response(
+                {"error": "company_id query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        logger.info(
+            f"EPS utilization requested by user: {request.user.username}, "
+            f"company_id: {company_id}"
+        )
+
+        try:
+            # Get company owned by this admin
+            try:
+                company = Company.objects.get(id=company_id, created_by=request.user)
+            except Company.DoesNotExist:
+                return Response(
+                    {"error": "Company not found or unauthorized."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Get filter type parameter
+            try:
+                filter_value = int(
+                    request.query_params.get("filter_type", FilterType.TODAY.value)
+                )
+                filter_enum = FilterType(filter_value)
+            except (ValueError, KeyError):
+                return Response(
+                    {"error": "Invalid filter value."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Get QRadar tenant IDs for this company
+            qradar_tenant_ids = company.qradar_mappings.values_list(
+                "qradar_tenant__id", flat=True
+            )
+
+            if not qradar_tenant_ids:
+                return Response(
+                    {
+                        "message": "No QRadar tenants found for this company.",
+                        "contracted_volume": None,
+                        "contracted_volume_type": None,
+                        "contracted_volume_type_display": None,
+                        "eps_graph": [],
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            # Calculate time range and truncation based on filter type
+            now = timezone.now()
+            time_trunc, start_time, end_time = self._get_time_range_and_truncation(
+                filter_enum, now, request
+            )
+
+            if start_time is None:  # Error case
+                return time_trunc  # Return the error response
+
+            # Build filter kwargs for EPS data
+            filter_kwargs = {"domain_id__in": qradar_tenant_ids}
+            if filter_enum == FilterType.CUSTOM_RANGE:
+                filter_kwargs["created_at__range"] = (start_time, end_time)
+            else:
+                filter_kwargs["created_at__gte"] = start_time
+
+            # Query EPS data with aggregation
+            eps_data_raw = (
+                IBMQradarEPS.objects.filter(**filter_kwargs)
+                .annotate(interval=time_trunc)
+                .values("interval")
+                .annotate(average_eps=Avg("average_eps"), peak_eps=Max("peak_eps"))
+                .order_by("interval")
+            )
+
+            # Format EPS data for response
+            eps_data = self._format_eps_data(
+                eps_data_raw, filter_enum, filter_kwargs, time_trunc
+            )
+
+            # Get contracted volume information
+            mapping = TenantQradarMapping.objects.filter(company=company).first()
+            contracted_volume = mapping.contracted_volume if mapping else None
+            contracted_volume_type = mapping.contracted_volume_type if mapping else None
+            contracted_volume_type_display = (
+                mapping.get_contracted_volume_type_display() if mapping else None
+            )
+
+            # Calculate utilization metrics
+            utilization_stats = self._calculate_utilization_stats(
+                eps_data, contracted_volume
+            )
+
+            response_data = {
+                "company_id": company.id,
+                "company_name": company.company_name,
+                "contracted_volume": contracted_volume,
+                "contracted_volume_type": contracted_volume_type,
+                "contracted_volume_type_display": contracted_volume_type_display,
+                "eps_graph": eps_data,
+                "utilization_stats": utilization_stats,
+            }
+
+            logger.success(
+                f"EPS utilization calculated successfully for company {company.company_name}"
+            )
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error calculating EPS utilization: {str(e)}")
+            return Response(
+                {"error": "Internal server error while calculating EPS utilization."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _get_time_range_and_truncation(self, filter_enum, now, request):
+        """Calculate time range and truncation based on filter type"""
+        from pytz import timezone as pytz_timezone
+
+        # Time range & truncation logic (similar to EPSGraphAPIView)
+        if filter_enum == FilterType.TODAY:
+            dubai_tz = pytz_timezone("Asia/Dubai")
+            dubai_now = now.astimezone(dubai_tz)
+            dubai_midnight = dubai_now.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = dubai_midnight.astimezone(pytz_timezone("UTC"))
+            time_trunc = TruncHour("created_at")
+            end_time = None
+        elif filter_enum == FilterType.WEEK:
+            start_time = now - timedelta(days=6)
+            time_trunc = TruncDay("created_at")
+            end_time = None
+        elif filter_enum == FilterType.MONTH:
+            start_time = now - timedelta(days=28)
+            time_trunc = TruncWeek("created_at")
+            end_time = None
+        elif filter_enum == FilterType.QUARTER:
+            start_of_current_month = now.replace(
+                day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            if start_of_current_month.month >= 3:
+                start_time = start_of_current_month.replace(
+                    month=start_of_current_month.month - 2
+                )
+            else:
+                year = (
+                    start_of_current_month.year - 1
+                    if start_of_current_month.month <= 2
+                    else start_of_current_month.year
+                )
+                month = (
+                    start_of_current_month.month + 10
+                    if start_of_current_month.month <= 2
+                    else start_of_current_month.month - 2
+                )
+                start_time = start_of_current_month.replace(year=year, month=month)
+            time_trunc = TruncMonth("created_at")
+            end_time = None
+        elif filter_enum == FilterType.YEAR:
+            start_time = now.replace(
+                month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+            time_trunc = TruncMonth("created_at")
+            end_time = None
+        elif filter_enum == FilterType.CUSTOM_RANGE:
+            start_str = request.query_params.get("start_date")
+            end_str = request.query_params.get("end_date")
+            try:
+                start_time = datetime.strptime(start_str, "%Y-%m-%d")
+                end_time = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
+                if start_time > end_time:
+                    return (
+                        Response(
+                            {"error": "Start date must be before end date."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        ),
+                        None,
+                        None,
+                    )
+            except (ValueError, TypeError):
+                return (
+                    Response(
+                        {"error": "Invalid custom date format. Use YYYY-MM-DD."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    ),
+                    None,
+                    None,
+                )
+            time_trunc = TruncDate("created_at")
+        else:
+            return (
+                Response(
+                    {"error": "Unsupported filter."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                ),
+                None,
+                None,
+            )
+
+        return time_trunc, start_time, end_time
+
+    def _format_eps_data(self, eps_data_raw, filter_enum, filter_kwargs, time_trunc):
+        """Format EPS data with improved interval formatting"""
+        eps_data = []
+        for entry in eps_data_raw:
+            interval_value = entry["interval"]
+
+            # Find the peak row for detailed timing info
+            peak_row = (
+                IBMQradarEPS.objects.filter(**filter_kwargs)
+                .annotate(interval=time_trunc)
+                .filter(interval=interval_value, peak_eps=entry["peak_eps"])
+                .order_by("created_at")
+                .first()
+            )
+            peak_eps_time = (
+                peak_row.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                if peak_row and peak_row.created_at
+                else None
+            )
+
+            # Format interval string based on filter type
+            if filter_enum == FilterType.TODAY:
+                interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            elif filter_enum == FilterType.MONTH:
+                week_num = len(eps_data) + 1
+                interval_str = f"Week {week_num}"
+            elif filter_enum == FilterType.QUARTER:
+                interval_str = entry["interval"].strftime("%B %Y")
+            elif filter_enum == FilterType.YEAR:
+                interval_str = entry["interval"].strftime("%B")
+            else:
+                interval_str = entry["interval"].strftime("%Y-%m-%d")
+
+            eps_data.append(
+                {
+                    "interval": interval_str,
+                    "average_eps": float(
+                        Decimal(entry["average_eps"] or 0).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                    "peak_eps": float(
+                        Decimal(entry["peak_eps"] or 0).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                    ),
+                    "peak_eps_time": peak_eps_time,
+                }
+            )
+
+        return eps_data
+
+    def _calculate_utilization_stats(self, eps_data, contracted_volume):
+        """Calculate utilization statistics"""
+        if not eps_data or not contracted_volume:
+            return {
+                "average_utilization_percentage": 0,
+                "peak_utilization_percentage": 0,
+                "total_data_points": 0,
+                "over_limit_count": 0,
+            }
+
+        average_values = [entry["average_eps"] for entry in eps_data]
+        peak_values = [entry["peak_eps"] for entry in eps_data]
+
+        avg_utilization = (
+            (sum(average_values) / len(average_values) / contracted_volume) * 100
+            if contracted_volume > 0
+            else 0
+        )
+        max_peak_eps = max(peak_values) if peak_values else 0
+        peak_utilization = (
+            (max_peak_eps / contracted_volume) * 100 if contracted_volume > 0 else 0
+        )
+        over_limit_count = sum(1 for peak in peak_values if peak > contracted_volume)
+
+        return {
+            "average_utilization_percentage": round(avg_utilization, 2),
+            "peak_utilization_percentage": round(peak_utilization, 2),
+            "total_data_points": len(eps_data),
+            "over_limit_count": over_limit_count,
+        }
 
 
 class APIVersionAPIView(APIView):

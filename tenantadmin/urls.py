@@ -8,6 +8,8 @@ from tenantadmin.views import (
     CustomerEPSAPIView,
     DeleteTenantByCompanyView,
     DistinctCompaniesAPIView,
+    EPSUtilizationAPIView,
+    IncidentCompletionStatusAPIView,
     IncidentPrioritySummaryAPIView,
     IncidentStatusSummaryAPIView,
     NonActiveTenantsAPIView,
@@ -85,6 +87,16 @@ urlpatterns = [
         "tenant_sla_matrix/",
         TenantSLAMatrixAPIView.as_view(),
         name="tenant-sla-matrix",
+    ),
+    path(
+        "incident_completion_status/",
+        IncidentCompletionStatusAPIView.as_view(),
+        name="incident-completion-status",
+    ),
+    path(
+        "eps_utilization/",
+        EPSUtilizationAPIView.as_view(),
+        name="eps-utilization",
     ),
     path("api-version/", APIVersionAPIView.as_view(), name="api-version"),
 ]
