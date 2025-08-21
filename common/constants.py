@@ -413,11 +413,7 @@ class FilterType(Enum):
 SEVERITY_LABELS = {0: "Unknown", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
 
 
-# SELECT DOMAINNAME(domainid) AS 'client',"Hostname" AS 'Hostname (custom)',MAX("Value") AS 'Peak EPS', AVG("Value") AS 'Average EPS' from events where client='ADGM' AND ( "Metric ID"='EventRate' AND "deviceType"='368' )
-# GROUP BY "Hostname"
-#  last 5 minutes
-
-
-# Defualt CLient
-# DWH
-# DuTelecom
+class APIConstants:
+    API_VERSION = "v1.0.0"
+    API_NAME = "duSOC Portal Backend API"
+    API_DESCRIPTION = "Backend API for duSOC Portal application"

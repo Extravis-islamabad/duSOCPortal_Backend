@@ -9,7 +9,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.models import User
 from authentication.permissions import IsAdminUser
-from common.constants import PaginationConstants
+from common.constants import APIConstants, PaginationConstants
 from tenant.cortex_soar_tasks import sync_soar_data
 from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
 from tenant.itsm_tasks import sync_itsm
@@ -457,3 +457,29 @@ class CheckCompanyNameExistView(APIView):
             {"message": "Company name is available."},
             status=status.HTTP_200_OK,
         )
+
+
+class APIVersionAPIView(APIView):
+    """
+    APIView to return the current API version information.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    @logger.catch
+    def get(self, request):
+        logger.info(f"API version requested by user: {request.user.username}")
+
+        version_info = {
+            "api_version": APIConstants.API_VERSION,
+            "api_name": APIConstants.API_NAME,
+            "api_description": APIConstants.API_DESCRIPTION,
+            "status": "active",
+        }
+
+        logger.success(
+            f"API version {APIConstants.API_VERSION} information returned successfully"
+        )
+
+        return Response(version_info, status=status.HTTP_200_OK)
