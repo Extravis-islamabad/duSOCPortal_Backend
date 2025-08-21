@@ -5663,9 +5663,9 @@ class SLASeverityMetricsView(APIView):
                     "ttdn_sla_minutes": sla_metrics_dict.get(level, {}).ttdn_minutes
                     if sla_metrics_dict.get(level)
                     else None,
-                    "tta_breached_incidents_list": [],  # Add list for breached incidents
-                    "ttn_breached_incidents_list": [],  # Add list for breached incidents
-                    "ttdn_breached_incidents_list": [],  # Add list for breached incidents
+                    # "tta_breached_incidents_list": [],  # Add list for breached incidents
+                    # "ttn_breached_incidents_list": [],  # Add list for breached incidents
+                    # "ttdn_breached_incidents_list": [],  # Add list for breached incidents
                 }
                 for level in [
                     SlaLevelChoices.P1,
@@ -5712,9 +5712,9 @@ class SLASeverityMetricsView(APIView):
                     response_data[level.label]["ttn_successful_incidents"] += 1
                 else:
                     response_data[level.label]["ttn_breached_incidents"] += 1
-                    response_data[level.label]["ttn_breached_incidents_list"].append(
-                        {"db_id": inc.db_id, "id": inc.id}
-                    )
+                    # response_data[level.label]["ttn_breached_incidents_list"].append(
+                    #     {"db_id": inc.db_id, "id": inc.id}
+                    # )
 
                 # Calculate TTDN metrics
                 ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
@@ -5722,9 +5722,9 @@ class SLASeverityMetricsView(APIView):
                     response_data[level.label]["ttdn_successful_incidents"] += 1
                 else:
                     response_data[level.label]["ttdn_breached_incidents"] += 1
-                    response_data[level.label]["ttdn_breached_incidents_list"].append(
-                        {"db_id": inc.db_id, "id": inc.id}
-                    )
+                    # response_data[level.label]["ttdn_breached_incidents_list"].append(
+                    #     {"db_id": inc.db_id, "id": inc.id}
+                    # )
 
             # Create the final response structure
             response = {
