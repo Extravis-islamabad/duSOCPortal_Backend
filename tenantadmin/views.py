@@ -827,7 +827,7 @@ class IncidentStatusSummaryAPIView(APIView):
                     )
 
             # Calculate incident status summary
-            summary = self._calculate_incident_status_summary(companies)
+            summary = self._calculate_incident_status_summary(companies, request)
 
             logger.success(
                 f"Incident status summary calculated successfully for {len(companies)} companies"
@@ -851,8 +851,48 @@ class IncidentStatusSummaryAPIView(APIView):
             "companies_summary": [],
         }
 
-    def _calculate_incident_status_summary(self, companies):
-        """Calculate incident status summary per company"""
+    def _apply_date_filters(self, request, base_filters):
+        """Apply date filtering logic similar to other incident views"""
+        filters = base_filters
+        now = timezone.now().date()
+        filter_type = request.query_params.get("filter_type")
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                filters &= Q(created__date__gte=start_date) & Q(
+                    created__date__lte=end_date
+                )
+            except ValueError:
+                # Invalid date format, but don't fail the request, just ignore the filter
+                pass
+        elif filter_type:
+            try:
+                filter_type = FilterType(int(filter_type))
+                if filter_type == FilterType.TODAY:
+                    filters &= Q(created__date=now)
+                elif filter_type == FilterType.WEEK:
+                    start_date = now - timedelta(days=7)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.MONTH:
+                    start_date = now - timedelta(days=30)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.QUARTER:
+                    start_date = now - timedelta(days=90)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.YEAR:
+                    start_date = now - timedelta(days=365)
+                    filters &= Q(created__date__gte=start_date)
+            except Exception as e:
+                logger.error(f"Error applying date filter: {str(e)}")
+
+        return filters
+
+    def _calculate_incident_status_summary(self, companies, request):
+        """Calculate incident status summary per company with date filtering"""
         companies_summary = []
 
         for company in companies:
@@ -875,14 +915,17 @@ class IncidentStatusSummaryAPIView(APIView):
             # Build base filter for company's SOAR tenants with true/false positive logic
             base_filters = self._get_valid_incidents_filter(soar_ids)
 
+            # Apply date filters
+            filters = self._apply_date_filters(request, base_filters)
+
             # Count open incidents (status = "1" or phases not in closed states)
-            open_filters = base_filters & (Q(status="1"))
+            open_filters = filters & (Q(status="1"))
             open_count = DUCortexSOARIncidentFinalModel.objects.filter(
                 open_filters
             ).count()
 
             # Count closed incidents (status = "2" or phases in closed states)
-            closed_filters = base_filters & (Q(status="2"))
+            closed_filters = filters & (Q(status="2"))
             closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
                 closed_filters
             ).count()
