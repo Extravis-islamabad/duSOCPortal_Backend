@@ -1216,10 +1216,16 @@ class TenantSLAMatrixAPIView(APIView):
                     2,
                 )
 
+        # Calculate total incidents count across all priorities (unique incidents count)
+        total_incidents_count = sum(
+            data["total_incidents"] for data in sla_metrics_data.values()
+        )
+
         return {
             "company_id": company.id,
             "company_name": company.company_name,
             "is_default_sla": is_default,
+            "total_incidents_count": total_incidents_count,
             "sla_metrics": list(sla_metrics_data.values()),
         }
 
