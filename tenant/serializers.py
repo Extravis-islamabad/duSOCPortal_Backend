@@ -1344,7 +1344,46 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
         return obj.integrations.count()
 
     def get_integrated_tools(self, obj):
-        return list(obj.integrations.values_list("instance_name", flat=True))
+        """Get integrated tools with detailed information"""
+        integrated_tools = []
+        for integration in obj.integrations.all():
+            # Determine the integration type name
+            integration_type_name = IntegrationTypes(integration.integration_type).label
+
+            # Determine the subtype name based on integration type
+            sub_type_name = None
+            if (
+                integration.integration_type == IntegrationTypes.SIEM_INTEGRATION
+                and integration.siem_subtype
+            ):
+                sub_type_name = SiemSubTypes(integration.siem_subtype).label
+            elif (
+                integration.integration_type == IntegrationTypes.SOAR_INTEGRATION
+                and integration.soar_subtype
+            ):
+                sub_type_name = SoarSubTypes(integration.soar_subtype).label
+            elif (
+                integration.integration_type == IntegrationTypes.ITSM_INTEGRATION
+                and integration.itsm_subtype
+            ):
+                sub_type_name = ItsmSubTypes(integration.itsm_subtype).label
+            elif (
+                integration.integration_type == IntegrationTypes.THREAT_INTELLIGENCE
+                and integration.threat_intelligence_subtype
+            ):
+                sub_type_name = ThreatIntelligenceSubTypes(
+                    integration.threat_intelligence_subtype
+                ).label
+
+            integrated_tools.append(
+                {
+                    "instance_name": integration.instance_name,
+                    "integration_type": integration_type_name,
+                    "sub_type": sub_type_name,
+                }
+            )
+
+        return integrated_tools
 
 
 class NonActiveCompanySerializer(serializers.ModelSerializer):
