@@ -1014,7 +1014,7 @@ class TenantSLAMatrixAPIView(APIView):
             # Calculate SLA matrix for each company
             companies_sla_data = []
             for company in companies:
-                company_sla_data = self._calculate_company_sla_matrix(company)
+                company_sla_data = self._calculate_company_sla_matrix(company, request)
                 companies_sla_data.append(company_sla_data)
 
             response_data = {
@@ -1035,8 +1035,8 @@ class TenantSLAMatrixAPIView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    def _calculate_company_sla_matrix(self, company):
-        """Calculate SLA matrix for a specific company"""
+    def _calculate_company_sla_matrix(self, company, request):
+        """Calculate SLA matrix for a specific company with date filtering"""
         # Get all SOAR tenant IDs for this company
         soar_ids = company.soar_tenants.values_list("id", flat=True)
 
@@ -1062,8 +1062,8 @@ class TenantSLAMatrixAPIView(APIView):
         sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
         # Get valid incidents (true positive OR false positive)
-        filters = self._get_valid_incidents_filter(soar_ids)
-        filters &= Q(
+        base_filters = self._get_valid_incidents_filter(soar_ids)
+        base_filters &= Q(
             incident_priority__in=[
                 SlaLevelChoices.P1.label,
                 SlaLevelChoices.P2.label,
@@ -1073,11 +1073,14 @@ class TenantSLAMatrixAPIView(APIView):
         )
 
         # We need TTA, TTN, and TTDN fields to calculate SLA compliance
-        filters &= (
+        base_filters &= (
             Q(incident_tta__isnull=False)
             & Q(incident_ttn__isnull=False)
             & Q(incident_ttdn__isnull=False)
         )
+
+        # Apply date filters
+        filters = self._apply_date_filters(request, base_filters)
 
         incidents = DUCortexSOARIncidentFinalModel.objects.filter(
             filters
@@ -1219,6 +1222,46 @@ class TenantSLAMatrixAPIView(APIView):
             "is_default_sla": is_default,
             "sla_metrics": list(sla_metrics_data.values()),
         }
+
+    def _apply_date_filters(self, request, base_filters):
+        """Apply date filtering logic similar to other incident views"""
+        filters = base_filters
+        now = timezone.now().date()
+        filter_type = request.query_params.get("filter_type")
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                filters &= Q(created__date__gte=start_date) & Q(
+                    created__date__lte=end_date
+                )
+            except ValueError:
+                # Invalid date format, but don't fail the request, just ignore the filter
+                pass
+        elif filter_type:
+            try:
+                filter_type = FilterType(int(filter_type))
+                if filter_type == FilterType.TODAY:
+                    filters &= Q(created__date=now)
+                elif filter_type == FilterType.WEEK:
+                    start_date = now - timedelta(days=7)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.MONTH:
+                    start_date = now - timedelta(days=30)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.QUARTER:
+                    start_date = now - timedelta(days=90)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.YEAR:
+                    start_date = now - timedelta(days=365)
+                    filters &= Q(created__date__gte=start_date)
+            except Exception as e:
+                logger.error(f"Error applying date filter: {str(e)}")
+
+        return filters
 
     def _get_valid_incidents_filter(self, soar_ids):
         """Get filter for incidents that match true positive OR false positive logic"""
