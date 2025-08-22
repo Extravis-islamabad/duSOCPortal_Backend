@@ -5,6 +5,7 @@ from tenantadmin.views import (
     AssetsSummaryAPIView,
     CheckCompanyNameExistView,
     CompanyTenantSettingsUpdateAPIView,
+    CompanyToolsAPIView,
     CustomerEPSAPIView,
     DeleteTenantByCompanyView,
     DistinctCompaniesAPIView,
@@ -97,6 +98,11 @@ urlpatterns = [
         "eps_utilization/",
         EPSUtilizationAPIView.as_view(),
         name="eps-utilization",
+    ),
+    path(
+        "company_tools/",
+        CompanyToolsAPIView.as_view(),
+        name="company-tools",
     ),
     path("api-version/", APIVersionAPIView.as_view(), name="api-version"),
 ]

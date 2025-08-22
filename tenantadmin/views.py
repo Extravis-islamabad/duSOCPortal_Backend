@@ -2022,6 +2022,158 @@ class EPSUtilizationAPIView(APIView):
         }
 
 
+class CompanyToolsAPIView(APIView):
+    """
+    APIView to return integration tools for all companies or a specific company.
+    Returns detailed information about each company's integrated tools including types and subtypes.
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        company_id = request.query_params.get("company_id")
+        logger.info(
+            f"Company tools requested by user: {request.user.username}, "
+            f"company_id: {company_id if company_id else 'all companies'}"
+        )
+
+        try:
+            if company_id:
+                # Get tools for specific company
+                try:
+                    company = Company.objects.get(
+                        id=company_id, created_by=request.user
+                    )
+                    companies = [company]
+                except Company.DoesNotExist:
+                    return Response(
+                        {"error": "Company not found or unauthorized."},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            else:
+                # Get tools for all companies owned by this admin
+                companies = Company.objects.filter(created_by=request.user)
+                if not companies.exists():
+                    return Response(
+                        {
+                            "message": "No companies found.",
+                            "companies": [],
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+
+            # Calculate tools data for each company
+            companies_tools_data = []
+            for company in companies:
+                company_tools_data = self._get_company_tools(company)
+                companies_tools_data.append(company_tools_data)
+
+            response_data = {
+                "companies_count": len(companies),
+                "companies": companies_tools_data,
+            }
+
+            logger.success(
+                f"Company tools data retrieved successfully for {len(companies)} companies"
+            )
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error retrieving company tools: {str(e)}")
+            return Response(
+                {"error": "Internal server error while retrieving company tools."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _get_company_tools(self, company):
+        """Get detailed tools information for a specific company"""
+        tools = []
+
+        # Get all integrations for this company
+        for integration in company.integrations.all():
+            # Determine the integration type name
+            integration_type_name = None
+            integration_type_id = integration.integration_type
+
+            try:
+                from integration.models import (
+                    IntegrationTypes,
+                    ItsmSubTypes,
+                    SiemSubTypes,
+                    SoarSubTypes,
+                    ThreatIntelligenceSubTypes,
+                )
+
+                integration_type_name = IntegrationTypes(integration_type_id).label
+            except (ValueError, AttributeError):
+                integration_type_name = "Unknown"
+
+            # Determine the subtype name and ID based on integration type
+            sub_type_name = None
+
+            if (
+                integration_type_id == IntegrationTypes.SIEM_INTEGRATION
+                and integration.siem_subtype
+            ):
+                integration.siem_subtype
+                try:
+                    sub_type_name = SiemSubTypes(integration.siem_subtype).label
+                except (ValueError, AttributeError):
+                    sub_type_name = "Unknown SIEM"
+
+            elif (
+                integration_type_id == IntegrationTypes.SOAR_INTEGRATION
+                and integration.soar_subtype
+            ):
+                integration.soar_subtype
+                try:
+                    sub_type_name = SoarSubTypes(integration.soar_subtype).label
+                except (ValueError, AttributeError):
+                    sub_type_name = "Unknown SOAR"
+
+            elif (
+                integration_type_id == IntegrationTypes.ITSM_INTEGRATION
+                and integration.itsm_subtype
+            ):
+                integration.itsm_subtype
+                try:
+                    sub_type_name = ItsmSubTypes(integration.itsm_subtype).label
+                except (ValueError, AttributeError):
+                    sub_type_name = "Unknown ITSM"
+
+            elif (
+                integration_type_id == IntegrationTypes.THREAT_INTELLIGENCE
+                and integration.threat_intelligence_subtype
+            ):
+                integration.threat_intelligence_subtype
+                try:
+                    sub_type_name = ThreatIntelligenceSubTypes(
+                        integration.threat_intelligence_subtype
+                    ).label
+                except (ValueError, AttributeError):
+                    sub_type_name = "Unknown Threat Intelligence"
+
+            tool_info = {
+                "id": integration.id,
+                "instance_name": integration.instance_name,
+                "integration_type": integration_type_name,
+                "sub_type": sub_type_name,
+                "status": integration.status,
+                "created_at": integration.created_at,
+                "updated_at": integration.updated_at,
+            }
+            tools.append(tool_info)
+
+        return {
+            "company_id": company.id,
+            "company_name": company.company_name,
+            "tools_count": len(tools),
+            "tools": tools,
+        }
+
+
 class APIVersionAPIView(APIView):
     """
     APIView to return the current API version information.
