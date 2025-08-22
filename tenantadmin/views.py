@@ -1557,8 +1557,10 @@ class IncidentCompletionStatusAPIView(APIView):
 
 class EPSUtilizationAPIView(APIView):
     """
-    APIView to return EPS utilization graph data for a specific company.
+    APIView to return EPS utilization graph data for a specific company or all companies.
     Returns time-series EPS data with contractual volume information.
+    If company_id is provided, returns data for that specific company.
+    If company_id is not provided, returns data for all companies owned by the admin.
     """
 
     authentication_classes = [JWTAuthentication]
@@ -1567,27 +1569,12 @@ class EPSUtilizationAPIView(APIView):
     def get(self, request):
         company_id = request.query_params.get("company_id")
 
-        if not company_id:
-            return Response(
-                {"error": "company_id query parameter is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         logger.info(
             f"EPS utilization requested by user: {request.user.username}, "
-            f"company_id: {company_id}"
+            f"company_id: {company_id if company_id else 'all companies'}"
         )
 
         try:
-            # Get company owned by this admin
-            try:
-                company = Company.objects.get(id=company_id, created_by=request.user)
-            except Company.DoesNotExist:
-                return Response(
-                    {"error": "Company not found or unauthorized."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
             # Get filter type parameter
             try:
                 filter_value = int(
@@ -1600,23 +1587,6 @@ class EPSUtilizationAPIView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Get QRadar tenant IDs for this company
-            qradar_tenant_ids = company.qradar_mappings.values_list(
-                "qradar_tenant__id", flat=True
-            )
-
-            if not qradar_tenant_ids:
-                return Response(
-                    {
-                        "message": "No QRadar tenants found for this company.",
-                        "contracted_volume": None,
-                        "contracted_volume_type": None,
-                        "contracted_volume_type_display": None,
-                        "eps_graph": [],
-                    },
-                    status=status.HTTP_200_OK,
-                )
-
             # Calculate time range and truncation based on filter type
             now = timezone.now()
             time_trunc, start_time, end_time = self._get_time_range_and_truncation(
@@ -1625,6 +1595,144 @@ class EPSUtilizationAPIView(APIView):
 
             if start_time is None:  # Error case
                 return time_trunc  # Return the error response
+
+            if company_id:
+                # Return data for specific company
+                return self._get_company_eps_data(
+                    request, company_id, filter_enum, time_trunc, start_time, end_time
+                )
+            else:
+                # Return data for all companies
+                return self._get_all_companies_eps_data(
+                    request, filter_enum, time_trunc, start_time, end_time
+                )
+
+        except Exception as e:
+            logger.error(f"Error calculating EPS utilization: {str(e)}")
+            return Response(
+                {"error": "Internal server error while calculating EPS utilization."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _get_company_eps_data(
+        self, request, company_id, filter_enum, time_trunc, start_time, end_time
+    ):
+        """Get EPS data for a specific company"""
+        try:
+            company = Company.objects.get(id=company_id, created_by=request.user)
+        except Company.DoesNotExist:
+            return Response(
+                {"error": "Company not found or unauthorized."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get QRadar tenant IDs for this company
+        qradar_tenant_ids = company.qradar_mappings.values_list(
+            "qradar_tenant__id", flat=True
+        )
+
+        if not qradar_tenant_ids:
+            return Response(
+                {
+                    "message": "No QRadar tenants found for this company.",
+                    "company_id": company.id,
+                    "company_name": company.company_name,
+                    "contracted_volume": None,
+                    "contracted_volume_type": None,
+                    "contracted_volume_type_display": None,
+                    "eps_graph": [],
+                    "utilization_stats": self._get_empty_utilization_stats(),
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Build filter kwargs for EPS data
+        filter_kwargs = {"domain_id__in": qradar_tenant_ids}
+        if filter_enum == FilterType.CUSTOM_RANGE:
+            filter_kwargs["created_at__range"] = (start_time, end_time)
+        else:
+            filter_kwargs["created_at__gte"] = start_time
+
+        # Query EPS data with aggregation
+        eps_data_raw = (
+            IBMQradarEPS.objects.filter(**filter_kwargs)
+            .annotate(interval=time_trunc)
+            .values("interval")
+            .annotate(average_eps=Avg("average_eps"), peak_eps=Max("peak_eps"))
+            .order_by("interval")
+        )
+
+        # Format EPS data for response
+        eps_data = self._format_eps_data(
+            eps_data_raw, filter_enum, filter_kwargs, time_trunc
+        )
+
+        # Get contracted volume information
+        mapping = TenantQradarMapping.objects.filter(company=company).first()
+        contracted_volume = mapping.contracted_volume if mapping else None
+        contracted_volume_type = mapping.contracted_volume_type if mapping else None
+        contracted_volume_type_display = (
+            mapping.get_contracted_volume_type_display() if mapping else None
+        )
+
+        # Calculate utilization metrics
+        utilization_stats = self._calculate_utilization_stats(
+            eps_data, contracted_volume
+        )
+
+        response_data = {
+            "company_id": company.id,
+            "company_name": company.company_name,
+            "contracted_volume": contracted_volume,
+            "contracted_volume_type": contracted_volume_type,
+            "contracted_volume_type_display": contracted_volume_type_display,
+            "eps_graph": eps_data,
+            "utilization_stats": utilization_stats,
+        }
+
+        logger.success(
+            f"EPS utilization calculated successfully for company {company.company_name}"
+        )
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    def _get_all_companies_eps_data(
+        self, request, filter_enum, time_trunc, start_time, end_time
+    ):
+        """Get EPS data for all companies owned by the admin"""
+        companies = Company.objects.filter(created_by=request.user)
+
+        if not companies.exists():
+            return Response(
+                {
+                    "message": "No companies found for this admin.",
+                    "companies": [],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        companies_data = []
+
+        for company in companies:
+            # Get QRadar tenant IDs for this company
+            qradar_tenant_ids = company.qradar_mappings.values_list(
+                "qradar_tenant__id", flat=True
+            )
+
+            if not qradar_tenant_ids:
+                # Add company with empty data if no QRadar tenants
+                companies_data.append(
+                    {
+                        "company_id": company.id,
+                        "company_name": company.company_name,
+                        "contracted_volume": None,
+                        "contracted_volume_type": None,
+                        "contracted_volume_type_display": None,
+                        "eps_graph": [],
+                        "utilization_stats": self._get_empty_utilization_stats(),
+                    }
+                )
+                continue
 
             # Build filter kwargs for EPS data
             filter_kwargs = {"domain_id__in": qradar_tenant_ids}
@@ -1660,28 +1768,39 @@ class EPSUtilizationAPIView(APIView):
                 eps_data, contracted_volume
             )
 
-            response_data = {
-                "company_id": company.id,
-                "company_name": company.company_name,
-                "contracted_volume": contracted_volume,
-                "contracted_volume_type": contracted_volume_type,
-                "contracted_volume_type_display": contracted_volume_type_display,
-                "eps_graph": eps_data,
-                "utilization_stats": utilization_stats,
-            }
-
-            logger.success(
-                f"EPS utilization calculated successfully for company {company.company_name}"
+            companies_data.append(
+                {
+                    "company_id": company.id,
+                    "company_name": company.company_name,
+                    "contracted_volume": contracted_volume,
+                    "contracted_volume_type": contracted_volume_type,
+                    "contracted_volume_type_display": contracted_volume_type_display,
+                    "eps_graph": eps_data,
+                    "utilization_stats": utilization_stats,
+                }
             )
 
-            return Response(response_data, status=status.HTTP_200_OK)
+        logger.success(
+            f"EPS utilization calculated successfully for {len(companies_data)} companies"
+        )
 
-        except Exception as e:
-            logger.error(f"Error calculating EPS utilization: {str(e)}")
-            return Response(
-                {"error": "Internal server error while calculating EPS utilization."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        return Response(
+            {
+                "message": f"EPS utilization data retrieved for {len(companies_data)} companies",
+                "total_companies": len(companies_data),
+                "companies": companies_data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def _get_empty_utilization_stats(self):
+        """Return empty utilization statistics"""
+        return {
+            "average_utilization_percentage": 0,
+            "peak_utilization_percentage": 0,
+            "total_data_points": 0,
+            "over_limit_count": 0,
+        }
 
     def _get_time_range_and_truncation(self, filter_enum, now, request):
         """Calculate time range and truncation based on filter type"""
