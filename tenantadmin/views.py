@@ -1046,6 +1046,7 @@ class TenantSLAMatrixAPIView(APIView):
                 "company_id": company.id,
                 "company_name": company.company_name,
                 "is_default_sla": company.is_default_sla,
+                "total_incidents_count": 0,
                 "sla_metrics": self._get_empty_sla_metrics(),
             }
 
