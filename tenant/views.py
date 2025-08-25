@@ -1867,54 +1867,54 @@ class IncidentsView(APIView):
         try:
             filter_type_int = int(filter_type_value)
 
-            if filter_type_int == FilterType.TODAY.value:
+            if filter_type_int == FilterType.TODAY.value:  # DAILY
                 return today, today
 
-            elif filter_type_int == FilterType.WEEK.value:
+            elif filter_type_int == FilterType.WEEK.value:  # WEEKLY
                 # Last 7 days
                 start_date = today - timedelta(days=7)
                 return start_date, today
 
-            elif filter_type_int == FilterType.MONTH.value:
+            elif filter_type_int == FilterType.MONTH.value:  # MONTHLY
                 # Current month
                 start_date = today - timedelta(days=30)
                 # start_date = today.replace(day=1)
                 return start_date, today
 
-            elif filter_type_int == FilterType.YEAR.value:
-                # Current year
-                start_date = today - timedelta(days=365)
-                # start_date = today.replace(month=1, day=1)
-                return start_date, today
+            # elif filter_type_int == FilterType.YEAR.value:
+            #     # Current year
+            #     start_date = today - timedelta(days=365)
+            #     # start_date = today.replace(month=1, day=1)
+            #     return start_date, today
 
-            elif filter_type_int == FilterType.QUARTER.value:
-                # Current quarter
-                start_date = today - timedelta(days=90)
-                # current_quarter = (today.month - 1) // 3 + 1
-                # quarter_start_month = (current_quarter - 1) * 3 + 1
-                # start_date = today.replace(month=quarter_start_month, day=1)
-                return start_date, today
+            # elif filter_type_int == FilterType.QUARTER.value:
+            #     # Current quarter
+            #     start_date = today - timedelta(days=90)
+            #     # current_quarter = (today.month - 1) // 3 + 1
+            #     # quarter_start_month = (current_quarter - 1) * 3 + 1
+            #     # start_date = today.replace(month=quarter_start_month, day=1)
+            #     return start_date, today
 
-            elif filter_type_int == FilterType.LAST_6_MONTHS.value:
-                # Last 6 months
-                start_date = (today.replace(day=1) - timedelta(days=180)).replace(day=1)
-                return start_date, today
+            # elif filter_type_int == FilterType.LAST_6_MONTHS.value:
+            #     # Last 6 months
+            #     start_date = (today.replace(day=1) - timedelta(days=180)).replace(day=1)
+            #     return start_date, today
 
-            elif filter_type_int == FilterType.LAST_3_WEEKS.value:
-                # Last 3 weeks (21 days)
-                start_date = today - timedelta(days=21)
-                return start_date, today
+            # elif filter_type_int == FilterType.LAST_3_WEEKS.value:
+            #     # Last 3 weeks (21 days)
+            #     start_date = today - timedelta(days=21)
+            #     return start_date, today
 
-            elif filter_type_int == FilterType.LAST_MONTH.value:
-                # Previous month
-                if today.month == 1:
-                    start_date = today.replace(year=today.year - 1, month=12, day=1)
-                    end_date = today.replace(year=today.year - 1, month=12, day=31)
-                else:
-                    start_date = today.replace(month=today.month - 1, day=1)
-                    # Get last day of previous month
-                    end_date = today.replace(day=1) - timedelta(days=1)
-                return start_date, end_date
+            # elif filter_type_int == FilterType.LAST_MONTH.value:
+            #     # Previous month
+            #     if today.month == 1:
+            #         start_date = today.replace(year=today.year - 1, month=12, day=1)
+            #         end_date = today.replace(year=today.year - 1, month=12, day=31)
+            #     else:
+            #         start_date = today.replace(month=today.month - 1, day=1)
+            #         # Get last day of previous month
+            #         end_date = today.replace(day=1) - timedelta(days=1)
+            #     return start_date, end_date
 
             elif filter_type_int == FilterType.CUSTOM_RANGE.value:
                 # Custom range should be handled by start_date/end_date parameters
@@ -1990,11 +1990,12 @@ class IncidentsView(APIView):
 
         # Handle false positives filter
         if false_positives:
-            # For false positives, we only need to check for Done status
+            # For false positives only, we only need to check for Done status
             filters &= Q(itsm_sync_status__iexact="Done")
         else:
-            # Original filters for true positives
-            filters &= (
+            # Include both true positives AND false positives when false_positives is False
+            # True positives filter (Ready incidents with all required fields)
+            true_positive_filters = (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
                 & Q(incident_tta__isnull=False)
@@ -2005,6 +2006,12 @@ class IncidentsView(APIView):
                 & Q(incident_priority__isnull=False)
                 & ~Q(incident_priority__exact="")
             )
+
+            # False positives filter (Done incidents)
+            false_positive_filters = Q(itsm_sync_status__iexact="Done")
+
+            # Combine both filters with OR operation
+            filters &= true_positive_filters | false_positive_filters
 
         # Step 6: Apply non-date filters
         if id_filter:
