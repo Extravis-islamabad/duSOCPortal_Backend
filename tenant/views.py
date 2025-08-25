@@ -4567,12 +4567,12 @@ class RecentIncidentsView(APIView):
                 elif filter_type == FilterType.MONTH:
                     start_date = now - timedelta(days=30)
                     filters &= Q(created__date__gte=start_date)
-                elif filter_type == FilterType.QUARTER:
-                    start_date = now - timedelta(days=90)
-                    filters &= Q(created__date__gte=start_date)
-                elif filter_type == FilterType.YEAR:
-                    start_date = now - timedelta(days=365)
-                    filters &= Q(created__date__gte=start_date)
+                # elif filter_type == FilterType.QUARTER:
+                #     start_date = now - timedelta(days=90)
+                #     filters &= Q(created__date__gte=start_date)
+                # elif filter_type == FilterType.YEAR:
+                #     start_date = now - timedelta(days=365)
+                #     filters &= Q(created__date__gte=start_date)
                 elif filter_type == FilterType.CUSTOM_RANGE:
                     start_date_str = request.query_params.get("start_date")
                     end_date_str = request.query_params.get("end_date")
@@ -4620,7 +4620,7 @@ class RecentIncidentsView(APIView):
                     incident_name_counts[cleaned_name] += 1
 
             # Step 6: Get top 10 most frequent incident names
-            top_10_incident_names = incident_name_counts.most_common(5)
+            top_10_incident_names = incident_name_counts.most_common(10)
 
             # Step 7: Build simple response with only incident names and counts
             response_data = [
@@ -5075,12 +5075,12 @@ class SLAIncidentsView(APIView):
                 elif filter_type_enum == FilterType.MONTH:
                     start_date = today - timedelta(days=29)
                     end_date = today
-                elif filter_type_enum == FilterType.QUARTER:
-                    start_date = today - timedelta(days=89)
-                    end_date = today
-                elif filter_type_enum == FilterType.YEAR:
-                    start_date = today - timedelta(days=364)
-                    end_date = today
+                # elif filter_type_enum == FilterType.QUARTER:
+                #     start_date = today - timedelta(days=89)
+                #     end_date = today
+                # elif filter_type_enum == FilterType.YEAR:
+                #     start_date = today - timedelta(days=364)
+                #     end_date = today
 
             if start_date:
                 filters &= Q(created__date__gte=start_date)
@@ -5594,12 +5594,12 @@ class SLASeverityIncidentsView(APIView):
                     elif filter_type == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
                         filters &= Q(created__date__gte=start_date)
-                    elif filter_type == FilterType.QUARTER:
-                        start_date = now - timedelta(days=90)
-                        filters &= Q(created__date__gte=start_date)
-                    elif filter_type == FilterType.YEAR:
-                        start_date = now - timedelta(days=365)
-                        filters &= Q(created__date__gte=start_date)
+                    # elif filter_type == FilterType.QUARTER:
+                    #     start_date = now - timedelta(days=90)
+                    #     filters &= Q(created__date__gte=start_date)
+                    # elif filter_type == FilterType.YEAR:
+                    #     start_date = now - timedelta(days=365)
+                    #     filters &= Q(created__date__gte=start_date)
                 except Exception:
                     return Response({"error": "Invalid filter_type."}, status=400)
 
