@@ -3284,185 +3284,162 @@ class OffenseCategoriesAPIView(APIView):
     permission_classes = [IsTenant]
 
     def get(self, request):
+        """
+        Retrieve offense categories from SOAR incidents filtered by tenant.
+        Uses DUCortexSOARIncidentFinalModel.qradar_category field.
+
+        Query Parameters:
+            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year, 5=Quarter,
+                              6=Last 6 months, 7=Last 3 weeks, 8=Last month,
+                              9=Custom range (requires start_date and end_date)
+            start_date (YYYY-MM-DD): Start date for custom range or direct filtering
+            end_date (YYYY-MM-DD): End date for custom range or direct filtering
+            include_fp (bool): Whether to include false positives. Default: true
+
+        Returns:
+            {
+                "categories": [
+                    {"category": "category_name", "count": count_value},
+                    ...
+                ]
+            }
+        """
         try:
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
-        siem_integrations = tenant.company.integrations.filter(
-            integration_type=IntegrationTypes.SIEM_INTEGRATION,
-            siem_subtype=SiemSubTypes.IBM_QRADAR,
+        # Check for active SOAR integration
+        soar_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
         )
-        if not siem_integrations.exists():
+        if not soar_integrations.exists():
             return Response(
-                {"error": "No active SEIM integration configured for tenant."},
+                {"error": "No active SOAR integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
-            # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
-            mappings = TenantQradarMapping.objects.filter(
-                company=tenant.company
-            ).values_list("event_collectors__id", "qradar_tenant__id")
-
-            if not mappings:
+            # Step 1: Get SOAR tenant IDs
+            soar_tenants = tenant.company.soar_tenants.all()
+            if not soar_tenants:
                 return Response(
-                    {"error": "No mappings found for the tenant."},
+                    {"error": "No SOAR tenants found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
+            soar_ids = [t.id for t in soar_tenants]
 
-            # Extract collector IDs and tenant IDs
-            collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
-
-            # Step 2: Retrieve asset IDs based on collector IDs
-            assets = IBMQradarAssests.objects.filter(
-                event_collector__id__in=collector_ids
-            ).values_list("id", flat=True)
-
-            if not assets:
-                return Response(
-                    {"error": "No assets found for the given collectors."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-            # Initialize filters
-            filters = Q(assests__id__in=assets) & Q(
-                qradar_tenant_domain__id__in=tenant_ids
+            # Step 2: Build base filters using same logic as DashboardView and IncidentSummaryView
+            # Base filters for True Positives (Ready incidents with all required fields)
+            true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
             )
 
-            # Handle date filtering
+            # Base filters for False Positives (Done incidents)
+            false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+                itsm_sync_status__iexact="Done"
+            )
+
+            # Check include_fp parameter (default to true for backward compatibility)
+            include_fp = (
+                request.query_params.get("include_fp", "true").lower() == "true"
+            )
+
+            if include_fp:
+                # Include both True Positives and False Positives
+                filters = true_positive_filters | false_positive_filters
+            else:
+                # Include only True Positives
+                filters = true_positive_filters
+
+            # Step 3: Handle date filtering
             filter_type = request.query_params.get("filter_type")
             start_date = request.query_params.get("start_date")
             end_date = request.query_params.get("end_date")
-            db_timezone = timezone.get_fixed_timezone(240)
-            now = timezone.now().astimezone(db_timezone)
-
-            def datetime_to_unix(dt):
-                return (
-                    int(time.mktime(dt.timetuple())) * 1000
-                )  # Convert to milliseconds
+            now = timezone.now()
 
             if start_date and end_date:
                 try:
-                    start_date = timezone.make_aware(
-                        datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
-                    ).replace(hour=0, minute=0, second=0, microsecond=0)
-                    end_date = timezone.make_aware(
-                        datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
-                    ).replace(hour=23, minute=59, second=59, microsecond=999999)
-
-                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & Q(
-                        start_time__lte=datetime_to_unix(end_date)
+                    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+                    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+                    filters &= Q(created__date__gte=start_date_obj) & Q(
+                        created__date__lte=end_date_obj
                     )
                 except ValueError:
                     return Response(
                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
                     )
-
             elif filter_type:
                 try:
                     filter_type = FilterType(int(filter_type))
                     if filter_type == FilterType.TODAY:
-                        start_date = now.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
+                        filters &= Q(created__date=now.date())
                     elif filter_type == FilterType.WEEK:
-                        start_date = now - timedelta(days=now.weekday())
-                        start_date = start_date.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
+                        start_date = now - timedelta(days=7)
+                        filters &= Q(created__date__gte=start_date.date())
                     elif filter_type == FilterType.MONTH:
-                        start_date = now.replace(
-                            day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    # elif filter_type == FilterType.QUARTER:
-                    #     current_quarter = (now.month - 1) // 3 + 1
-                    #     quarter_start_month = 3 * current_quarter - 2
-                    #     start_date = now.replace(
-                    #         month=quarter_start_month,
-                    #         day=1,
-                    #         hour=0,
-                    #         minute=0,
-                    #         second=0,
-                    #         microsecond=0,
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.YEAR:
-                    #     start_date = now.replace(
-                    #         month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.LAST_6_MONTHS:
-                    #     start_date = now - timedelta(days=180)
-                    #     start_date = start_date.replace(
-                    #         hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.LAST_3_WEEKS:
-                    #     start_date = now - timedelta(weeks=3)
-                    #     start_date = start_date.replace(
-                    #         hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.LAST_MONTH:
-                    #     # Get first day of last month
-                    #     first_day_this_month = now.replace(day=1)
-                    #     last_day_last_month = first_day_this_month - timedelta(days=1)
-                    #     start_date = last_day_last_month.replace(
-                    #         day=1, hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = last_day_last_month.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-
-                    filters &= Q(start_time__gte=datetime_to_unix(start_date)) & Q(
-                        start_time__lte=datetime_to_unix(end_date)
-                    )
+                        start_date = now - timedelta(days=30)
+                        filters &= Q(created__date__gte=start_date.date())
+                    elif filter_type == FilterType.CUSTOM_RANGE:
+                        start_date_str = request.query_params.get("start_date")
+                        end_date_str = request.query_params.get("end_date")
+                        if not start_date_str or not end_date_str:
+                            return Response(
+                                {
+                                    "error": "Custom range requires both start_date and end_date."
+                                },
+                                status=400,
+                            )
+                        try:
+                            start_date_obj = datetime.strptime(
+                                start_date_str, "%Y-%m-%d"
+                            ).date()
+                            end_date_obj = datetime.strptime(
+                                end_date_str, "%Y-%m-%d"
+                            ).date()
+                            filters &= Q(created__date__gte=start_date_obj) & Q(
+                                created__date__lte=end_date_obj
+                            )
+                        except ValueError:
+                            return Response(
+                                {"error": "Invalid date format. Use YYYY-MM-DD."},
+                                status=400,
+                            )
                 except Exception as e:
                     return Response(
                         {"error": f"Invalid filter_type: {str(e)}"}, status=400
                     )
 
-            # Step 3: Retrieve offenses with categories field
-            offenses = IBMQradarOffense.objects.filter(filters).values("categories")
-
-            # Step 4: Aggregate category counts
-            category_counts = Counter()
-            for offense in offenses:
-                categories = offense["categories"] or []  # Handle null/empty JSONField
-                if isinstance(categories, list):  # Ensure it's a list
-                    category_counts.update(
-                        category for category in categories if category
-                    )  # Skip empty strings
+            # Step 4: Query incidents with qradar_category field and group by category
+            category_counts = (
+                DUCortexSOARIncidentFinalModel.objects.filter(filters)
+                .exclude(qradar_category__isnull=True)
+                .exclude(qradar_category__exact="")
+                .values("qradar_category")
+                .annotate(count=Count("id"))
+                .order_by("-count")  # Order by count descending
+            )
 
             # Step 5: Format the response for graphing
             response_data = [
-                {"category": category, "count": count}
-                for category, count in category_counts.items()
+                {"category": item["qradar_category"], "count": item["count"]}
+                for item in category_counts
             ]
 
             if not response_data:
                 return Response(
                     {
-                        "message": "No offense categories found for the given assets and tenant.",
+                        "message": "No offense categories found for the given tenant and filters.",
                         "categories": [],
                     },
                     status=status.HTTP_200_OK,
@@ -3471,6 +3448,7 @@ class OffenseCategoriesAPIView(APIView):
             return Response({"categories": response_data}, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logger.error(f"Error in OffenseCategoriesAPIView: {str(e)}")
             return Response(
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
