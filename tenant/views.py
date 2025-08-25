@@ -2009,33 +2009,32 @@ class IncidentsView(APIView):
 
         date_format = "%Y-%m-%d"  # Expected format for date inputs
 
-        # Step 5: Initialize filters with Q object
-        filters = Q(cortex_soar_tenant__in=soar_ids)
+        # Step 5: Initialize filters using same logic as DashboardView
+        # Base filters for True Positives (Ready incidents with all required fields)
+        true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(itsm_sync_status__iexact="Ready")
+            & Q(incident_priority__isnull=False)
+            & ~Q(incident_priority__exact="")
+        )
 
-        # Handle false positives filter
+        # Base filters for False Positives (Done incidents)
+        false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+            itsm_sync_status__iexact="Done"
+        )
+
+        # Handle false positives parameter
         if false_positives:
-            # For false positives only, we only need to check for Done status
-            filters &= Q(itsm_sync_status__iexact="Done")
+            # For false positives only, use false_positive_filters
+            filters = false_positive_filters
         else:
-            # Include both true positives AND false positives when false_positives is False
-            # True positives filter (Ready incidents with all required fields)
-            true_positive_filters = (
-                ~Q(owner__isnull=True)
-                & ~Q(owner__exact="")
-                & Q(incident_tta__isnull=False)
-                & Q(incident_ttn__isnull=False)
-                & Q(incident_ttdn__isnull=False)
-                & Q(itsm_sync_status__isnull=False)
-                & Q(itsm_sync_status__iexact="Ready")
-                & Q(incident_priority__isnull=False)
-                & ~Q(incident_priority__exact="")
-            )
-
-            # False positives filter (Done incidents)
-            false_positive_filters = Q(itsm_sync_status__iexact="Done")
-
-            # Combine both filters with OR operation
-            filters &= true_positive_filters | false_positive_filters
+            # Include both true positives AND false positives (same as DashboardView)
+            filters = true_positive_filters | false_positive_filters
 
         # Step 6: Apply non-date filters
         if id_filter:
@@ -2241,9 +2240,15 @@ class IncidentsView(APIView):
 
                 parts = name.split()
                 offense_db_id = parts[0] if parts else None
-                if offense_db_id is None:
-                    continue
-                offense_id = offense_map.get(offense_db_id) if offense_db_id else None
+                # Don't skip incidents without names - include all incidents
+                if name and parts and parts[0].isdigit():
+                    offense_db_id = parts[0]
+                    offense_id = (
+                        offense_map.get(offense_db_id) if offense_db_id else None
+                    )
+                else:
+                    offense_db_id = None
+                    offense_id = None
 
                 # Use isoformat() for consistent datetime formatting
                 created_date = row["created"].isoformat() if row["created"] else "N/A"
