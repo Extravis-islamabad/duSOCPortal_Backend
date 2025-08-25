@@ -857,227 +857,6 @@ class TenantCortexSOARIncidentsAPIView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
-# class SeverityDistributionView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         """
-#         Retrieve severity distribution (P1-P4) for the authenticated tenant (only true positives).
-#         Uses the exact same logic as DashboardView to ensure counts match.
-
-#         Returns:
-#             {
-#                 "severityDistribution": [
-#                     {"name": "P1", "value": 0},
-#                     {"name": "P2", "value": 0},
-#                     {"name": "P3", "value": 0},
-#                     {"name": "P4", "value": 0}
-#                 ]
-#             }
-#         """
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-
-#         soar_integrations = tenant.company.integrations.filter(
-#             integration_type=IntegrationTypes.SOAR_INTEGRATION,
-#             soar_subtype=SoarSubTypes.CORTEX_SOAR,
-#             status=True,
-#         )
-#         if not soar_integrations.exists():
-#             return Response(
-#                 {"error": "No active SOAR integration configured for tenant."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-
-#         soar_tenants = tenant.company.soar_tenants.all()
-#         if not soar_tenants:
-#             return Response({"error": "No SOAR tenants found."}, status=404)
-
-#         soar_ids = [t.id for t in soar_tenants]
-
-#         try:
-#             true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
-#                 ~Q(owner__isnull=True)
-#                 & ~Q(owner__exact="")
-#                 & Q(incident_tta__isnull=False)
-#                 & Q(incident_ttn__isnull=False)
-#                 & Q(incident_ttdn__isnull=False)
-#                 & Q(itsm_sync_status__isnull=False)
-#                 & Q(itsm_sync_status__iexact="Ready")
-#                 & Q(incident_priority__isnull=False)
-#                 & ~Q(incident_priority__exact="")
-#             )
-
-#             # Handle date filtering
-#             filter_type = request.query_params.get("filter_type")
-#             start_date = request.query_params.get("start_date")
-#             end_date = request.query_params.get("end_date")
-#             db_timezone = timezone.get_fixed_timezone(240)
-#             now = timezone.now().astimezone(db_timezone)
-
-#             def datetime_to_unix(dt):
-#                 return (
-#                     int(time.mktime(dt.timetuple())) * 1000
-#                 )  # Convert to milliseconds
-
-#             if start_date and end_date:
-#                 try:
-#                     if not isinstance(start_date, str) or not isinstance(end_date, str):
-#                         return Response(
-#                             {
-#                                 "error": "start_date and end_date must be strings in YYYY-MM-DD format."
-#                             },
-#                             status=400,
-#                         )
-
-#                     start_date = timezone.make_aware(
-#                         datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
-#                     ).replace(hour=0, minute=0, second=0, microsecond=0)
-
-#                     end_date = timezone.make_aware(
-#                         datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
-#                     ).replace(hour=23, minute=59, second=59, microsecond=999999)
-
-#                     true_positive_filters &= Q(occured__gte=start_date) & Q(
-#                         occured__lte=end_date
-#                     )
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
-#                     )
-
-#             elif filter_type:
-#                 try:
-#                     filter_type = FilterType(int(filter_type))
-#                     if filter_type == FilterType.TODAY:
-#                         start_date = now.replace(
-#                             hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.WEEK:
-#                         start_date = now - timedelta(days=now.weekday())
-#                         start_date = start_date.replace(
-#                             hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.MONTH:
-#                         start_date = now.replace(
-#                             day=1, hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.QUARTER:
-#                         current_quarter = (now.month - 1) // 3 + 1
-#                         quarter_start_month = 3 * current_quarter - 2
-#                         start_date = now.replace(
-#                             month=quarter_start_month,
-#                             day=1,
-#                             hour=0,
-#                             minute=0,
-#                             second=0,
-#                             microsecond=0,
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.YEAR:
-#                         start_date = now.replace(
-#                             month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.LAST_6_MONTHS:
-#                         start_date = now - timedelta(days=180)
-#                         start_date = start_date.replace(
-#                             hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.LAST_3_WEEKS:
-#                         start_date = now - timedelta(weeks=3)
-#                         start_date = start_date.replace(
-#                             hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.LAST_MONTH:
-#                         # Get first day of last month
-#                         first_day_this_month = now.replace(day=1)
-#                         last_day_last_month = first_day_this_month - timedelta(days=1)
-#                         start_date = last_day_last_month.replace(
-#                             day=1, hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = last_day_last_month.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     true_positive_filters &= Q(occured__gte=start_date) & Q(
-#                         occured__lte=end_date
-#                     )
-
-#                 except Exception as e:
-#                     return Response(
-#                         {"error": f"Invalid filter_type: {str(e)}"}, status=400
-#                     )
-
-#             # Define our severity levels (P1-P4)
-#             SEVERITY_LEVELS = {1: "1", 2: "2", 3: "3", 4: "4"}
-
-#             # Get counts for each severity level using only true positive filters
-#             severity_counts = (
-#                 DUCortexSOARIncidentFinalModel.objects.filter(true_positive_filters)
-#                 .values("severity")
-#                 .annotate(count=Count("id"))
-#             )
-
-#             # Convert to dictionary and handle all severity values
-#             count_dict = {}
-
-#             for item in severity_counts:
-#                 severity_val = item["severity"]
-#                 count = item["count"]
-
-#                 if severity_val in SEVERITY_LEVELS:
-#                     # Direct mapping for P1-P4 (severity 1-4)
-#                     count_dict[severity_val] = count_dict.get(severity_val, 0) + count
-#                 elif severity_val is None or severity_val == 0:
-#                     # Map NULL/0 severity to P4 (lowest priority)
-#                     count_dict[1] = count_dict.get(4, 0) + count
-#                 elif severity_val > 4:
-#                     # Map severity > 4 to P4 (lowest priority)
-#                     count_dict[4] = count_dict.get(4, 0) + count
-#                 else:
-#                     # For any other unexpected values, map to P4
-#                     count_dict[4] = count_dict.get(4, 0) + count
-
-#             # Build result ensuring all severity levels are included
-#             result = [
-#                 {
-#                     "name": f"{severity_value}",
-#                     "value": count_dict.get(severity_value, 0),
-#                 }
-#                 for severity_value in sorted(SEVERITY_LEVELS.keys())
-#             ]
-
-#             return Response({"severityDistribution": result}, status=200)
-
-#         except Exception as e:
-#             logger.error("Error in SeverityDistributionView: %s", str(e))
-#             return Response(
-#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
-
-
 class TypeDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -1165,53 +944,6 @@ class TypeDistributionView(APIView):
                         end_date = now.replace(
                             hour=23, minute=59, second=59, microsecond=999999
                         )
-                    # elif filter_type == FilterType.QUARTER:
-                    #     current_quarter = (now.month - 1) // 3 + 1
-                    #     quarter_start_month = 3 * current_quarter - 2
-                    #     start_date = now.replace(
-                    #         month=quarter_start_month,
-                    #         day=1,
-                    #         hour=0,
-                    #         minute=0,
-                    #         second=0,
-                    #         microsecond=0,
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.YEAR:
-                    #     start_date = now.replace(
-                    #         month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.LAST_6_MONTHS:
-                    #     start_date = now - timedelta(days=180)
-                    #     start_date = start_date.replace(
-                    #         hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.LAST_3_WEEKS:
-                    #     start_date = now - timedelta(weeks=3)
-                    #     start_date = start_date.replace(
-                    #         hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.LAST_MONTH:
-                    #     # Get first day of last month
-                    #     first_day_this_month = now.replace(day=1)
-                    #     last_day_last_month = first_day_this_month - timedelta(days=1)
-                    #     start_date = last_day_last_month.replace(
-                    #         day=1, hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = last_day_last_month.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
                     filters &= Q(occured__gte=start_date) & Q(occured__lte=end_date)
 
                 except Exception as e:
@@ -1246,129 +978,6 @@ class TypeDistributionView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
-# class SLAStatusView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-
-#         soar_integrations = tenant.company.integrations.filter(
-#             integration_type=IntegrationTypes.SOAR_INTEGRATION,
-#             soar_subtype=SoarSubTypes.CORTEX_SOAR,
-#             status=True,
-#         )
-#         if not soar_integrations.exists():
-#             return Response(
-#                 {"error": "No active SOAR integration configured for tenant."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-#         soar_tenants = tenant.company.soar_tenants.all()
-#         if not soar_tenants:
-#             return Response({"error": "No SOAR tenants found."}, status=404)
-
-#         soar_ids = [t.id for t in soar_tenants]
-
-#         if not soar_ids:
-#             return Response({"error": "No SOAR tenants found."}, status=404)
-
-#         try:
-#             # Query SLA compliance using Django ORM
-#             sla_stats = DUCortexSOARIncidentFinalModel.objects.filter(
-#                 cortex_soar_tenant__in=soar_ids, status__in=["Closed", "False Positive"]
-#             ).aggregate(
-#                 total=Count("id", filter=Q(sla__isnull=False)),
-#                 within_sla=Count(
-#                     "id",
-#                     filter=Q(sla__isnull=False)
-#                     & Q(
-#                         created__gte=timezone.now()
-#                         - F("sla") * timezone.timedelta(hours=1)
-#                     ),
-#                     output_field=IntegerField(),
-#                 ),
-#             )
-
-#             total = sla_stats["total"] or 0
-#             within_sla = sla_stats["within_sla"] or 0
-#             sla_percentage = (within_sla / total * 100) if total > 0 else 100
-
-#             # Query most at-risk incidents
-#             at_risk_qs = (
-#                 DUCortexSOARIncidentFinalModel.objects.filter(
-#                     cortex_soar_tenant__in=soar_ids,
-#                     status__in=["Closed", "False Positive"],
-#                     sla__isnull=False,
-#                 )
-#                 .annotate(
-#                     # Calculate hours_open as seconds difference / 3600
-#                     hours_open=ExpressionWrapper(
-#                         ExtractSecond(timezone.now() - F("created")) / 3600.0,
-#                         output_field=FloatField(),
-#                     ),
-#                     # Calculate hours_remaining as sla - hours_open
-#                     hours_remaining=ExpressionWrapper(
-#                         F("sla")
-#                         - (ExtractSecond(timezone.now() - F("created")) / 3600.0),
-#                         output_field=FloatField(),
-#                     ),
-#                 )
-#                 .order_by("hours_remaining")
-#                 .select_related("integration")[:5]  # Limit to 5
-#             )
-
-#             at_risk = []
-#             severity_map = {1: "P1", 2: "P2", 3: "P3", 4: "P4"}
-#             for incident in at_risk_qs:
-#                 hours_remaining = incident.hours_remaining
-#                 days_remaining = hours_remaining / 24.0  # Numeric division
-
-#                 # Determine status
-#                 status_flag = "OK"
-#                 if hours_remaining < 0:
-#                     status_flag = "Overdue"
-#                 elif hours_remaining < 4:
-#                     status_flag = "Critical"
-#                 elif hours_remaining < 24:
-#                     status_flag = "Warning"
-
-#                 # Map severity to priority
-#                 priority = severity_map.get(incident.severity, "P4")
-
-#                 at_risk.append(
-#                     {
-#                         "id": f"{incident.id}",
-#                         "name": incident.name,
-#                         "priority": priority,
-#                         "remaining": f"{days_remaining:.1f} days"
-#                         if hours_remaining > 0
-#                         else "Overdue",
-#                         "status": status_flag,
-#                     }
-#                 )
-
-#             return Response(
-#                 {
-#                     "slaCompliance": {
-#                         "percentage": round(sla_percentage, 1),
-#                         "withinSla": within_sla,
-#                         "total": total,
-#                         "atRiskIncidents": at_risk,
-#                     }
-#                 },
-#                 status=status.HTTP_200_OK,
-#             )
-
-#         except Exception as e:
-#             logger.error("Error in SLAStatusView: %s", str(e))
-#             return Response(
-#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
 
 
 class OwnerDistributionView(APIView):
@@ -1490,17 +1099,6 @@ class DashboardView(APIView):
                 start_date = now - timedelta(days=7)
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
-            # elif filter_type == FilterType.YEAR:
-            #     start_date = now - timedelta(days=365)
-            # elif filter_type == FilterType.QUARTER:
-            #     start_date = now - timedelta(days=90)
-            # elif filter_type == FilterType.LAST_6_MONTHS:
-            #     start_date = now - timedelta(days=180)
-            # elif filter_type == FilterType.LAST_3_WEEKS:
-            #     start_date = now - timedelta(days=21)
-            # elif filter_type == FilterType.LAST_MONTH:
-            #     start_date = now - timedelta(days=30)
-            #     end_date = now - timedelta(days=30)  # Exactly one month ago
             elif filter_type == FilterType.CUSTOM_RANGE:
                 start_date = self._parse_date(request.query_params.get("start_date"))
                 end_date = self._parse_date(request.query_params.get("end_date"))
@@ -1898,41 +1496,6 @@ class IncidentsView(APIView):
                 start_date = today - timedelta(days=30)
                 # start_date = today.replace(day=1)
                 return start_date, today
-
-            # elif filter_type_int == FilterType.YEAR.value:
-            #     # Current year
-            #     start_date = today - timedelta(days=365)
-            #     # start_date = today.replace(month=1, day=1)
-            #     return start_date, today
-
-            # elif filter_type_int == FilterType.QUARTER.value:
-            #     # Current quarter
-            #     start_date = today - timedelta(days=90)
-            #     # current_quarter = (today.month - 1) // 3 + 1
-            #     # quarter_start_month = (current_quarter - 1) * 3 + 1
-            #     # start_date = today.replace(month=quarter_start_month, day=1)
-            #     return start_date, today
-
-            # elif filter_type_int == FilterType.LAST_6_MONTHS.value:
-            #     # Last 6 months
-            #     start_date = (today.replace(day=1) - timedelta(days=180)).replace(day=1)
-            #     return start_date, today
-
-            # elif filter_type_int == FilterType.LAST_3_WEEKS.value:
-            #     # Last 3 weeks (21 days)
-            #     start_date = today - timedelta(days=21)
-            #     return start_date, today
-
-            # elif filter_type_int == FilterType.LAST_MONTH.value:
-            #     # Previous month
-            #     if today.month == 1:
-            #         start_date = today.replace(year=today.year - 1, month=12, day=1)
-            #         end_date = today.replace(year=today.year - 1, month=12, day=31)
-            #     else:
-            #         start_date = today.replace(month=today.month - 1, day=1)
-            #         # Get last day of previous month
-            #         end_date = today.replace(day=1) - timedelta(days=1)
-            #     return start_date, end_date
 
             elif filter_type_int == FilterType.CUSTOM_RANGE.value:
                 # Custom range should be handled by start_date/end_date parameters
@@ -2437,65 +2000,8 @@ class IncidentDetailView(APIView):
                 except (json.JSONDecodeError, TypeError):
                     source_ips = []
 
-            # log_source_types = []
-            # if incident["log_source_type"]:
-            #     try:
-            #         log_source_types = (
-            #             json.loads(incident["log_source_type"])
-            #             if isinstance(incident["log_source_type"], str)
-            #             else incident["log_source_type"]
-            #         )
-            #     except (json.JSONDecodeError, TypeError):
-            #         log_source_types = []
-
             # Create related items
             related_items = {"alerts": [], "users": [], "assets": []}
-
-            # if incident["list_of_rules_offense"]:
-            #     try:
-            #         rules = (
-            #             json.loads(incident["list_of_rules_offense"])
-            #             if isinstance(incident["list_of_rules_offense"], str)
-            #             else incident["list_of_rules_offense"]
-            #         )
-            #         # Handle list of strings
-            #         if isinstance(rules, list) and all(
-            #             isinstance(rule, str) for rule in rules
-            #         ):
-            #             for rule in rules[:5]:  # Limit to first 5
-            #                 related_items["alerts"].append(
-            #                     {"title": "Rule", "subtitle": rule or "Unknown Rule"}
-            #                 )
-            #         # Handle list of dictionaries
-            #         elif isinstance(rules, list):
-            #             for rule in rules[:5]:
-            #                 rule_id = (
-            #                     rule.get("id", "Unknown")
-            #                     if isinstance(rule, dict)
-            #                     else "Unknown"
-            #                 )
-            #                 rule_name = (
-            #                     rule.get("name", "Unknown Rule")
-            #                     if isinstance(rule, dict)
-            #                     else str(rule)
-            #                 )
-            #                 related_items["alerts"].append(
-            #                     {"title": f"Rule {rule_id}", "subtitle": rule_name}
-            #                 )
-            #         else:
-            #             related_items["alerts"].append(
-            #                 {
-            #                     "title": "Associated Rules",
-            #                     "subtitle": "See incident details",
-            #                 }
-            #             )
-            #     except (json.JSONDecodeError, TypeError):
-            #         related_items["alerts"].append(
-            #             {
-            #                 "title": "Associated Rules",
-            #                 "subtitle": "See incident details",
-            #             }
-            #         )
 
             ticket_id = None
             ticket_db_id = None
@@ -2623,461 +2129,6 @@ class IncidentDetailView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
-# class OffenseStatsAPIView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-
-#         siem_integrations = tenant.company.integrations.filter(
-#             integration_type=IntegrationTypes.SIEM_INTEGRATION,
-#             siem_subtype=SiemSubTypes.IBM_QRADAR,
-#             status=True,
-#         )
-#         if not siem_integrations.exists():
-#             return Response(
-#                 {"error": "No active SEIM integration configured for tenant."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-#         try:
-#             # Step 1: Retrieve collector and tenant IDs from TenantQradarMapping
-#             mappings = TenantQradarMapping.objects.filter(
-#                 company=tenant.company
-#             ).values_list("event_collectors__id", "qradar_tenant__id")
-
-#             if not mappings:
-#                 return Response(
-#                     {"error": "No mappings found for the tenant."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-
-#             # Extract collector IDs and tenant IDs
-#             collector_ids, tenant_ids = zip(*mappings) if mappings else ([], [])
-
-#             # Step 2: Retrieve asset IDs based on collector IDs
-#             assets = IBMQradarAssests.objects.filter(
-#                 event_collector__id__in=collector_ids
-#             ).values_list("id", flat=True)
-
-#             if not assets:
-#                 return Response(
-#                     {"error": "No assets found for the given collectors."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-#             # Initialize filters
-#             filters = Q(assests__id__in=assets) & Q(
-#                 qradar_tenant_domain__id__in=tenant_ids
-#             )
-#             # Handle date filtering
-#             filter_type = request.query_params.get("filter_type")
-#             start_date = request.query_params.get("start_date")
-#             end_date = request.query_params.get("end_date")
-#             db_timezone = timezone.get_fixed_timezone(240)
-#             now = timezone.now().astimezone(db_timezone)
-
-#             def datetime_to_unix(dt):
-#                 return (
-#                     int(time.mktime(dt.timetuple())) * 1000
-#                 )  # Convert to milliseconds
-
-#             if start_date and end_date:
-#                 try:
-#                     start_date = timezone.make_aware(
-#                         datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
-#                     ).replace(hour=0, minute=0, second=0, microsecond=0)
-#                     end_date = timezone.make_aware(
-#                         datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
-#                     ).replace(hour=23, minute=59, second=59, microsecond=999999)
-
-#                     filters &= Q(start_date__gte=start_date) & Q(
-#                         start_date__lte=end_date
-#                     )
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
-#                     )
-
-#             elif filter_type:
-#                 try:
-#                     filter_type = FilterType(int(filter_type))
-#                     if filter_type == FilterType.TODAY:
-#                         start_date = now.replace(
-#                             hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.WEEK:
-#                         start_date = now - timedelta(days=now.weekday())
-#                         start_date = start_date.replace(
-#                             hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.MONTH:
-#                         start_date = now.replace(
-#                             day=1, hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.QUARTER:
-#                         current_quarter = (now.month - 1) // 3 + 1
-#                         quarter_start_month = 3 * current_quarter - 2
-#                         start_date = now.replace(
-#                             month=quarter_start_month,
-#                             day=1,
-#                             hour=0,
-#                             minute=0,
-#                             second=0,
-#                             microsecond=0,
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.YEAR:
-#                         start_date = now.replace(
-#                             month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.LAST_6_MONTHS:
-#                         start_date = now - timedelta(days=180)
-#                         start_date = start_date.replace(
-#                             hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.LAST_3_WEEKS:
-#                         start_date = now - timedelta(weeks=3)
-#                         start_date = start_date.replace(
-#                             hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-#                     elif filter_type == FilterType.LAST_MONTH:
-#                         # Get first day of last month
-#                         first_day_this_month = now.replace(day=1)
-#                         last_day_last_month = first_day_this_month - timedelta(days=1)
-#                         start_date = last_day_last_month.replace(
-#                             day=1, hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = last_day_last_month.replace(
-#                             hour=23, minute=59, second=59, microsecond=999999
-#                         )
-
-#                     filters &= Q(start_date__gte=start_date) & Q(
-#                         start_date__lte=end_date
-#                     )
-#                 except Exception as e:
-#                     return Response(
-#                         {"error": f"Invalid filter_type: {str(e)}"}, status=400
-#                     )
-
-#             # Step 3: Calculate today's start timestamp (00:00 UTC, May 22, 2025)
-#             now = timezone.now()
-
-#             # Start of today in Django timezone
-#             today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-
-#             # Convert to milliseconds timestamp
-#             today_start_timestamp = int(today_start.timestamp() * 1000)
-#             # Step 4: Compute statistics directly in the database
-
-#             stats = IBMQradarOffense.objects.filter(filters).aggregate(
-#                 total_offenses=Count("id"),
-#                 open_offenses=Count(
-#                     Case(When(~Q(status="CLOSED"), then=1), output_field=IntegerField())
-#                 ),
-#                 high_severity=Count(
-#                     Case(When(severity__gte=7, then=1), output_field=IntegerField())
-#                 ),
-#                 low_severity=Count(
-#                     Case(When(severity__lt=4, then=1), output_field=IntegerField())
-#                 ),
-#                 todays_offenses=Count(
-#                     Case(
-#                         When(start_time__gt=today_start_timestamp, then=1),
-#                         output_field=IntegerField(),
-#                     )
-#                 ),
-#             )
-
-#             # Step 5: Format the response
-#             response_data = {
-#                 "statistics": {
-#                     "total_offenses": stats["total_offenses"] or 0,
-#                     "open_offenses": stats["open_offenses"] or 0,
-#                     "high_severity": stats["high_severity"] or 0,
-#                     "low_severity": stats["low_severity"] or 0,
-#                     "todays_offenses": stats["todays_offenses"] or 0,
-#                 }
-#             }
-
-#             if stats["total_offenses"] == 0:
-#                 response_data[
-#                     "message"
-#                 ] = "No offenses found for the given assets and tenant."
-
-#             return Response(response_data, status=status.HTTP_200_OK)
-
-#         except Exception:
-#             return Response(
-#                 {"error": "Invalid tenant or related data not found."},
-#                 status=status.HTTP_404_NOT_FOUND,
-#             )
-#         except Exception as e:
-#             return Response(
-#                 {"error": f"An error occurred: {str(e)}"},
-#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             )
-
-
-# class OffenseDetailsByTenantAPIView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         """
-#         Retrieve QRadar offenses filtered by:
-#         - Tenant-specific assets and QRadar tenant domains
-#         - Optional query parameters: id, db_id, description, severity, status,
-#           start_date, end_date, start_time_start, start_time_end
-
-#         Query Parameters:
-#             id (int): Exact match on id
-#             db_id (int): Exact match on db_id
-#             description (str): Partial match on description (case-insensitive)
-#             severity (int): Exact match on severity
-#             status (str): Partial match on status (case-insensitive)
-#             start_date (YYYY-MM-DD): Offenses created on or after this date
-#             end_date (YYYY-MM-DD): Offenses created on or before this date
-#             start_time_start (YYYY-MM-DD): Offenses with start_time on or after this date
-#             start_time_end (YYYY-MM-DD): Offenses with start_time on or before this date
-
-#         Returns:
-#             Paginated response with count, next, previous, and results
-#         """
-#         try:
-#             # Step 1: Validate tenant
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-
-#         # Step 2: Check for active SIEM integration
-#         siem_integrations = tenant.company.integrations.filter(
-#             integration_type=IntegrationTypes.SIEM_INTEGRATION,
-#             siem_subtype=SiemSubTypes.IBM_QRADAR,
-#             status=True,
-#         )
-#         if not siem_integrations.exists():
-#             return Response(
-#                 {"error": "No active SIEM integration configured for tenant."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-
-#         try:
-#             # Step 3: Get tenant mappings
-#             mappings = TenantQradarMapping.objects.filter(
-#                 company=tenant.company
-#             ).values_list("event_collectors__id", "qradar_tenant__id")
-
-#             if not mappings:
-#                 return Response(
-#                     {"error": "No mappings found for the tenant."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-
-#             collector_ids, tenant_ids = zip(*mappings)
-
-#             # Step 4: Get assets for collectors
-#             assets = IBMQradarAssests.objects.filter(
-#                 event_collector__id__in=collector_ids
-#             ).values_list("id", flat=True)
-
-#             if not assets:
-#                 return Response(
-#                     {"error": "No assets found for the given collectors."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-
-#             # Step 5: Build filters
-#             filters = Q(assests__id__in=assets) & Q(
-#                 qradar_tenant_domain__id__in=tenant_ids
-#             )
-
-#             # ID filter
-#             id_filter = request.query_params.get("id")
-#             if id_filter:
-#                 try:
-#                     id_value = int(id_filter)
-#                     filters &= Q(id=id_value)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid id format. Must be an integer."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             # DB ID filter
-#             db_id_filter = request.query_params.get("db_id")
-#             if db_id_filter:
-#                 try:
-#                     db_id_value = int(db_id_filter)
-#                     filters &= Q(db_id=db_id_value)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid db_id format. Must be an integer."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             # Description filter
-#             description_filter = request.query_params.get("description")
-#             if description_filter:
-#                 filters &= Q(description__icontains=description_filter)
-
-#             # Severity filter
-#             severity_filter = request.query_params.get("severity")
-#             if severity_filter:
-#                 try:
-#                     severity_value = int(severity_filter)
-#                     filters &= Q(severity=severity_value)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid severity format. Must be an integer."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             # Status filter
-#             status_filter = request.query_params.get("status")
-#             if status_filter:
-#                 filters &= Q(status__icontains=status_filter)
-
-#             # Date filters
-#             date_format_filter = "%Y-%m-%d"  # e.g., "2025-06-17"
-#             start_date_str = request.query_params.get("start_date")
-#             end_date_str = request.query_params.get("end_date")
-
-#             if start_date_str:
-#                 try:
-#                     start_date = datetime.strptime(
-#                         start_date_str, date_format_filter
-#                     ).date()
-#                     filters &= Q(start_date__gte=start_date)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid start_date format. Use YYYY-MM-DD."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             if end_date_str:
-#                 try:
-#                     end_date = datetime.strptime(
-#                         end_date_str, date_format_filter
-#                     ).date()
-#                     filters &= Q(start_date__lte=end_date)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid end_date format. Use YYYY-MM-DD."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             if start_date_str and end_date_str and end_date < start_date:
-#                 return Response(
-#                     {"error": "end_date must be after or equal to start_date."},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-
-#             # Start time filters (assuming start_time is a Unix timestamp in milliseconds)
-#             start_time_start_str = request.query_params.get("start_time_start")
-#             start_time_end_str = request.query_params.get("start_time_end")
-
-#             if start_time_start_str:
-#                 try:
-#                     start_time_start_dt = datetime.strptime(
-#                         start_time_start_str, date_format_filter
-#                     )
-#                     # Convert datetime to Unix timestamp (milliseconds)
-#                     start_time_start = int(start_time_start_dt.timestamp() * 1000)
-#                     filters &= Q(start_time__gte=start_time_start)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid start_time_start format. Use YYYY-MM-DD."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             if start_time_end_str:
-#                 try:
-#                     start_time_end_dt = datetime.strptime(
-#                         start_time_end_str, date_format_filter
-#                     )
-#                     # Convert datetime to Unix timestamp (milliseconds)
-#                     start_time_end = int(start_time_end_dt.timestamp() * 1000)
-#                     filters &= Q(start_time__lte=start_time_end)
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid start_time_end format. Use YYYY-MM-DD."},
-#                         status=status.HTTP_400_BAD_REQUEST,
-#                     )
-
-#             if (
-#                 start_time_start_str
-#                 and start_time_end_str
-#                 and start_time_end < start_time_start
-#             ):
-#                 return Response(
-#                     {
-#                         "error": "start_time_end must be after or equal to start_time_start."
-#                     },
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-
-#             # Handle null start_date (exclude or include based on requirement)
-#             # Option 1: Exclude null start_date records when date filters are applied
-#             if start_date_str or end_date_str:
-#                 filters &= Q(start_date__isnull=False)
-
-#             # Step 6: Query offenses
-#             offenses = (
-#                 IBMQradarOffense.objects.filter(filters)
-#                 .values(
-#                     "id",
-#                     "db_id",
-#                     "description",
-#                     "severity",
-#                     "status",
-#                     "start_date",
-#                     "start_time",
-#                 )
-#                 .distinct()
-#                 .order_by("-start_date")
-#             )
-
-#             # Step 7: Pagination
-#             paginator = PageNumberPagination()
-#             paginator.page_size = PaginationConstants.PAGE_SIZE
-#             paginated_offenses = paginator.paginate_queryset(offenses, request)
-
-#             # Step 8: Return paginated response
-#             return paginator.get_paginated_response(
-#                 {"offenses": list(paginated_offenses)}
-#             )
-
-#         except Exception as e:
-#             logger.error(f"Error in OffenseDetailsByTenantAPIView {str(e)}")
-#             return Response(
-#                 {"error": f"{str(e)}"},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
 
 
 class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
@@ -3710,75 +2761,6 @@ class TenantAssetsEPSAPIView(APIView):
             )
 
 
-# class EPSCountValuesByDomainAPIView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-
-#         siem_integrations = tenant.company.integrations.filter(
-#             integration_type=IntegrationTypes.SIEM_INTEGRATION,
-#             siem_subtype=SiemSubTypes.IBM_QRADAR,
-#             status=True,
-#         )
-#         if not siem_integrations.exists():
-#             return Response(
-#                 {"error": "No active SEIM integration configured for tenant."},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-#         try:
-#             # Step 1: Retrieve collector IDs from TenantQradarMapping
-#             qradar_tenant_ids = TenantQradarMapping.objects.filter(
-#                 company=tenant.company
-#             ).values_list("qradar_tenant__id", flat=True)
-
-#             if not qradar_tenant_ids:
-#                 return Response(
-#                     {"error": "No mappings found for the tenant."},
-#                     status=status.HTTP_404_NOT_FOUND,
-#                 )
-
-#             eps_entries = IBMQradarEPS.objects.filter(domain__in=qradar_tenant_ids)
-#             sum_eps = eps_entries.aggregate(total_eps=Avg("eps"))["total_eps"] or 0
-#             serializer = IBMQradarEPSSerializer(
-#                 eps_entries, many=True, context={"request": request}
-#             )
-
-#             mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
-
-#             contracted_volume = mapping.contracted_volume if mapping else None
-#             contracted_volume_type = mapping.contracted_volume_type if mapping else None
-#             contracted_volume_type_display = (
-#                 mapping.get_contracted_volume_type_display() if mapping else None
-#             )
-
-#             # Step 4: Return combined response
-#             return Response(
-#                 {
-#                     "contracted_volume": contracted_volume,
-#                     "contracted_volume_type": contracted_volume_type,
-#                     "contracted_volume_type_display": contracted_volume_type_display,
-#                     "sum_eps": sum_eps,
-#                     "eps_data": serializer.data,
-#                 },
-#                 status=200,
-#             )
-#         except Exception:
-#             return Response(
-#                 {"error": "Invalid tenant or related data not found."},
-#                 status=status.HTTP_404_NOT_FOUND,
-#             )
-#         except Exception as e:
-#             return Response(
-#                 {"error": f"An error occurred: {str(e)}"},
-#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             )
-
-
 class EPSGraphAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -3905,12 +2887,6 @@ class EPSGraphAPIView(APIView):
                 # Format as "Week 1", "Week 2", etc.
                 week_num = len(eps_data) + 1
                 interval_str = f"Week {week_num}"
-            # elif filter_enum == FilterType.QUARTER:
-            #     # Format as month names
-            #     interval_str = entry["interval"].strftime("%B %Y")
-            # elif filter_enum == FilterType.YEAR:
-            #     # Format as month names
-            #     interval_str = entry["interval"].strftime("%B")
             else:
                 interval_str = entry["interval"].strftime("%Y-%m-%d")
 
@@ -4234,53 +3210,7 @@ class AlertListView(APIView):
                         end_date = now.replace(
                             hour=23, minute=59, second=59, microsecond=999999
                         )
-                    # elif filter_type == FilterType.QUARTER:
-                    #     current_quarter = (now.month - 1) // 3 + 1
-                    #     quarter_start_month = 3 * current_quarter - 2
-                    #     start_date = now.replace(
-                    #         month=quarter_start_month,
-                    #         day=1,
-                    #         hour=0,
-                    #         minute=0,
-                    #         second=0,
-                    #         microsecond=0,
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.YEAR:
-                    #     start_date = now.replace(
-                    #         month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.LAST_6_MONTHS:
-                    #     start_date = now - timedelta(days=180)
-                    #     start_date = start_date.replace(
-                    #         hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.LAST_3_WEEKS:
-                    #     start_date = now - timedelta(weeks=3)
-                    #     start_date = start_date.replace(
-                    #         hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = now.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
-                    # elif filter_type == FilterType.LAST_MONTH:
-                    #     # Get first day of last month
-                    #     first_day_this_month = now.replace(day=1)
-                    #     last_day_last_month = first_day_this_month - timedelta(days=1)
-                    #     start_date = last_day_last_month.replace(
-                    #         day=1, hour=0, minute=0, second=0, microsecond=0
-                    #     )
-                    #     end_date = last_day_last_month.replace(
-                    #         hour=23, minute=59, second=59, microsecond=999999
-                    #     )
+
                     filters_on_date &= Q(published_time__gte=start_date) & Q(
                         published_time__lte=end_date
                     )
@@ -4545,12 +3475,6 @@ class RecentIncidentsView(APIView):
                 elif filter_type == FilterType.MONTH:
                     start_date = now - timedelta(days=30)
                     filters &= Q(created__date__gte=start_date)
-                # elif filter_type == FilterType.QUARTER:
-                #     start_date = now - timedelta(days=90)
-                #     filters &= Q(created__date__gte=start_date)
-                # elif filter_type == FilterType.YEAR:
-                #     start_date = now - timedelta(days=365)
-                #     filters &= Q(created__date__gte=start_date)
                 elif filter_type == FilterType.CUSTOM_RANGE:
                     start_date_str = request.query_params.get("start_date")
                     end_date_str = request.query_params.get("end_date")
@@ -4694,21 +3618,6 @@ class AllIncidentsView(APIView):
                     elif filter_enum == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
                         end_date = now
-                    # elif filter_enum == FilterType.QUARTER:
-                    #     start_date = now - timedelta(days=90)
-                    #     end_date = now
-                    # elif filter_enum == FilterType.YEAR:
-                    #     start_date = now - timedelta(days=365)
-                    #     end_date = now
-                    # elif filter_enum == FilterType.LAST_6_MONTHS:
-                    #     start_date = now - timedelta(days=180)
-                    #     end_date = now
-                    # elif filter_enum == FilterType.LAST_3_WEEKS:
-                    #     start_date = now - timedelta(days=21)
-                    #     end_date = now
-                    # elif filter_enum == FilterType.LAST_MONTH:
-                    #     start_date = now - timedelta(days=60)
-                    #     end_date = now - timedelta(days=30)
                     elif filter_enum == FilterType.CUSTOM_RANGE:
                         start_date_str = request.query_params.get("start_date")
                         end_date_str = request.query_params.get("end_date")
@@ -4809,181 +3718,6 @@ class AllIncidentsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-# class IncidentSummaryView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         """
-#         Retrieve summary of incident counts by severity for the authenticated tenant.
-#         Filtered by:
-#         - SOAR tenant
-#         - True positive logic (ready incidents with proper fields)
-#         - optional filter_type (1–4)
-#         - optional severity (0–6)
-#         - optional priority (1-4)
-
-#         Query Parameters:
-#             filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year
-#             severity (int): Severity level between 0 and 6
-#             priority (int): Priority level (1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical)
-
-#         Returns:
-#             {
-#                 "summary": {
-#                     "Unknown": 0,
-#                     "Low": 0,
-#                     "Medium": 0,
-#                     "High": 0,
-#                     "Critical": 0,
-#                     "Major": 0,
-#                     "Minor": 0
-#                 },
-#                 "priority_summary": {
-#                     "P1 Critical": 0,
-#                     "P2 High": 0,
-#                     "P3 Medium": 0,
-#                     "P4 Low": 0
-#                 }
-#             }
-#         """
-#         try:
-#             # Step 1: Validate tenant
-#             tenant = Tenant.objects.get(tenant=request.user)
-#             soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
-
-#             if not soar_ids:
-#                 return Response({"error": "No SOAR tenants found."}, status=404)
-
-#             # Step 2: Apply true positive logic filters (same as AllIncidentsView)
-#             filters = Q(cortex_soar_tenant__in=soar_ids)
-#             filters &= (
-#                 ~Q(owner__isnull=True)
-#                 & ~Q(owner__exact="")
-#                 & Q(incident_tta__isnull=False)
-#                 & Q(incident_ttn__isnull=False)
-#                 & Q(incident_ttdn__isnull=False)
-#                 & Q(itsm_sync_status__isnull=False)
-#                 & Q(itsm_sync_status__iexact="Ready")
-#             )
-
-#             # false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
-#             #     itsm_sync_status__iexact="Done"
-#             # )
-#             # filters  = filters | false_positive_filters
-#             # Handle filter_type (same as AllIncidentsView)
-#             filter_type = request.query_params.get("filter_type")
-#             now = timezone.now()
-#             if filter_type:
-#                 try:
-#                     filter_enum = FilterType(int(filter_type))
-#                     if filter_enum == FilterType.TODAY:
-#                         filters &= Q(created__date=now)
-#                     elif filter_enum == FilterType.WEEK:
-#                         start_date = now - timedelta(days=7)
-#                         filters &= Q(created__date__gte=start_date)
-#                     elif filter_enum == FilterType.MONTH:
-#                         start_date = now - timedelta(days=30)
-#                         filters &= Q(created__date__gte=start_date)
-#                     elif filter_enum == FilterType.QUARTER:
-#                         start_date = now - timedelta(days=90)
-#                         filters &= Q(created__date__gte=start_date)
-#                     elif filter_enum == FilterType.YEAR:
-#                         start_date = now - timedelta(days=365)
-#                         filters &= Q(created__date__gte=start_date)
-#                 except Exception:
-#                     return Response(
-#                         {
-#                             "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
-#                         },
-#                         status=400,
-#                     )
-
-#             # Handle severity
-#             # severity = request.query_params.get("severity")
-#             # if severity is not None:
-#             #     try:
-#             #         severity_int = int(severity)
-#             #         if severity_int not in range(0, 7):
-#             #             raise ValueError
-#             #         filters &= Q(severity=severity_int)
-#             #     except ValueError:
-#             #         return Response(
-#             #             {"error": "Invalid severity. Must be between 0 and 6."},
-#             #             status=400,
-#             #         )
-
-#             # Handle priority (using SlaLevelChoices)
-#             priority = request.query_params.get("priority")
-#             if priority:
-#                 try:
-#                     priority_int = int(priority)
-#                     if priority_int not in [choice.value for choice in SlaLevelChoices]:
-#                         raise ValueError
-
-#                     # Get the priority string from the choices (e.g., "P1 Critical")
-#                     priority_str = SlaLevelChoices(priority_int).label
-#                     # Extract the prefix (e.g., "P1" from "P1 Critical")
-#                     priority_prefix = priority_str.split()[0]
-
-#                     filters &= Q(incident_priority__icontains=priority_prefix)
-#                 except (ValueError, KeyError):
-#                     return Response(
-#                         {
-#                             "error": "Invalid priority. Must be 1 (P4 Low), 2 (P3 Medium), 3 (P2 High), or 4 (P1 Critical)."
-#                         },
-#                         status=400,
-#                     )
-
-#             # Step 3: Apply filters and calculate summary counts
-#             incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
-
-#             # Severity summary (same as original)
-#             severity_counts = incidents_qs.values("severity").annotate(
-#                 count=Count("severity")
-#             )
-
-#             # Initialize severity summary with all severity labels set to 0
-#             severity_summary = {label: 0 for label in SEVERITY_LABELS.values()}
-
-#             # Update counts for severities present in the data
-#             for item in severity_counts:
-#                 severity_value = item["severity"]
-#                 label = SEVERITY_LABELS.get(
-#                     severity_value, f"Unknown ({severity_value})"
-#                 )
-#                 severity_summary[label] = item["count"]
-
-#             # Priority summary (using SlaLevelChoices)
-#             priority_counts = incidents_qs.values("incident_priority").annotate(
-#                 count=Count("incident_priority")
-#             )
-
-#             # Initialize priority summary with priority labels set to 0
-#             priority_summary = {choice.label: 0 for choice in SlaLevelChoices}
-
-#             # Update counts for priorities present in the data
-#             for item in priority_counts:
-#                 priority_value = item["incident_priority"]
-#                 if priority_value:
-#                     # Map priority strings to summary labels
-#                     for choice in SlaLevelChoices:
-#                         if choice.name in priority_value:  # e.g., "P1" in "P1 Critical"
-#                             priority_summary[choice.label] += item["count"]
-
-#             # Step 4: Return both summaries
-#             return Response(
-#                 {"summary": severity_summary, "priority_summary": priority_summary},
-#                 status=200,
-#             )
-
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-#         except Exception as e:
-#             logger.error("Error in IncidentSummaryView: %s", str(e))
-#             return Response({"error": str(e)}, status=500)
-
-
 class SLAIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5053,12 +3787,6 @@ class SLAIncidentsView(APIView):
                 elif filter_type_enum == FilterType.MONTH:
                     start_date = today - timedelta(days=29)
                     end_date = today
-                # elif filter_type_enum == FilterType.QUARTER:
-                #     start_date = today - timedelta(days=89)
-                #     end_date = today
-                # elif filter_type_enum == FilterType.YEAR:
-                #     start_date = today - timedelta(days=364)
-                #     end_date = today
 
             if start_date:
                 filters &= Q(created__date__gte=start_date)
@@ -5335,177 +4063,6 @@ class SLAComplianceView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-# class SLASeverityIncidentsView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         try:
-#             tenant = Tenant.objects.get(tenant=request.user)
-#             logger.debug("Tenant ID: %s, User ID: %s", tenant.id, request.user.id)
-#         except Tenant.DoesNotExist:
-#             return Response({"error": "Tenant not found."}, status=404)
-
-#         try:
-#             soar_tenants = tenant.company.soar_tenants.all()
-#             if not soar_tenants:
-#                 return Response({"error": "No SOAR tenants found."}, status=404)
-#             soar_ids = [t.id for t in soar_tenants]
-
-#             # FIXED: Use consistent filtering logic with DashboardView
-#             # Base filters for True Positives (Ready incidents with all required fields)
-#             true_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
-#                 ~Q(owner__isnull=True)
-#                 & ~Q(owner__exact="")
-#                 & Q(incident_tta__isnull=False)
-#                 & Q(incident_ttn__isnull=False)
-#                 & Q(incident_ttdn__isnull=False)
-#                 & Q(itsm_sync_status__isnull=False)
-#                 & Q(itsm_sync_status__iexact="Ready")
-#                 & Q(incident_priority__isnull=False)
-#                 & ~Q(incident_priority__exact="")
-#             )
-
-#             # Base filters for False Positives (Done incidents)
-#             false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & Q(
-#                 itsm_sync_status__iexact="Done"
-#             )
-
-#             # Total incidents = True Positives + False Positives (matches DashboardView)
-#             base_filters = true_positive_filters | false_positive_filters
-
-#             # Date filtering logic (applied on top of base filters)
-#             filter_type = request.query_params.get("filter_type")
-#             start_date = request.query_params.get("start_date")
-#             end_date = request.query_params.get("end_date")
-#             db_timezone = timezone.get_fixed_timezone(240)
-#             now = timezone.now().astimezone(db_timezone)
-
-#             # Start with base filters
-#             filters = base_filters
-
-#             if start_date and end_date:
-#                 try:
-#                     start_date = timezone.make_aware(
-#                         datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
-#                     )
-#                     end_date = timezone.make_aware(
-#                         datetime.strptime(end_date, "%Y-%m-%d")
-#                         + timedelta(days=1)
-#                         - timedelta(microseconds=1),
-#                         timezone=db_timezone,
-#                     )
-#                     filters &= Q(created__range=[start_date, end_date])
-#                 except ValueError:
-#                     return Response(
-#                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
-#                     )
-
-#             elif filter_type:
-#                 try:
-#                     filter_type = FilterType(int(filter_type))
-#                     if filter_type == FilterType.TODAY:
-#                         start_date = now.replace(
-#                             hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now
-#                         filters &= Q(created__range=[start_date, end_date])
-#                     elif filter_type == FilterType.WEEK:
-#                         start_date = now - timedelta(days=7)
-#                         start_date = start_date.replace(
-#                             hour=0, minute=0, second=0, microsecond=0
-#                         )
-#                         end_date = now
-#                         filters &= Q(created__range=[start_date, end_date])
-#                     elif filter_type == FilterType.MONTH:
-#                         start_date = now - timedelta(days=30)
-#                         end_date = now
-#                         filters &= Q(created__range=[start_date, end_date])
-#                     elif filter_type == FilterType.QUARTER:
-#                         start_date = now - timedelta(days=90)
-#                         end_date = now
-#                         filters &= Q(created__range=[start_date, end_date])
-#                     elif filter_type == FilterType.YEAR:
-#                         start_date = now - timedelta(days=365)
-#                         end_date = now
-#                         filters &= Q(created__range=[start_date, end_date])
-#                 except Exception:
-#                     return Response({"error": "Invalid filter_type."}, status=400)
-
-#             # FIXED: Apply the consistent filters (no need for additional field checks)
-#             # The base filters already ensure these fields are not null for true positives
-#             incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
-
-#             if tenant.company.is_default_sla:
-#                 sla_metrics = DefaultSoarSlaMetric.objects.all()
-#             else:
-#                 sla_metrics = SoarTenantSlaMetric.objects.filter(
-#                     soar_tenant__in=soar_tenants, company=tenant.company
-#                 )
-#             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
-
-#             # FIXED: Use exact same priority mapping as SLASeverityMetricsView
-#             priority_to_sla_map = {
-#                 "P1 Critical": SlaLevelChoices.P1,
-#                 "P2 High": SlaLevelChoices.P2,
-#                 "P3 Medium": SlaLevelChoices.P3,
-#                 "P4 Low": SlaLevelChoices.P4,
-#             }
-#             sla_to_label_map = {
-#                 SlaLevelChoices.P1: "p1_critical",
-#                 SlaLevelChoices.P2: "p2_high",
-#                 SlaLevelChoices.P3: "p3_medium",
-#                 SlaLevelChoices.P4: "p4_low",
-#             }
-
-#             severity_counts = {
-#                 "p1_critical": {"total_incidents": 0, "completed_incidents": 0},
-#                 "p2_high": {"total_incidents": 0, "completed_incidents": 0},
-#                 "p3_medium": {"total_incidents": 0, "completed_incidents": 0},
-#                 "p4_low": {"total_incidents": 0, "completed_incidents": 0},
-#             }
-
-#             for incident in incidents:
-#                 sla_level = priority_to_sla_map.get(incident.incident_priority)
-#                 if not sla_level:
-#                     continue
-
-#                 sla_metric = sla_metrics_dict.get(sla_level)
-#                 if not sla_metric:
-#                     continue
-
-#                 label = sla_to_label_map[sla_level]
-#                 created = incident.created
-#                 any_breach = False
-
-#                 # FIXED: Add null checks for safety (even though base filters should handle this)
-#                 if incident.incident_tta:
-#                     if (
-#                         incident.incident_tta - created
-#                     ).total_seconds() / 60 > sla_metric.tta_minutes:
-#                         any_breach = True
-#                 if incident.incident_ttn:
-#                     if (
-#                         incident.incident_ttn - created
-#                     ).total_seconds() / 60 > sla_metric.ttn_minutes:
-#                         any_breach = True
-#                 if incident.incident_ttdn:
-#                     if (
-#                         incident.incident_ttdn - created
-#                     ).total_seconds() / 60 > sla_metric.ttdn_minutes:
-#                         any_breach = True
-
-#                 severity_counts[label]["total_incidents"] += 1
-#                 if not any_breach:
-#                     severity_counts[label]["completed_incidents"] += 1
-
-#             return Response(severity_counts)
-
-#         except Exception as e:
-#             logger.error(f"Error in SLASeverityIncidentsView: {str(e)}")
-#             return Response({"error": str(e)}, status=500)
-
-
 class SLASeverityIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -5572,12 +4129,6 @@ class SLASeverityIncidentsView(APIView):
                     elif filter_type == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
                         filters &= Q(created__date__gte=start_date)
-                    # elif filter_type == FilterType.QUARTER:
-                    #     start_date = now - timedelta(days=90)
-                    #     filters &= Q(created__date__gte=start_date)
-                    # elif filter_type == FilterType.YEAR:
-                    #     start_date = now - timedelta(days=365)
-                    #     filters &= Q(created__date__gte=start_date)
                 except Exception:
                     return Response({"error": "Invalid filter_type."}, status=400)
 
@@ -5726,9 +4277,6 @@ class SLASeverityMetricsView(APIView):
                     "ttdn_sla_minutes": sla_metrics_dict.get(level, {}).ttdn_minutes
                     if sla_metrics_dict.get(level)
                     else None,
-                    # "tta_breached_incidents_list": [],  # Add list for breached incidents
-                    # "ttn_breached_incidents_list": [],  # Add list for breached incidents
-                    # "ttdn_breached_incidents_list": [],  # Add list for breached incidents
                 }
                 for level in [
                     SlaLevelChoices.P1,
@@ -5765,9 +4313,6 @@ class SLASeverityMetricsView(APIView):
                     response_data[level.label]["tta_successful_incidents"] += 1
                 else:
                     response_data[level.label]["tta_breached_incidents"] += 1
-                    # response_data[level.label]["tta_breached_incidents_list"].append(
-                    #     {"db_id": inc.db_id, "id": inc.id}
-                    # )
 
                 # Calculate TTN metrics
                 ttn_delta = (inc.incident_ttn - occured).total_seconds() / 60
@@ -5775,20 +4320,12 @@ class SLASeverityMetricsView(APIView):
                     response_data[level.label]["ttn_successful_incidents"] += 1
                 else:
                     response_data[level.label]["ttn_breached_incidents"] += 1
-                    # response_data[level.label]["ttn_breached_incidents_list"].append(
-                    #     {"db_id": inc.db_id, "id": inc.id}
-                    # )
-
                 # Calculate TTDN metrics
                 ttdn_delta = (inc.incident_ttdn - occured).total_seconds() / 60
                 if ttdn_delta <= sla.ttdn_minutes:
                     response_data[level.label]["ttdn_successful_incidents"] += 1
                 else:
                     response_data[level.label]["ttdn_breached_incidents"] += 1
-                    # response_data[level.label]["ttdn_breached_incidents_list"].append(
-                    #     {"db_id": inc.db_id, "id": inc.id}
-                    # )
-
             # Create the final response structure
             response = {
                 "metrics": list(response_data.values()),
@@ -6407,26 +4944,6 @@ class IncidentReportView(APIView):
                 date_threshold = now - timedelta(days=30)
                 comparison_period = now - timedelta(days=60)
                 period_name = "last month"
-            # elif filter_type == FilterType.YEAR.value:
-            #     date_threshold = now - timedelta(days=365)
-            #     comparison_period = now - timedelta(days=730)
-            #     period_name = "last year"
-            # elif filter_type == FilterType.QUARTER.value:
-            #     date_threshold = now - timedelta(weeks=13)
-            #     comparison_period = now - timedelta(weeks=26)
-            #     period_name = "last quarter"
-            # elif filter_type == FilterType.LAST_6_MONTHS.value:
-            #     date_threshold = now - timedelta(days=180)
-            #     comparison_period = now - timedelta(days=360)
-            #     period_name = "last 6 months"
-            # elif filter_type == FilterType.LAST_3_WEEKS.value:
-            #     date_threshold = now - timedelta(weeks=3)
-            #     comparison_period = now - timedelta(weeks=6)
-            #     period_name = "last 3 weeks"
-            # elif filter_type == FilterType.LAST_MONTH.value:
-            #     date_threshold = now - timedelta(days=30)
-            #     comparison_period = now - timedelta(days=60)
-            #     period_name = "last month"
             else:
                 # Default to last 3 weeks
                 date_threshold = now - timedelta(weeks=3)
@@ -6909,44 +5426,6 @@ class IncidentReportView(APIView):
                         {"timestamp": current_time.isoformat(), **priority_counts}
                     )
                     current_time = next_time
-            # elif filter_type == FilterType.YEAR.value:
-            #     start_time = date_threshold
-            #     end_time = now
-            #     current_time = start_time
-            #     while current_time <= end_time:
-            #         next_time = (
-            #             current_time.replace(day=1) + timedelta(days=32)
-            #         ).replace(day=1)
-            #         time_filter = Q(created__gte=current_time, created__lt=next_time)
-            #         counts = (
-            #             incidents.filter(time_filter)
-            #             .values("incident_priority")
-            #             .annotate(count=Count("id"))
-            #         )
-            #         priority_counts = {
-            #             "Critical": 0,
-            #             "High": 0,
-            #             "Medium": 0,
-            #             "Low": 0,
-            #             "Unknown": 0,
-            #         }
-            #         for entry in counts:
-            #             priority_key = entry["incident_priority"]
-            #             if priority_key in priority_map:
-            #                 label = (
-            #                     reverse_priority_label[priority_map[priority_key]]
-            #                     .replace("P1 ", "")
-            #                     .replace("P2 ", "")
-            #                     .replace("P3 ", "")
-            #                     .replace("P4 ", "")
-            #                 )
-            #                 priority_counts[label] = entry["count"]
-            #             else:
-            #                 priority_counts["Unknown"] = entry["count"]
-            #         incident_ticket_trend_by_priority_graph.append(
-            #             {"timestamp": current_time.isoformat(), **priority_counts}
-            #         )
-            #         current_time = next_time
             else:
                 start_time = date_threshold
                 end_time = now
@@ -7576,10 +6055,6 @@ def get_incidents_trend(filter_type, filters):
         time_trunc = TruncDay("occured")
     elif filter_type == FilterType.MONTH:
         time_trunc = TruncWeek("occured")
-    # elif filter_type == FilterType.QUARTER:
-    #     time_trunc = TruncMonth("occured")
-    # elif filter_type == FilterType.YEAR:
-    #     time_trunc = TruncMonth("occured")
     elif filter_type == FilterType.CUSTOM_RANGE:
         time_trunc = TruncDate("occured")
 
@@ -7604,10 +6079,6 @@ def get_incidents_trend(filter_type, filters):
                 continue
             week_num = len(incident_closure_trends) + 1
             interval_str = f"Week {week_num} ({entry['interval'].strftime('%Y-%m-%d')})"
-        # elif filter_type == FilterType.QUARTER:
-        #     interval_str = entry["interval"].strftime("%B %Y")
-        # elif filter_type == FilterType.YEAR:
-        #     interval_str = entry["interval"].strftime("%B")
         else:
             interval_str = entry["interval"].strftime("%Y-%m-%d")
 
@@ -7689,12 +6160,6 @@ class DetailedIncidentReport(APIView):
                 filters &= Q(created__date__gte=start_date)
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
-                filters &= Q(created__date__gte=start_date)
-                # elif filter_type == FilterType.QUARTER:
-                #     start_date = now - timedelta(days=90)
-                #     filters &= Q(created__date__gte=start_date)
-                # elif filter_type == FilterType.YEAR:
-                #     start_date = now - timedelta(days=365)
                 filters &= Q(created__date__gte=start_date)
             elif filter_type == FilterType.CUSTOM_RANGE:
                 start_date_str = request.query_params.get("start_date")
@@ -8139,12 +6604,6 @@ class ConsolidatedReport(APIView):
                 interval_str = f"Week {week_num}"
                 date_of_week = entry["interval"].strftime("%Y-%m-%d")
                 interval_str += f" ({date_of_week})"
-            # elif filter_type == FilterType.QUARTER:
-            #     # Format as month names
-            #     interval_str = entry["interval"].strftime("%B %Y")
-            # elif filter_type == FilterType.YEAR:
-            #     # Format as month names
-            #     interval_str = entry["interval"].strftime("%B")
             else:
                 interval_str = entry["interval"].strftime("%Y-%m-%d")
 
