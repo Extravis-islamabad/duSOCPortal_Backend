@@ -20,13 +20,7 @@ from django.db.models import (
     Q,
     Sum,
 )
-from django.db.models.functions import (
-    TruncDate,
-    TruncDay,
-    TruncHour,
-    TruncMonth,
-    TruncWeek,
-)
+from django.db.models.functions import TruncDate, TruncDay, TruncHour, TruncWeek
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.templatetags.static import static
@@ -4568,16 +4562,83 @@ class RecentIncidentsView(APIView):
 
             soar_ids = [t.id for t in soar_tenants]
 
-            # Step 4: Use ORM to get incident names efficiently
+            # Step 4: Build True Positive filters (same as DetailedIncidentReport)
+            filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
+
+            # Step 5: Apply date filtering (same logic as DetailedIncidentReport)
+            filter_type = request.query_params.get("filter_type", FilterType.WEEK.value)
+            if filter_type is not None:
+                try:
+                    filter_type = int(filter_type)
+                except ValueError:
+                    return Response({"error": "Invalid filter_type."}, status=400)
+
+            now = timezone.now()
+            start_date_str = request.query_params.get("start_date")
+            end_date_str = request.query_params.get("end_date")
+
+            try:
+                filter_type = FilterType(int(filter_type))
+                if filter_type == FilterType.WEEK:
+                    start_date = now - timedelta(days=7)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.MONTH:
+                    start_date = now - timedelta(days=30)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.QUARTER:
+                    start_date = now - timedelta(days=90)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.YEAR:
+                    start_date = now - timedelta(days=365)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.CUSTOM_RANGE:
+                    start_date_str = request.query_params.get("start_date")
+                    end_date_str = request.query_params.get("end_date")
+                    if start_date_str and end_date_str:
+                        try:
+                            start_date = datetime.strptime(
+                                start_date_str, "%Y-%m-%d"
+                            ).date()
+                            end_date = datetime.strptime(
+                                end_date_str, "%Y-%m-%d"
+                            ).date()
+                            filters &= Q(created__date__gte=start_date) & Q(
+                                created__date__lte=end_date
+                            )
+                            if start_date > end_date:
+                                return Response(
+                                    {
+                                        "error": "Start date cannot be greater than end date."
+                                    },
+                                    status=400,
+                                )
+                        except ValueError:
+                            return Response(
+                                {"error": "Invalid date format. Use YYYY-MM-DD."},
+                                status=400,
+                            )
+            except Exception:
+                return Response({"error": "Invalid filter_type."}, status=400)
+
+            # Step 6: Use ORM to get incident names efficiently with filters
             incident_names = (
-                DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant_id__in=soar_ids, name__isnull=False
-                )
+                DUCortexSOARIncidentFinalModel.objects.filter(filters)
+                .filter(name__isnull=False)
                 .exclude(name__exact="")
                 .values_list("name", flat=True)
             )
 
-            # Step 5: Process names and count occurrences
+            # Step 7: Process names and count occurrences
             incident_name_counts = Counter()
 
             for name in incident_names:
@@ -4587,7 +4648,7 @@ class RecentIncidentsView(APIView):
                     incident_name_counts[cleaned_name] += 1
 
             # Step 6: Get top 10 most frequent incident names
-            top_10_incident_names = incident_name_counts.most_common(10)
+            top_10_incident_names = incident_name_counts.most_common(5)
 
             # Step 7: Build simple response with only incident names and counts
             response_data = [
@@ -7555,10 +7616,10 @@ def get_incidents_trend(filter_type, filters):
         time_trunc = TruncDay("occured")
     elif filter_type == FilterType.MONTH:
         time_trunc = TruncWeek("occured")
-    elif filter_type == FilterType.QUARTER:
-        time_trunc = TruncMonth("occured")
-    elif filter_type == FilterType.YEAR:
-        time_trunc = TruncMonth("occured")
+    # elif filter_type == FilterType.QUARTER:
+    #     time_trunc = TruncMonth("occured")
+    # elif filter_type == FilterType.YEAR:
+    #     time_trunc = TruncMonth("occured")
     elif filter_type == FilterType.CUSTOM_RANGE:
         time_trunc = TruncDate("occured")
 
@@ -7583,10 +7644,10 @@ def get_incidents_trend(filter_type, filters):
                 continue
             week_num = len(incident_closure_trends) + 1
             interval_str = f"Week {week_num} ({entry['interval'].strftime('%Y-%m-%d')})"
-        elif filter_type == FilterType.QUARTER:
-            interval_str = entry["interval"].strftime("%B %Y")
-        elif filter_type == FilterType.YEAR:
-            interval_str = entry["interval"].strftime("%B")
+        # elif filter_type == FilterType.QUARTER:
+        #     interval_str = entry["interval"].strftime("%B %Y")
+        # elif filter_type == FilterType.YEAR:
+        #     interval_str = entry["interval"].strftime("%B")
         else:
             interval_str = entry["interval"].strftime("%Y-%m-%d")
 
@@ -7669,11 +7730,11 @@ class DetailedIncidentReport(APIView):
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
                 filters &= Q(created__date__gte=start_date)
-            elif filter_type == FilterType.QUARTER:
-                start_date = now - timedelta(days=90)
-                filters &= Q(created__date__gte=start_date)
-            elif filter_type == FilterType.YEAR:
-                start_date = now - timedelta(days=365)
+                # elif filter_type == FilterType.QUARTER:
+                #     start_date = now - timedelta(days=90)
+                #     filters &= Q(created__date__gte=start_date)
+                # elif filter_type == FilterType.YEAR:
+                #     start_date = now - timedelta(days=365)
                 filters &= Q(created__date__gte=start_date)
             elif filter_type == FilterType.CUSTOM_RANGE:
                 start_date_str = request.query_params.get("start_date")
@@ -7751,15 +7812,20 @@ class DetailedIncidentReport(APIView):
 
         total_incidents_raised = incident_counts
 
-        incident_data = DUCortexSOARIncidentFinalModel.objects.filter(filters).values(
-            "name", "incident_priority"
+        # Use pure ORM to get incident names and priorities efficiently
+        incident_data = (
+            DUCortexSOARIncidentFinalModel.objects.filter(filters)
+            .filter(name__isnull=False)
+            .exclude(name__exact="")
+            .values_list("name", "incident_priority")
         )
 
-        # Extract use_case and keep priority
-        use_case_priority_pairs = [
-            (extract_use_case(item["name"]), item["incident_priority"])
-            for item in incident_data
-        ]
+        # Extract use_case and keep priority using Python processing
+        use_case_priority_pairs = []
+        for name, priority in incident_data:
+            cleaned_name = extract_use_case(name)
+            if cleaned_name:  # Only include non-empty cleaned names
+                use_case_priority_pairs.append((cleaned_name, priority))
 
         # Count frequency by (use_case, incident_priority) pair
         use_case_counts = Counter(use_case_priority_pairs)
