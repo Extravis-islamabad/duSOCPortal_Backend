@@ -36,7 +36,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from weasyprint import HTML
 
 from authentication.permissions import IsAdminUser, IsTenant
-from common.constants import SEVERITY_LABELS, FilterType, PaginationConstants
+from common.constants import FilterType, PaginationConstants
 from common.modules.cyware import Cyware
 from common.utils import extract_use_case
 from integration.models import (
@@ -4831,179 +4831,179 @@ class AllIncidentsView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-class IncidentSummaryView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsTenant]
+# class IncidentSummaryView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
 
-    def get(self, request):
-        """
-        Retrieve summary of incident counts by severity for the authenticated tenant.
-        Filtered by:
-        - SOAR tenant
-        - True positive logic (ready incidents with proper fields)
-        - optional filter_type (1–4)
-        - optional severity (0–6)
-        - optional priority (1-4)
+#     def get(self, request):
+#         """
+#         Retrieve summary of incident counts by severity for the authenticated tenant.
+#         Filtered by:
+#         - SOAR tenant
+#         - True positive logic (ready incidents with proper fields)
+#         - optional filter_type (1–4)
+#         - optional severity (0–6)
+#         - optional priority (1-4)
 
-        Query Parameters:
-            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year
-            severity (int): Severity level between 0 and 6
-            priority (int): Priority level (1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical)
+#         Query Parameters:
+#             filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year
+#             severity (int): Severity level between 0 and 6
+#             priority (int): Priority level (1=P4 Low, 2=P3 Medium, 3=P2 High, 4=P1 Critical)
 
-        Returns:
-            {
-                "summary": {
-                    "Unknown": 0,
-                    "Low": 0,
-                    "Medium": 0,
-                    "High": 0,
-                    "Critical": 0,
-                    "Major": 0,
-                    "Minor": 0
-                },
-                "priority_summary": {
-                    "P1 Critical": 0,
-                    "P2 High": 0,
-                    "P3 Medium": 0,
-                    "P4 Low": 0
-                }
-            }
-        """
-        try:
-            # Step 1: Validate tenant
-            tenant = Tenant.objects.get(tenant=request.user)
-            soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
+#         Returns:
+#             {
+#                 "summary": {
+#                     "Unknown": 0,
+#                     "Low": 0,
+#                     "Medium": 0,
+#                     "High": 0,
+#                     "Critical": 0,
+#                     "Major": 0,
+#                     "Minor": 0
+#                 },
+#                 "priority_summary": {
+#                     "P1 Critical": 0,
+#                     "P2 High": 0,
+#                     "P3 Medium": 0,
+#                     "P4 Low": 0
+#                 }
+#             }
+#         """
+#         try:
+#             # Step 1: Validate tenant
+#             tenant = Tenant.objects.get(tenant=request.user)
+#             soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
 
-            if not soar_ids:
-                return Response({"error": "No SOAR tenants found."}, status=404)
+#             if not soar_ids:
+#                 return Response({"error": "No SOAR tenants found."}, status=404)
 
-            # Step 2: Apply true positive logic filters (same as AllIncidentsView)
-            filters = Q(cortex_soar_tenant__in=soar_ids)
-            filters &= (
-                ~Q(owner__isnull=True)
-                & ~Q(owner__exact="")
-                & Q(incident_tta__isnull=False)
-                & Q(incident_ttn__isnull=False)
-                & Q(incident_ttdn__isnull=False)
-                & Q(itsm_sync_status__isnull=False)
-                & Q(itsm_sync_status__iexact="Ready")
-            )
+#             # Step 2: Apply true positive logic filters (same as AllIncidentsView)
+#             filters = Q(cortex_soar_tenant__in=soar_ids)
+#             filters &= (
+#                 ~Q(owner__isnull=True)
+#                 & ~Q(owner__exact="")
+#                 & Q(incident_tta__isnull=False)
+#                 & Q(incident_ttn__isnull=False)
+#                 & Q(incident_ttdn__isnull=False)
+#                 & Q(itsm_sync_status__isnull=False)
+#                 & Q(itsm_sync_status__iexact="Ready")
+#             )
 
-            # false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
-            #     itsm_sync_status__iexact="Done"
-            # )
-            # filters  = filters | false_positive_filters
-            # Handle filter_type (same as AllIncidentsView)
-            filter_type = request.query_params.get("filter_type")
-            now = timezone.now()
-            if filter_type:
-                try:
-                    filter_enum = FilterType(int(filter_type))
-                    if filter_enum == FilterType.TODAY:
-                        filters &= Q(created__date=now)
-                    elif filter_enum == FilterType.WEEK:
-                        start_date = now - timedelta(days=7)
-                        filters &= Q(created__date__gte=start_date)
-                    elif filter_enum == FilterType.MONTH:
-                        start_date = now - timedelta(days=30)
-                        filters &= Q(created__date__gte=start_date)
-                    elif filter_enum == FilterType.QUARTER:
-                        start_date = now - timedelta(days=90)
-                        filters &= Q(created__date__gte=start_date)
-                    elif filter_enum == FilterType.YEAR:
-                        start_date = now - timedelta(days=365)
-                        filters &= Q(created__date__gte=start_date)
-                except Exception:
-                    return Response(
-                        {
-                            "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
-                        },
-                        status=400,
-                    )
+#             # false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+#             #     itsm_sync_status__iexact="Done"
+#             # )
+#             # filters  = filters | false_positive_filters
+#             # Handle filter_type (same as AllIncidentsView)
+#             filter_type = request.query_params.get("filter_type")
+#             now = timezone.now()
+#             if filter_type:
+#                 try:
+#                     filter_enum = FilterType(int(filter_type))
+#                     if filter_enum == FilterType.TODAY:
+#                         filters &= Q(created__date=now)
+#                     elif filter_enum == FilterType.WEEK:
+#                         start_date = now - timedelta(days=7)
+#                         filters &= Q(created__date__gte=start_date)
+#                     elif filter_enum == FilterType.MONTH:
+#                         start_date = now - timedelta(days=30)
+#                         filters &= Q(created__date__gte=start_date)
+#                     elif filter_enum == FilterType.QUARTER:
+#                         start_date = now - timedelta(days=90)
+#                         filters &= Q(created__date__gte=start_date)
+#                     elif filter_enum == FilterType.YEAR:
+#                         start_date = now - timedelta(days=365)
+#                         filters &= Q(created__date__gte=start_date)
+#                 except Exception:
+#                     return Response(
+#                         {
+#                             "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
+#                         },
+#                         status=400,
+#                     )
 
-            # Handle severity
-            # severity = request.query_params.get("severity")
-            # if severity is not None:
-            #     try:
-            #         severity_int = int(severity)
-            #         if severity_int not in range(0, 7):
-            #             raise ValueError
-            #         filters &= Q(severity=severity_int)
-            #     except ValueError:
-            #         return Response(
-            #             {"error": "Invalid severity. Must be between 0 and 6."},
-            #             status=400,
-            #         )
+#             # Handle severity
+#             # severity = request.query_params.get("severity")
+#             # if severity is not None:
+#             #     try:
+#             #         severity_int = int(severity)
+#             #         if severity_int not in range(0, 7):
+#             #             raise ValueError
+#             #         filters &= Q(severity=severity_int)
+#             #     except ValueError:
+#             #         return Response(
+#             #             {"error": "Invalid severity. Must be between 0 and 6."},
+#             #             status=400,
+#             #         )
 
-            # Handle priority (using SlaLevelChoices)
-            priority = request.query_params.get("priority")
-            if priority:
-                try:
-                    priority_int = int(priority)
-                    if priority_int not in [choice.value for choice in SlaLevelChoices]:
-                        raise ValueError
+#             # Handle priority (using SlaLevelChoices)
+#             priority = request.query_params.get("priority")
+#             if priority:
+#                 try:
+#                     priority_int = int(priority)
+#                     if priority_int not in [choice.value for choice in SlaLevelChoices]:
+#                         raise ValueError
 
-                    # Get the priority string from the choices (e.g., "P1 Critical")
-                    priority_str = SlaLevelChoices(priority_int).label
-                    # Extract the prefix (e.g., "P1" from "P1 Critical")
-                    priority_prefix = priority_str.split()[0]
+#                     # Get the priority string from the choices (e.g., "P1 Critical")
+#                     priority_str = SlaLevelChoices(priority_int).label
+#                     # Extract the prefix (e.g., "P1" from "P1 Critical")
+#                     priority_prefix = priority_str.split()[0]
 
-                    filters &= Q(incident_priority__icontains=priority_prefix)
-                except (ValueError, KeyError):
-                    return Response(
-                        {
-                            "error": "Invalid priority. Must be 1 (P4 Low), 2 (P3 Medium), 3 (P2 High), or 4 (P1 Critical)."
-                        },
-                        status=400,
-                    )
+#                     filters &= Q(incident_priority__icontains=priority_prefix)
+#                 except (ValueError, KeyError):
+#                     return Response(
+#                         {
+#                             "error": "Invalid priority. Must be 1 (P4 Low), 2 (P3 Medium), 3 (P2 High), or 4 (P1 Critical)."
+#                         },
+#                         status=400,
+#                     )
 
-            # Step 3: Apply filters and calculate summary counts
-            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+#             # Step 3: Apply filters and calculate summary counts
+#             incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
 
-            # Severity summary (same as original)
-            severity_counts = incidents_qs.values("severity").annotate(
-                count=Count("severity")
-            )
+#             # Severity summary (same as original)
+#             severity_counts = incidents_qs.values("severity").annotate(
+#                 count=Count("severity")
+#             )
 
-            # Initialize severity summary with all severity labels set to 0
-            severity_summary = {label: 0 for label in SEVERITY_LABELS.values()}
+#             # Initialize severity summary with all severity labels set to 0
+#             severity_summary = {label: 0 for label in SEVERITY_LABELS.values()}
 
-            # Update counts for severities present in the data
-            for item in severity_counts:
-                severity_value = item["severity"]
-                label = SEVERITY_LABELS.get(
-                    severity_value, f"Unknown ({severity_value})"
-                )
-                severity_summary[label] = item["count"]
+#             # Update counts for severities present in the data
+#             for item in severity_counts:
+#                 severity_value = item["severity"]
+#                 label = SEVERITY_LABELS.get(
+#                     severity_value, f"Unknown ({severity_value})"
+#                 )
+#                 severity_summary[label] = item["count"]
 
-            # Priority summary (using SlaLevelChoices)
-            priority_counts = incidents_qs.values("incident_priority").annotate(
-                count=Count("incident_priority")
-            )
+#             # Priority summary (using SlaLevelChoices)
+#             priority_counts = incidents_qs.values("incident_priority").annotate(
+#                 count=Count("incident_priority")
+#             )
 
-            # Initialize priority summary with priority labels set to 0
-            priority_summary = {choice.label: 0 for choice in SlaLevelChoices}
+#             # Initialize priority summary with priority labels set to 0
+#             priority_summary = {choice.label: 0 for choice in SlaLevelChoices}
 
-            # Update counts for priorities present in the data
-            for item in priority_counts:
-                priority_value = item["incident_priority"]
-                if priority_value:
-                    # Map priority strings to summary labels
-                    for choice in SlaLevelChoices:
-                        if choice.name in priority_value:  # e.g., "P1" in "P1 Critical"
-                            priority_summary[choice.label] += item["count"]
+#             # Update counts for priorities present in the data
+#             for item in priority_counts:
+#                 priority_value = item["incident_priority"]
+#                 if priority_value:
+#                     # Map priority strings to summary labels
+#                     for choice in SlaLevelChoices:
+#                         if choice.name in priority_value:  # e.g., "P1" in "P1 Critical"
+#                             priority_summary[choice.label] += item["count"]
 
-            # Step 4: Return both summaries
-            return Response(
-                {"summary": severity_summary, "priority_summary": priority_summary},
-                status=200,
-            )
+#             # Step 4: Return both summaries
+#             return Response(
+#                 {"summary": severity_summary, "priority_summary": priority_summary},
+#                 status=200,
+#             )
 
-        except Tenant.DoesNotExist:
-            return Response({"error": "Tenant not found."}, status=404)
-        except Exception as e:
-            logger.error("Error in IncidentSummaryView: %s", str(e))
-            return Response({"error": str(e)}, status=500)
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+#         except Exception as e:
+#             logger.error("Error in IncidentSummaryView: %s", str(e))
+#             return Response({"error": str(e)}, status=500)
 
 
 class SLAIncidentsView(APIView):
