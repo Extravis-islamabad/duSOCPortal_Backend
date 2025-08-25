@@ -7868,7 +7868,7 @@ class ConsolidatedReport(APIView):
     permission_classes = [IsTenant]
 
     def get(self, request):
-        from django.db.models.functions import TruncMonth, TruncWeek
+        from django.db.models.functions import TruncWeek
 
         try:
             # Step 1: Get current tenant
@@ -7925,7 +7925,9 @@ class ConsolidatedReport(APIView):
             except ValueError:
                 return Response({"error": "Invalid filter_type."}, status=400)
 
-        filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+        # Build True Positive and False Positive filters (same as AllIncidentsView and DashboardView)
+        # Base filters for True Positives (Ready incidents with all required fields)
+        true_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
             ~Q(owner__isnull=True)
             & ~Q(owner__exact="")
             & Q(incident_tta__isnull=False)
@@ -7937,57 +7939,35 @@ class ConsolidatedReport(APIView):
             & ~Q(incident_priority__exact="")
         )
 
-        # false_postive_filter = Q(itsm_sync_status__iexact="Done")
+        # Base filters for False Positives (Done incidents)
+        false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & Q(
+            itsm_sync_status__iexact="Done"
+        )
+
+        # Combine both True Positives and False Positives
+        filters = true_positive_filters | false_positive_filters
 
         now = timezone.now()
-        # start_time = end_time = None
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
 
         try:
             filter_type = FilterType(int(filter_type))
-            if filter_type == FilterType.WEEK:
+            if filter_type == FilterType.TODAY:
+                start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                filters &= Q(created__date=start_date.date())
+                start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                time_trunc = TruncHour("created_at")
+            elif filter_type == FilterType.WEEK:
                 start_date = now - timedelta(days=7)
-                filters &= Q(created__date__gte=start_date)
+                filters &= Q(created__date__gte=start_date.date())
                 start_time = now - timedelta(days=6)
                 time_trunc = TruncDay("created_at")
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
-                filters &= Q(created__date__gte=start_date)
+                filters &= Q(created__date__gte=start_date.date())
                 start_time = now - timedelta(days=28)
                 time_trunc = TruncWeek("created_at")
-            elif filter_type == FilterType.QUARTER:
-                start_date = now - timedelta(days=90)
-                filters &= Q(created__date__gte=start_date)
-                start_of_current_month = now.replace(
-                    day=1, hour=0, minute=0, second=0, microsecond=0
-                )
-                # Go back 2 months from start of current month
-                if start_of_current_month.month >= 3:
-                    start_time = start_of_current_month.replace(
-                        month=start_of_current_month.month - 2
-                    )
-                else:
-                    # Handle year boundary
-                    year = (
-                        start_of_current_month.year - 1
-                        if start_of_current_month.month <= 2
-                        else start_of_current_month.year
-                    )
-                    month = (
-                        start_of_current_month.month + 10
-                        if start_of_current_month.month <= 2
-                        else start_of_current_month.month - 2
-                    )
-                    start_time = start_of_current_month.replace(year=year, month=month)
-                time_trunc = TruncMonth("created_at")
-            elif filter_type == FilterType.YEAR:
-                start_date = now - timedelta(days=365)
-                filters &= Q(created__date__gte=start_date)
-                start_time = now.replace(
-                    month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-                )
-                time_trunc = TruncMonth("created_at")
             elif filter_type == FilterType.CUSTOM_RANGE:
                 start_date_str = request.query_params.get("start_date")
                 end_date_str = request.query_params.get("end_date")
@@ -8007,12 +7987,6 @@ class ConsolidatedReport(APIView):
                                 },
                                 status=400,
                             )
-                        time_to_check = end_date - start_date
-                        if time_to_check.days < 7:
-                            return Response(
-                                {"error": "Custom range must be at least 7 days."},
-                                status=400,
-                            )
                         start_time = datetime.strptime(start_date_str, "%Y-%m-%d")
                         end_time = datetime.strptime(
                             end_date_str, "%Y-%m-%d"
@@ -8023,8 +7997,20 @@ class ConsolidatedReport(APIView):
                             status=400,
                         )
                     time_trunc = TruncDate("created_at")
+                else:
+                    return Response(
+                        {
+                            "error": "Custom range requires both start_date and end_date."
+                        },
+                        status=400,
+                    )
             else:
-                return Response({"error": "Unsupported filter"}, status=400)
+                return Response(
+                    {
+                        "error": "Unsupported filter_type. Use 1=Today, 2=Week, 3=Month, 9=Custom Range."
+                    },
+                    status=400,
+                )
         except Exception:
             return Response({"error": "Invalid filter_type."}, status=400)
 
@@ -8203,12 +8189,12 @@ class ConsolidatedReport(APIView):
                 interval_str = f"Week {week_num}"
                 date_of_week = entry["interval"].strftime("%Y-%m-%d")
                 interval_str += f" ({date_of_week})"
-            elif filter_type == FilterType.QUARTER:
-                # Format as month names
-                interval_str = entry["interval"].strftime("%B %Y")
-            elif filter_type == FilterType.YEAR:
-                # Format as month names
-                interval_str = entry["interval"].strftime("%B")
+            # elif filter_type == FilterType.QUARTER:
+            #     # Format as month names
+            #     interval_str = entry["interval"].strftime("%B %Y")
+            # elif filter_type == FilterType.YEAR:
+            #     # Format as month names
+            #     interval_str = entry["interval"].strftime("%B")
             else:
                 interval_str = entry["interval"].strftime("%Y-%m-%d")
 
