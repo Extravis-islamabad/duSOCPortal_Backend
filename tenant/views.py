@@ -4672,7 +4672,7 @@ class AllIncidentsView(APIView):
         """
         Retrieve up to 10 incidents filtered by:
         - SOAR tenant
-        - True positive logic (ready incidents with proper fields)
+        - Both True Positives (Ready incidents with proper fields) and False Positives (Done incidents)
         - optional filter_type (1-9) using created column
         - optional incident_priority (P1, P2, P3, P4)
         - optional custom date range (requires start_date and end_date)
@@ -4704,9 +4704,9 @@ class AllIncidentsView(APIView):
             if not soar_ids:
                 return Response({"error": "No SOAR tenants found."}, status=404)
 
-            # Step 2: Apply true positive logic filters
-            filters = Q(cortex_soar_tenant__in=soar_ids)
-            filters &= (
+            # Step 2: Build True Positive and False Positive filters (same as DashboardView and IncidentsView)
+            # Base filters for True Positives (Ready incidents with all required fields)
+            true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
                 & Q(incident_tta__isnull=False)
@@ -4714,7 +4714,17 @@ class AllIncidentsView(APIView):
                 & Q(incident_ttdn__isnull=False)
                 & Q(itsm_sync_status__isnull=False)
                 & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
             )
+
+            # Base filters for False Positives (Done incidents)
+            false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+                itsm_sync_status__iexact="Done"
+            )
+
+            # Combine both True Positives and False Positives
+            filters = true_positive_filters | false_positive_filters
 
             # Step 3: Handle filter_type using created column
             filter_type = request.query_params.get("filter_type")
