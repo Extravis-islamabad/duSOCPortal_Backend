@@ -3,13 +3,7 @@ from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db.models import Avg, Count, Max, Q
-from django.db.models.functions import (
-    TruncDate,
-    TruncDay,
-    TruncHour,
-    TruncMonth,
-    TruncWeek,
-)
+from django.db.models.functions import TruncDate, TruncDay, TruncHour, TruncWeek
 from django.utils import timezone
 from loguru import logger
 from rest_framework import status
@@ -880,12 +874,12 @@ class IncidentStatusSummaryAPIView(APIView):
                 elif filter_type == FilterType.MONTH:
                     start_date = now - timedelta(days=30)
                     filters &= Q(created__date__gte=start_date)
-                elif filter_type == FilterType.QUARTER:
-                    start_date = now - timedelta(days=90)
-                    filters &= Q(created__date__gte=start_date)
-                elif filter_type == FilterType.YEAR:
-                    start_date = now - timedelta(days=365)
-                    filters &= Q(created__date__gte=start_date)
+                # elif filter_type == FilterType.QUARTER:
+                #     start_date = now - timedelta(days=90)
+                #     filters &= Q(created__date__gte=start_date)
+                # elif filter_type == FilterType.YEAR:
+                #     start_date = now - timedelta(days=365)
+                #     filters &= Q(created__date__gte=start_date)
             except Exception as e:
                 logger.error(f"Error applying date filter: {str(e)}")
 
@@ -1259,12 +1253,12 @@ class TenantSLAMatrixAPIView(APIView):
                 elif filter_type == FilterType.MONTH:
                     start_date = now - timedelta(days=30)
                     filters &= Q(created__date__gte=start_date)
-                elif filter_type == FilterType.QUARTER:
-                    start_date = now - timedelta(days=90)
-                    filters &= Q(created__date__gte=start_date)
-                elif filter_type == FilterType.YEAR:
-                    start_date = now - timedelta(days=365)
-                    filters &= Q(created__date__gte=start_date)
+                # elif filter_type == FilterType.QUARTER:
+                #     start_date = now - timedelta(days=90)
+                #     filters &= Q(created__date__gte=start_date)
+                # elif filter_type == FilterType.YEAR:
+                #     start_date = now - timedelta(days=365)
+                #     filters &= Q(created__date__gte=start_date)
             except Exception as e:
                 logger.error(f"Error applying date filter: {str(e)}")
 
@@ -1450,12 +1444,12 @@ class IncidentCompletionStatusAPIView(APIView):
                 elif filter_type == FilterType.MONTH:
                     start_date = now - timedelta(days=30)
                     filters &= Q(created__date__gte=start_date)
-                elif filter_type == FilterType.QUARTER:
-                    start_date = now - timedelta(days=90)
-                    filters &= Q(created__date__gte=start_date)
-                elif filter_type == FilterType.YEAR:
-                    start_date = now - timedelta(days=365)
-                    filters &= Q(created__date__gte=start_date)
+                # elif filter_type == FilterType.QUARTER:
+                #     start_date = now - timedelta(days=90)
+                #     filters &= Q(created__date__gte=start_date)
+                # elif filter_type == FilterType.YEAR:
+                #     start_date = now - timedelta(days=365)
+                #     filters &= Q(created__date__gte=start_date)
             except Exception as e:
                 logger.error(f"Error applying date filters: {str(e)}")
                 # Don't fail the request, just ignore the filter
@@ -1874,34 +1868,34 @@ class EPSUtilizationAPIView(APIView):
             start_time = now - timedelta(days=28)
             time_trunc = TruncWeek("created_at")
             end_time = None
-        elif filter_enum == FilterType.QUARTER:
-            start_of_current_month = now.replace(
-                day=1, hour=0, minute=0, second=0, microsecond=0
-            )
-            if start_of_current_month.month >= 3:
-                start_time = start_of_current_month.replace(
-                    month=start_of_current_month.month - 2
-                )
-            else:
-                year = (
-                    start_of_current_month.year - 1
-                    if start_of_current_month.month <= 2
-                    else start_of_current_month.year
-                )
-                month = (
-                    start_of_current_month.month + 10
-                    if start_of_current_month.month <= 2
-                    else start_of_current_month.month - 2
-                )
-                start_time = start_of_current_month.replace(year=year, month=month)
-            time_trunc = TruncMonth("created_at")
-            end_time = None
-        elif filter_enum == FilterType.YEAR:
-            start_time = now.replace(
-                month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-            )
-            time_trunc = TruncMonth("created_at")
-            end_time = None
+        # elif filter_enum == FilterType.QUARTER:
+        #     start_of_current_month = now.replace(
+        #         day=1, hour=0, minute=0, second=0, microsecond=0
+        #     )
+        #     if start_of_current_month.month >= 3:
+        #         start_time = start_of_current_month.replace(
+        #             month=start_of_current_month.month - 2
+        #         )
+        #     else:
+        #         year = (
+        #             start_of_current_month.year - 1
+        #             if start_of_current_month.month <= 2
+        #             else start_of_current_month.year
+        #         )
+        #         month = (
+        #             start_of_current_month.month + 10
+        #             if start_of_current_month.month <= 2
+        #             else start_of_current_month.month - 2
+        #         )
+        #         start_time = start_of_current_month.replace(year=year, month=month)
+        #     time_trunc = TruncMonth("created_at")
+        #     end_time = None
+        # elif filter_enum == FilterType.YEAR:
+        #     start_time = now.replace(
+        #         month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        #     )
+        #     time_trunc = TruncMonth("created_at")
+        #     end_time = None
         elif filter_enum == FilterType.CUSTOM_RANGE:
             start_str = request.query_params.get("start_date")
             end_str = request.query_params.get("end_date")
@@ -1965,10 +1959,10 @@ class EPSUtilizationAPIView(APIView):
             elif filter_enum == FilterType.MONTH:
                 week_num = len(eps_data) + 1
                 interval_str = f"Week {week_num}"
-            elif filter_enum == FilterType.QUARTER:
-                interval_str = entry["interval"].strftime("%B %Y")
-            elif filter_enum == FilterType.YEAR:
-                interval_str = entry["interval"].strftime("%B")
+            # elif filter_enum == FilterType.QUARTER:
+            #     interval_str = entry["interval"].strftime("%B %Y")
+            # elif filter_enum == FilterType.YEAR:
+            #     interval_str = entry["interval"].strftime("%B")
             else:
                 interval_str = entry["interval"].strftime("%Y-%m-%d")
 

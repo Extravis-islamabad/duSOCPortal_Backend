@@ -1165,53 +1165,53 @@ class TypeDistributionView(APIView):
                         end_date = now.replace(
                             hour=23, minute=59, second=59, microsecond=999999
                         )
-                    elif filter_type == FilterType.QUARTER:
-                        current_quarter = (now.month - 1) // 3 + 1
-                        quarter_start_month = 3 * current_quarter - 2
-                        start_date = now.replace(
-                            month=quarter_start_month,
-                            day=1,
-                            hour=0,
-                            minute=0,
-                            second=0,
-                            microsecond=0,
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.YEAR:
-                        start_date = now.replace(
-                            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.LAST_6_MONTHS:
-                        start_date = now - timedelta(days=180)
-                        start_date = start_date.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.LAST_3_WEEKS:
-                        start_date = now - timedelta(weeks=3)
-                        start_date = start_date.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.LAST_MONTH:
-                        # Get first day of last month
-                        first_day_this_month = now.replace(day=1)
-                        last_day_last_month = first_day_this_month - timedelta(days=1)
-                        start_date = last_day_last_month.replace(
-                            day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = last_day_last_month.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
+                    # elif filter_type == FilterType.QUARTER:
+                    #     current_quarter = (now.month - 1) // 3 + 1
+                    #     quarter_start_month = 3 * current_quarter - 2
+                    #     start_date = now.replace(
+                    #         month=quarter_start_month,
+                    #         day=1,
+                    #         hour=0,
+                    #         minute=0,
+                    #         second=0,
+                    #         microsecond=0,
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.YEAR:
+                    #     start_date = now.replace(
+                    #         month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.LAST_6_MONTHS:
+                    #     start_date = now - timedelta(days=180)
+                    #     start_date = start_date.replace(
+                    #         hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.LAST_3_WEEKS:
+                    #     start_date = now - timedelta(weeks=3)
+                    #     start_date = start_date.replace(
+                    #         hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.LAST_MONTH:
+                    #     # Get first day of last month
+                    #     first_day_this_month = now.replace(day=1)
+                    #     last_day_last_month = first_day_this_month - timedelta(days=1)
+                    #     start_date = last_day_last_month.replace(
+                    #         day=1, hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = last_day_last_month.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
                     filters &= Q(occured__gte=start_date) & Q(occured__lte=end_date)
 
                 except Exception as e:
@@ -3385,53 +3385,53 @@ class OffenseCategoriesAPIView(APIView):
                         end_date = now.replace(
                             hour=23, minute=59, second=59, microsecond=999999
                         )
-                    elif filter_type == FilterType.QUARTER:
-                        current_quarter = (now.month - 1) // 3 + 1
-                        quarter_start_month = 3 * current_quarter - 2
-                        start_date = now.replace(
-                            month=quarter_start_month,
-                            day=1,
-                            hour=0,
-                            minute=0,
-                            second=0,
-                            microsecond=0,
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.YEAR:
-                        start_date = now.replace(
-                            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.LAST_6_MONTHS:
-                        start_date = now - timedelta(days=180)
-                        start_date = start_date.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.LAST_3_WEEKS:
-                        start_date = now - timedelta(weeks=3)
-                        start_date = start_date.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.LAST_MONTH:
-                        # Get first day of last month
-                        first_day_this_month = now.replace(day=1)
-                        last_day_last_month = first_day_this_month - timedelta(days=1)
-                        start_date = last_day_last_month.replace(
-                            day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = last_day_last_month.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
+                    # elif filter_type == FilterType.QUARTER:
+                    #     current_quarter = (now.month - 1) // 3 + 1
+                    #     quarter_start_month = 3 * current_quarter - 2
+                    #     start_date = now.replace(
+                    #         month=quarter_start_month,
+                    #         day=1,
+                    #         hour=0,
+                    #         minute=0,
+                    #         second=0,
+                    #         microsecond=0,
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.YEAR:
+                    #     start_date = now.replace(
+                    #         month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.LAST_6_MONTHS:
+                    #     start_date = now - timedelta(days=180)
+                    #     start_date = start_date.replace(
+                    #         hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.LAST_3_WEEKS:
+                    #     start_date = now - timedelta(weeks=3)
+                    #     start_date = start_date.replace(
+                    #         hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.LAST_MONTH:
+                    #     # Get first day of last month
+                    #     first_day_this_month = now.replace(day=1)
+                    #     last_day_last_month = first_day_this_month - timedelta(days=1)
+                    #     start_date = last_day_last_month.replace(
+                    #         day=1, hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = last_day_last_month.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
 
                     filters &= Q(start_time__gte=datetime_to_unix(start_date)) & Q(
                         start_time__lte=datetime_to_unix(end_date)
@@ -4256,53 +4256,53 @@ class AlertListView(APIView):
                         end_date = now.replace(
                             hour=23, minute=59, second=59, microsecond=999999
                         )
-                    elif filter_type == FilterType.QUARTER:
-                        current_quarter = (now.month - 1) // 3 + 1
-                        quarter_start_month = 3 * current_quarter - 2
-                        start_date = now.replace(
-                            month=quarter_start_month,
-                            day=1,
-                            hour=0,
-                            minute=0,
-                            second=0,
-                            microsecond=0,
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.YEAR:
-                        start_date = now.replace(
-                            month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.LAST_6_MONTHS:
-                        start_date = now - timedelta(days=180)
-                        start_date = start_date.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.LAST_3_WEEKS:
-                        start_date = now - timedelta(weeks=3)
-                        start_date = start_date.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    elif filter_type == FilterType.LAST_MONTH:
-                        # Get first day of last month
-                        first_day_this_month = now.replace(day=1)
-                        last_day_last_month = first_day_this_month - timedelta(days=1)
-                        start_date = last_day_last_month.replace(
-                            day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = last_day_last_month.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
+                    # elif filter_type == FilterType.QUARTER:
+                    #     current_quarter = (now.month - 1) // 3 + 1
+                    #     quarter_start_month = 3 * current_quarter - 2
+                    #     start_date = now.replace(
+                    #         month=quarter_start_month,
+                    #         day=1,
+                    #         hour=0,
+                    #         minute=0,
+                    #         second=0,
+                    #         microsecond=0,
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.YEAR:
+                    #     start_date = now.replace(
+                    #         month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.LAST_6_MONTHS:
+                    #     start_date = now - timedelta(days=180)
+                    #     start_date = start_date.replace(
+                    #         hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.LAST_3_WEEKS:
+                    #     start_date = now - timedelta(weeks=3)
+                    #     start_date = start_date.replace(
+                    #         hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = now.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
+                    # elif filter_type == FilterType.LAST_MONTH:
+                    #     # Get first day of last month
+                    #     first_day_this_month = now.replace(day=1)
+                    #     last_day_last_month = first_day_this_month - timedelta(days=1)
+                    #     start_date = last_day_last_month.replace(
+                    #         day=1, hour=0, minute=0, second=0, microsecond=0
+                    #     )
+                    #     end_date = last_day_last_month.replace(
+                    #         hour=23, minute=59, second=59, microsecond=999999
+                    #     )
                     filters_on_date &= Q(published_time__gte=start_date) & Q(
                         published_time__lte=end_date
                     )
@@ -4716,21 +4716,21 @@ class AllIncidentsView(APIView):
                     elif filter_enum == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
                         end_date = now
-                    elif filter_enum == FilterType.QUARTER:
-                        start_date = now - timedelta(days=90)
-                        end_date = now
-                    elif filter_enum == FilterType.YEAR:
-                        start_date = now - timedelta(days=365)
-                        end_date = now
-                    elif filter_enum == FilterType.LAST_6_MONTHS:
-                        start_date = now - timedelta(days=180)
-                        end_date = now
-                    elif filter_enum == FilterType.LAST_3_WEEKS:
-                        start_date = now - timedelta(days=21)
-                        end_date = now
-                    elif filter_enum == FilterType.LAST_MONTH:
-                        start_date = now - timedelta(days=60)
-                        end_date = now - timedelta(days=30)
+                    # elif filter_enum == FilterType.QUARTER:
+                    #     start_date = now - timedelta(days=90)
+                    #     end_date = now
+                    # elif filter_enum == FilterType.YEAR:
+                    #     start_date = now - timedelta(days=365)
+                    #     end_date = now
+                    # elif filter_enum == FilterType.LAST_6_MONTHS:
+                    #     start_date = now - timedelta(days=180)
+                    #     end_date = now
+                    # elif filter_enum == FilterType.LAST_3_WEEKS:
+                    #     start_date = now - timedelta(days=21)
+                    #     end_date = now
+                    # elif filter_enum == FilterType.LAST_MONTH:
+                    #     start_date = now - timedelta(days=60)
+                    #     end_date = now - timedelta(days=30)
                     elif filter_enum == FilterType.CUSTOM_RANGE:
                         start_date_str = request.query_params.get("start_date")
                         end_date_str = request.query_params.get("end_date")
@@ -6429,26 +6429,26 @@ class IncidentReportView(APIView):
                 date_threshold = now - timedelta(days=30)
                 comparison_period = now - timedelta(days=60)
                 period_name = "last month"
-            elif filter_type == FilterType.YEAR.value:
-                date_threshold = now - timedelta(days=365)
-                comparison_period = now - timedelta(days=730)
-                period_name = "last year"
-            elif filter_type == FilterType.QUARTER.value:
-                date_threshold = now - timedelta(weeks=13)
-                comparison_period = now - timedelta(weeks=26)
-                period_name = "last quarter"
-            elif filter_type == FilterType.LAST_6_MONTHS.value:
-                date_threshold = now - timedelta(days=180)
-                comparison_period = now - timedelta(days=360)
-                period_name = "last 6 months"
-            elif filter_type == FilterType.LAST_3_WEEKS.value:
-                date_threshold = now - timedelta(weeks=3)
-                comparison_period = now - timedelta(weeks=6)
-                period_name = "last 3 weeks"
-            elif filter_type == FilterType.LAST_MONTH.value:
-                date_threshold = now - timedelta(days=30)
-                comparison_period = now - timedelta(days=60)
-                period_name = "last month"
+            # elif filter_type == FilterType.YEAR.value:
+            #     date_threshold = now - timedelta(days=365)
+            #     comparison_period = now - timedelta(days=730)
+            #     period_name = "last year"
+            # elif filter_type == FilterType.QUARTER.value:
+            #     date_threshold = now - timedelta(weeks=13)
+            #     comparison_period = now - timedelta(weeks=26)
+            #     period_name = "last quarter"
+            # elif filter_type == FilterType.LAST_6_MONTHS.value:
+            #     date_threshold = now - timedelta(days=180)
+            #     comparison_period = now - timedelta(days=360)
+            #     period_name = "last 6 months"
+            # elif filter_type == FilterType.LAST_3_WEEKS.value:
+            #     date_threshold = now - timedelta(weeks=3)
+            #     comparison_period = now - timedelta(weeks=6)
+            #     period_name = "last 3 weeks"
+            # elif filter_type == FilterType.LAST_MONTH.value:
+            #     date_threshold = now - timedelta(days=30)
+            #     comparison_period = now - timedelta(days=60)
+            #     period_name = "last month"
             else:
                 # Default to last 3 weeks
                 date_threshold = now - timedelta(weeks=3)
@@ -6852,7 +6852,7 @@ class IncidentReportView(APIView):
                         {"timestamp": current_time.isoformat(), **priority_counts}
                     )
                     current_time = next_time
-            elif filter_type in [FilterType.WEEK.value, FilterType.LAST_3_WEEKS.value]:
+            elif filter_type in [FilterType.WEEK.value]:
                 start_time = date_threshold
                 end_time = now
                 delta = timedelta(days=1)
@@ -6891,9 +6891,9 @@ class IncidentReportView(APIView):
                     current_time = next_time
             elif filter_type in [
                 FilterType.MONTH.value,
-                FilterType.LAST_MONTH.value,
-                FilterType.QUARTER.value,
-                FilterType.LAST_6_MONTHS.value,
+                # FilterType.LAST_MONTH.value,
+                # FilterType.QUARTER.value,
+                # FilterType.LAST_6_MONTHS.value,
             ]:
                 start_time = date_threshold
                 end_time = now
@@ -6931,44 +6931,44 @@ class IncidentReportView(APIView):
                         {"timestamp": current_time.isoformat(), **priority_counts}
                     )
                     current_time = next_time
-            elif filter_type == FilterType.YEAR.value:
-                start_time = date_threshold
-                end_time = now
-                current_time = start_time
-                while current_time <= end_time:
-                    next_time = (
-                        current_time.replace(day=1) + timedelta(days=32)
-                    ).replace(day=1)
-                    time_filter = Q(created__gte=current_time, created__lt=next_time)
-                    counts = (
-                        incidents.filter(time_filter)
-                        .values("incident_priority")
-                        .annotate(count=Count("id"))
-                    )
-                    priority_counts = {
-                        "Critical": 0,
-                        "High": 0,
-                        "Medium": 0,
-                        "Low": 0,
-                        "Unknown": 0,
-                    }
-                    for entry in counts:
-                        priority_key = entry["incident_priority"]
-                        if priority_key in priority_map:
-                            label = (
-                                reverse_priority_label[priority_map[priority_key]]
-                                .replace("P1 ", "")
-                                .replace("P2 ", "")
-                                .replace("P3 ", "")
-                                .replace("P4 ", "")
-                            )
-                            priority_counts[label] = entry["count"]
-                        else:
-                            priority_counts["Unknown"] = entry["count"]
-                    incident_ticket_trend_by_priority_graph.append(
-                        {"timestamp": current_time.isoformat(), **priority_counts}
-                    )
-                    current_time = next_time
+            # elif filter_type == FilterType.YEAR.value:
+            #     start_time = date_threshold
+            #     end_time = now
+            #     current_time = start_time
+            #     while current_time <= end_time:
+            #         next_time = (
+            #             current_time.replace(day=1) + timedelta(days=32)
+            #         ).replace(day=1)
+            #         time_filter = Q(created__gte=current_time, created__lt=next_time)
+            #         counts = (
+            #             incidents.filter(time_filter)
+            #             .values("incident_priority")
+            #             .annotate(count=Count("id"))
+            #         )
+            #         priority_counts = {
+            #             "Critical": 0,
+            #             "High": 0,
+            #             "Medium": 0,
+            #             "Low": 0,
+            #             "Unknown": 0,
+            #         }
+            #         for entry in counts:
+            #             priority_key = entry["incident_priority"]
+            #             if priority_key in priority_map:
+            #                 label = (
+            #                     reverse_priority_label[priority_map[priority_key]]
+            #                     .replace("P1 ", "")
+            #                     .replace("P2 ", "")
+            #                     .replace("P3 ", "")
+            #                     .replace("P4 ", "")
+            #                 )
+            #                 priority_counts[label] = entry["count"]
+            #             else:
+            #                 priority_counts["Unknown"] = entry["count"]
+            #         incident_ticket_trend_by_priority_graph.append(
+            #             {"timestamp": current_time.isoformat(), **priority_counts}
+            #         )
+            #         current_time = next_time
             else:
                 start_time = date_threshold
                 end_time = now
