@@ -4529,20 +4529,13 @@ class RecentIncidentsView(APIView):
 
     def get(self, request):
         """
-        Retrieve two lists: up to 5 incidents with status='1' (Open) and up to 5 incidents
-        with status='2' (Closed), ordered by created date (descending), filtered by SOAR
-        tenant IDs and a time period. Only accessible by authenticated users with valid
-        tenant permissions and active SOAR integration.
+        Retrieve the top 10 incident names based on cleaned incident name occurrence frequency.
 
-        Query Parameters:
-            filter_type (int): 1=Today, 2=Week, 3=Month, 4=Year, 5=Quarter,
-                              6=Last 6 months, 7=Last 3 weeks, 8=Last month,
-                              9=Custom range (requires start_date and end_date)
-            start_date (str): Required for CUSTOM_RANGE (format: YYYY-MM-DD)
-            end_date (str): Required for CUSTOM_RANGE (format: YYYY-MM-DD)
+        Uses Django ORM to get incident names, then processes them to remove:
+        - Leading numbers and spaces (e.g., "31607 ")
+        - Leading organization codes (e.g., "AEP-XDR ", "ADGM-")
 
-        Returns:
-            Dictionary with two lists: 'open' (status='1') and 'closed' (status='2')
+        Returns only incident names and their occurrence counts.
         """
         try:
             # Step 1: Validate tenant
@@ -4575,104 +4568,34 @@ class RecentIncidentsView(APIView):
 
             soar_ids = [t.id for t in soar_tenants]
 
-            # Step 4: Get filter_type from query params (default to MONTH)
-            filter_type_param = request.query_params.get("filter_type", "3")
-            try:
-                filter_type_value = int(filter_type_param)
-                filter_type = FilterType(filter_type_value)
-            except (ValueError, KeyError):
-                return Response(
-                    {"error": "Invalid filter_type. Use 1-9 as per FilterType enum."},
-                    status=status.HTTP_400_BAD_REQUEST,
+            # Step 4: Use ORM to get incident names efficiently
+            incident_names = (
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant_id__in=soar_ids, name__isnull=False
                 )
-
-            # Step 5: Determine date filter
-            now = timezone.now()
-            start_date = None
-            end_date = None
-
-            if filter_type == FilterType.TODAY:
-                start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            elif filter_type == FilterType.WEEK:
-                start_date = now - timedelta(days=7)
-            elif filter_type == FilterType.MONTH:
-                start_date = now - timedelta(days=30)
-            elif filter_type == FilterType.YEAR:
-                start_date = now - timedelta(days=365)
-            elif filter_type == FilterType.QUARTER:
-                start_date = now - timedelta(days=90)
-            elif filter_type == FilterType.LAST_6_MONTHS:
-                start_date = now - timedelta(days=180)
-            elif filter_type == FilterType.LAST_3_WEEKS:
-                start_date = now - timedelta(days=21)
-            elif filter_type == FilterType.LAST_MONTH:
-                start_date = now - timedelta(days=30)
-                end_date = now - timedelta(days=60)  # Last month only
-            elif filter_type == FilterType.CUSTOM_RANGE:
-                start_date_str = request.query_params.get("start_date")
-                end_date_str = request.query_params.get("end_date")
-
-                if not start_date_str or not end_date_str:
-                    return Response(
-                        {
-                            "error": "Custom range requires both start_date and end_date."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                try:
-                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-                    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-
-                    # Ensure end_date is not before start_date
-                    if end_date < start_date:
-                        return Response(
-                            {"error": "end_date cannot be before start_date."},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-
-                    # Convert to datetime at start of day
-                    start_date = datetime.combine(start_date, datetime.min.time())
-                    end_date = datetime.combine(end_date, datetime.min.time())
-
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid date format. Use YYYY-MM-DD."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            # For all cases except CUSTOM_RANGE, end_date is current time
-            if filter_type != FilterType.CUSTOM_RANGE and not end_date:
-                end_date = now
-
-            # Step 6: Build the base query
-            base_query = Q(cortex_soar_tenant_id__in=soar_ids)
-
-            # Add date filtering
-            if start_date:
-                base_query &= Q(created__gte=start_date)
-            if end_date:
-                base_query &= Q(created__lte=end_date)
-
-            # Step 7: Query for incidents with status='1' (Open)
-            open_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                base_query & Q(status="1")
-            ).order_by("-created")[:5]
-
-            # Step 8: Query for incidents with status='2' (Closed)
-            closed_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                base_query & Q(status="2")
-            ).order_by("-created")[:5]
-
-            # Step 9: Serialize both sets of incidents
-            open_serializer = RecentIncidentsSerializer(open_incidents, many=True)
-            closed_serializer = RecentIncidentsSerializer(closed_incidents, many=True)
-
-            # Step 10: Return response with two lists
-            return Response(
-                {"open": open_serializer.data, "closed": closed_serializer.data},
-                status=status.HTTP_200_OK,
+                .exclude(name__exact="")
+                .values_list("name", flat=True)
             )
+
+            # Step 5: Process names and count occurrences
+            incident_name_counts = Counter()
+
+            for name in incident_names:
+                # Clean the incident name using the same logic as extract_use_case
+                cleaned_name = extract_use_case(name)
+                if cleaned_name:  # Only count non-empty cleaned names
+                    incident_name_counts[cleaned_name] += 1
+
+            # Step 6: Get top 10 most frequent incident names
+            top_10_incident_names = incident_name_counts.most_common(10)
+
+            # Step 7: Build simple response with only incident names and counts
+            response_data = [
+                {"incident_name": incident_name, "occurrence_count": count}
+                for incident_name, count in top_10_incident_names
+            ]
+
+            return Response(response_data, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response(
