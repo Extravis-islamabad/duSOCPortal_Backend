@@ -3806,13 +3806,26 @@ class EPSGraphAPIView(APIView):
     permission_classes = [IsTenant]
 
     def get(self, request):
-        from django.db.models.functions import TruncMonth, TruncWeek
+        from django.db.models.functions import TruncWeek
         from pytz import timezone as pytz_timezone
 
         try:
             filter_value = int(
                 request.query_params.get("filter_type", FilterType.TODAY.value)
             )
+            # Validate that only supported filter types are used
+            if filter_value not in [
+                FilterType.TODAY.value,
+                FilterType.WEEK.value,
+                FilterType.MONTH.value,
+                FilterType.CUSTOM_RANGE.value,
+            ]:
+                return Response(
+                    {
+                        "error": "Unsupported filter_type. Only supports TODAY (1), WEEK (2), MONTH (3), and CUSTOM_RANGE (9)."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             filter_enum = FilterType(filter_value)
         except (ValueError, KeyError):
             return Response(
@@ -3845,50 +3858,6 @@ class EPSGraphAPIView(APIView):
             # Get start of current month and show 4 weeks (28 days back from now)
             start_time = now - timedelta(days=28)
             time_trunc = TruncWeek("created_at")  # Group by week to get 4 data points
-        elif filter_enum == FilterType.QUARTER:
-            # Show 3 full months - current month and 2 previous months
-            # If current month is July, show May, June, July
-            start_of_current_month = now.replace(
-                day=1, hour=0, minute=0, second=0, microsecond=0
-            )
-            # Go back 2 months from start of current month
-            if start_of_current_month.month >= 3:
-                start_time = start_of_current_month.replace(
-                    month=start_of_current_month.month - 2
-                )
-            else:
-                # Handle year boundary
-                year = (
-                    start_of_current_month.year - 1
-                    if start_of_current_month.month <= 2
-                    else start_of_current_month.year
-                )
-                month = (
-                    start_of_current_month.month + 10
-                    if start_of_current_month.month <= 2
-                    else start_of_current_month.month - 2
-                )
-                start_time = start_of_current_month.replace(year=year, month=month)
-            time_trunc = TruncMonth("created_at")  # Group by month to get 3 data points
-        elif filter_enum == FilterType.YEAR:
-            # Show 12 months - start from beginning of current year
-            start_time = now.replace(
-                month=1, day=1, hour=0, minute=0, second=0, microsecond=0
-            )
-            time_trunc = TruncMonth(
-                "created_at"
-            )  # Group by month to get 12 data points
-        elif filter_enum == FilterType.LAST_6_MONTHS:
-            start_time = now - timedelta(days=182)
-            time_trunc = TruncDate("created_at")
-        elif filter_enum == FilterType.LAST_3_WEEKS:
-            start_time = now - timedelta(weeks=3)
-            time_trunc = TruncDate("created_at")
-        elif filter_enum == FilterType.LAST_MONTH:
-            first_day_this_month = now.replace(day=1)
-            last_month = first_day_this_month - timedelta(days=1)
-            start_time = last_month.replace(day=1)
-            time_trunc = TruncDate("created_at")
         elif filter_enum == FilterType.CUSTOM_RANGE:
             start_str = request.query_params.get("start_date")
             end_str = request.query_params.get("end_date")
@@ -3908,7 +3877,10 @@ class EPSGraphAPIView(APIView):
             time_trunc = TruncDate("created_at")
         else:
             return Response(
-                {"error": "Unsupported filter."}, status=status.HTTP_400_BAD_REQUEST
+                {
+                    "error": "Unsupported filter_type. Only supports TODAY (1), WEEK (2), MONTH (3), and CUSTOM_RANGE (9)."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Domain mapping
@@ -3955,12 +3927,12 @@ class EPSGraphAPIView(APIView):
                 # Format as "Week 1", "Week 2", etc.
                 week_num = len(eps_data) + 1
                 interval_str = f"Week {week_num}"
-            elif filter_enum == FilterType.QUARTER:
-                # Format as month names
-                interval_str = entry["interval"].strftime("%B %Y")
-            elif filter_enum == FilterType.YEAR:
-                # Format as month names
-                interval_str = entry["interval"].strftime("%B")
+            # elif filter_enum == FilterType.QUARTER:
+            #     # Format as month names
+            #     interval_str = entry["interval"].strftime("%B %Y")
+            # elif filter_enum == FilterType.YEAR:
+            #     # Format as month names
+            #     interval_str = entry["interval"].strftime("%B")
             else:
                 interval_str = entry["interval"].strftime("%Y-%m-%d")
 
