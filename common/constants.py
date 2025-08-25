@@ -402,11 +402,11 @@ class FilterType(Enum):
     TODAY = 1
     WEEK = 2
     MONTH = 3
-    YEAR = 4
-    QUARTER = 5
-    LAST_6_MONTHS = 6  # Represents "Last 6 months"
-    LAST_3_WEEKS = 7  # Represents "Last 3 weeks"
-    LAST_MONTH = 8  # Repre
+    # YEAR = 4
+    # QUARTER = 5
+    # LAST_6_MONTHS = 6  # Represents "Last 6 months"
+    # LAST_3_WEEKS = 7  # Represents "Last 3 weeks"
+    # LAST_MONTH = 8  # Repre
     CUSTOM_RANGE = 9
 
 

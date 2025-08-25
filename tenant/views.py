@@ -1496,17 +1496,17 @@ class DashboardView(APIView):
                 start_date = now - timedelta(days=7)
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
-            elif filter_type == FilterType.YEAR:
-                start_date = now - timedelta(days=365)
-            elif filter_type == FilterType.QUARTER:
-                start_date = now - timedelta(days=90)
-            elif filter_type == FilterType.LAST_6_MONTHS:
-                start_date = now - timedelta(days=180)
-            elif filter_type == FilterType.LAST_3_WEEKS:
-                start_date = now - timedelta(days=21)
-            elif filter_type == FilterType.LAST_MONTH:
-                start_date = now - timedelta(days=30)
-                end_date = now - timedelta(days=30)  # Exactly one month ago
+            # elif filter_type == FilterType.YEAR:
+            #     start_date = now - timedelta(days=365)
+            # elif filter_type == FilterType.QUARTER:
+            #     start_date = now - timedelta(days=90)
+            # elif filter_type == FilterType.LAST_6_MONTHS:
+            #     start_date = now - timedelta(days=180)
+            # elif filter_type == FilterType.LAST_3_WEEKS:
+            #     start_date = now - timedelta(days=21)
+            # elif filter_type == FilterType.LAST_MONTH:
+            #     start_date = now - timedelta(days=30)
+            #     end_date = now - timedelta(days=30)  # Exactly one month ago
             elif filter_type == FilterType.CUSTOM_RANGE:
                 start_date = self._parse_date(request.query_params.get("start_date"))
                 end_date = self._parse_date(request.query_params.get("end_date"))
@@ -1585,31 +1585,29 @@ class DashboardView(APIView):
 
             # Date calculations
             today = timezone.now().date()
-            yesterday = today - timedelta(days=1)
-            last_week = today - timedelta(days=7)
 
             dashboard_data = {}
 
             # Total Incidents (True Positives + False Positives only)
-            if not filter_list or "total_alerts" in filter_list:
+            if not filter_list or "total_incidents" in filter_list:
                 total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
                     total_incident_filters
                 ).count()
 
-                last_week_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    total_incident_filters, created__date__range=[last_week, yesterday]
-                ).count()
-
-                current_week_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    total_incident_filters,
-                    created__date__range=[today - timedelta(days=6), today],
-                ).count()
-
-                percent_change = self._calculate_percentage_change(
-                    current_week_count, last_week_count, "week"
+                # Calculate trend based on filter type
+                (
+                    current_count,
+                    previous_count,
+                    trend_period,
+                ) = self._calculate_trend_comparison(
+                    total_incident_filters, filter_type, start_date, end_date
                 )
 
-                dashboard_data["total_alerts"] = {
+                percent_change = self._calculate_percentage_change(
+                    current_count, previous_count, trend_period
+                )
+
+                dashboard_data["total_incidents"] = {
                     "count": total_incidents,
                     "change": percent_change,
                     "new": DUCortexSOARIncidentFinalModel.objects.filter(
@@ -1617,70 +1615,86 @@ class DashboardView(APIView):
                     ).count(),
                 }
 
-            # Open Incidents (status=1) - Using true positive filters
+            # Open Incidents based on True Positives (status=1) and False Positives (not closed)
             if not filter_list or "open" in filter_list:
-                open_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                # True Positives with status=1 (open)
+                open_true_positives = DUCortexSOARIncidentFinalModel.objects.filter(
                     true_positive_filters, status=1
                 ).count()
 
-                yesterday_open = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=1, created__date=yesterday
+                # False Positives that are not closed (Done status but no closed date)
+                open_false_positives = DUCortexSOARIncidentFinalModel.objects.filter(
+                    false_positive_filters, closed__isnull=True
                 ).count()
 
-                today_open = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=1, created__date=today
-                ).count()
+                open_count = open_true_positives + open_false_positives
+
+                # Calculate trend based on filter type for open incidents
+                open_tp_filters = true_positive_filters & Q(status=1)
+                open_fp_filters = false_positive_filters & Q(closed__isnull=True)
+
+                (
+                    current_open_tp,
+                    previous_open_tp,
+                    trend_period,
+                ) = self._calculate_trend_comparison(
+                    open_tp_filters, filter_type, start_date, end_date
+                )
+                current_open_fp, previous_open_fp, _ = self._calculate_trend_comparison(
+                    open_fp_filters, filter_type, start_date, end_date
+                )
+
+                current_total_open = current_open_tp + current_open_fp
+                previous_total_open = previous_open_tp + previous_open_fp
 
                 percent_change = self._calculate_percentage_change(
-                    today_open, yesterday_open, "day"
+                    current_total_open, previous_total_open, trend_period
                 )
 
                 dashboard_data["open"] = {"count": open_count, "change": percent_change}
 
-            # Closed Incidents (status=2) - Using true positive filters
+            # Closed Incidents based on True Positives (status=2) and False Positives (with closed date)
             if not filter_list or "closed" in filter_list:
-                closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                # True Positives with status=2 (closed)
+                closed_true_positives = DUCortexSOARIncidentFinalModel.objects.filter(
                     true_positive_filters, status=2
                 ).count()
 
-                yesterday_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=2, closed__date=yesterday
+                # False Positives that are closed (Done status with closed date)
+                closed_false_positives = DUCortexSOARIncidentFinalModel.objects.filter(
+                    false_positive_filters, closed__isnull=False
                 ).count()
 
-                today_closed = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=2, closed__date=today
-                ).count()
+                closed_count = closed_true_positives + closed_false_positives
+
+                # Calculate trend based on filter type for closed incidents
+                closed_tp_filters = true_positive_filters & Q(status=2)
+                closed_fp_filters = false_positive_filters & Q(closed__isnull=False)
+
+                (
+                    current_closed_tp,
+                    previous_closed_tp,
+                    trend_period,
+                ) = self._calculate_trend_comparison(
+                    closed_tp_filters, filter_type, start_date, end_date
+                )
+                (
+                    current_closed_fp,
+                    previous_closed_fp,
+                    _,
+                ) = self._calculate_trend_comparison(
+                    closed_fp_filters, filter_type, start_date, end_date
+                )
+
+                current_total_closed = current_closed_tp + current_closed_fp
+                previous_total_closed = previous_closed_tp + previous_closed_fp
 
                 percent_change = self._calculate_percentage_change(
-                    today_closed, yesterday_closed, "day"
+                    current_total_closed, previous_total_closed, trend_period
                 )
 
                 dashboard_data["closed"] = {
                     "count": closed_count,
-                    "change": percent_change,
-                }
-
-            # True Positives (Ready incidents with all required fields)
-            if not filter_list or "total_incidents" in filter_list:
-                tp_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters
-                ).count()
-
-                last_week_tp = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, created__date__range=[last_week, yesterday]
-                ).count()
-
-                current_week_tp = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters,
-                    created__date__range=[today - timedelta(days=6), today],
-                ).count()
-
-                percent_change = self._calculate_percentage_change(
-                    current_week_tp, last_week_tp, "week"
-                )
-
-                dashboard_data["total_incidents"] = {
-                    "count": tp_count,
                     "change": percent_change,
                 }
 
@@ -1690,17 +1704,17 @@ class DashboardView(APIView):
                     false_positive_filters
                 ).count()
 
-                last_week_fp = DUCortexSOARIncidentFinalModel.objects.filter(
-                    false_positive_filters, created__date__range=[last_week, yesterday]
-                ).count()
-
-                current_week_fp = DUCortexSOARIncidentFinalModel.objects.filter(
-                    false_positive_filters,
-                    created__date__range=[today - timedelta(days=6), today],
-                ).count()
+                # Calculate trend based on filter type for false positives
+                (
+                    current_fp,
+                    previous_fp,
+                    trend_period,
+                ) = self._calculate_trend_comparison(
+                    false_positive_filters, filter_type, start_date, end_date
+                )
 
                 percent_change = self._calculate_percentage_change(
-                    current_week_fp, last_week_fp, "week"
+                    current_fp, previous_fp, trend_period
                 )
 
                 dashboard_data["falsePositives"] = {
@@ -1750,8 +1764,77 @@ class DashboardView(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    def _calculate_trend_comparison(
+        self, base_filters, filter_type, start_date, end_date
+    ):
+        """Calculate current and previous period counts for trend comparison"""
+        now = timezone.now().date()
+
+        # Return N/A for custom date range filters
+        if filter_type == FilterType.CUSTOM_RANGE:
+            return 0, 0, "N/A"
+
+        if not filter_type:
+            # Default to week comparison if no filter_type
+            current_start = now - timedelta(days=6)
+            current_end = now
+            previous_start = now - timedelta(days=13)
+            previous_end = now - timedelta(days=7)
+            period = "week"
+        elif filter_type == FilterType.TODAY:
+            # Compare today with yesterday
+            current_start = current_end = now
+            previous_start = previous_end = now - timedelta(days=1)
+            period = "day"
+        elif filter_type == FilterType.WEEK:
+            # Compare this week with previous week
+            current_start = now - timedelta(days=6)
+            current_end = now
+            previous_start = now - timedelta(days=13)
+            previous_end = now - timedelta(days=7)
+            period = "week"
+        elif filter_type == FilterType.MONTH:
+            # Compare this month with previous month
+            current_start = now - timedelta(days=29)
+            current_end = now
+            previous_start = now - timedelta(days=59)
+            previous_end = now - timedelta(days=30)
+            period = "month"
+        else:
+            # Default to week comparison for other filter types
+            current_start = now - timedelta(days=6)
+            current_end = now
+            previous_start = now - timedelta(days=13)
+            previous_end = now - timedelta(days=7)
+            period = "week"
+
+        # Count incidents for current period
+        current_filters = (
+            base_filters
+            & Q(created__date__gte=current_start)
+            & Q(created__date__lte=current_end)
+        )
+        current_count = DUCortexSOARIncidentFinalModel.objects.filter(
+            current_filters
+        ).count()
+
+        # Count incidents for previous period
+        previous_filters = (
+            base_filters
+            & Q(created__date__gte=previous_start)
+            & Q(created__date__lte=previous_end)
+        )
+        previous_count = DUCortexSOARIncidentFinalModel.objects.filter(
+            previous_filters
+        ).count()
+
+        return current_count, previous_count, period
+
     def _calculate_percentage_change(self, current, previous, period="day"):
         """Calculate percentage change with time period indication"""
+        if period == "N/A":
+            return "N/A"
+
         if previous == 0:
             return f"0% from previous {period}"
 
