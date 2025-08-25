@@ -1722,6 +1722,30 @@ class DashboardView(APIView):
                     "change": percent_change,
                 }
 
+            # True Positives (Ready incidents with all required fields)
+            if not filter_list or "truePositives" in filter_list:
+                tp_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    true_positive_filters
+                ).count()
+
+                # Calculate trend based on filter type for true positives
+                (
+                    current_tp,
+                    previous_tp,
+                    trend_period,
+                ) = self._calculate_trend_comparison(
+                    true_positive_filters, filter_type, start_date, end_date
+                )
+
+                percent_change = self._calculate_percentage_change(
+                    current_tp, previous_tp, trend_period
+                )
+
+                dashboard_data["truePositives"] = {
+                    "count": tp_count,
+                    "change": percent_change,
+                }
+
             # OPTIONAL: Add incomplete incidents count for visibility
             if not filter_list or "incompleteIncidents" in filter_list:
                 incomplete_filters = (
