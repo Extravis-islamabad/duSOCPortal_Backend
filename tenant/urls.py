@@ -42,6 +42,7 @@ from tenant.views import (
     TotalAssetsByTenantAPIView,
     TotalTicketsByTenantAPIView,
     TypeDistributionView,
+    UseCaseIncidentsView,
 )
 
 # test
@@ -153,6 +154,11 @@ urlpatterns = [
         "api/recent-incidents/",
         RecentIncidentsView.as_view(),
         name="recent-incidents",
+    ),
+    path(
+        "api/use-case-incidents/",
+        UseCaseIncidentsView.as_view(),
+        name="use-case-incidents",
     ),
     path(
         "alerts/<str:alert_id>/details/",
