@@ -300,6 +300,118 @@ class LDAP:
             return []
 
 
+class DateTimeStorage:
+    """
+    Utility class for storing and managing datetime values.
+    Provides static methods to store, retrieve, and manipulate datetime values
+    using the DateTimeStorage model.
+    """
+
+    @staticmethod
+    def store_current_time():
+        """
+        Store or update the current datetime.
+
+        Returns:
+            DateTimeStorage: The created or updated instance
+
+        Example:
+            >>> DateTimeStorage.store_current_time()
+            <DateTimeStorage: DateTime: 2024-01-15 14:30:25+00:00>
+        """
+        from tenant.models import DateTimeStorage as DTStorage
+
+        return DTStorage.store_datetime()
+
+    @staticmethod
+    def store_specific_time(datetime_value):
+        """
+        Store or update a specific datetime.
+
+        Args:
+            datetime_value (datetime): The datetime to store
+
+        Returns:
+            DateTimeStorage: The created or updated instance
+
+        Example:
+            >>> from datetime import datetime
+            >>> from django.utils import timezone
+            >>> dt = timezone.make_aware(datetime(2024, 1, 15, 14, 30, 0))
+            >>> DateTimeStorage.store_specific_time(dt)
+            <DateTimeStorage: DateTime: 2024-01-15 14:30:00+00:00>
+        """
+        from tenant.models import DateTimeStorage as DTStorage
+
+        return DTStorage.store_datetime(datetime_value)
+
+    @staticmethod
+    def get_stored_time():
+        """
+        Get the currently stored datetime.
+
+        Returns:
+            datetime or None: The stored datetime or None if nothing is stored
+
+        Example:
+            >>> DateTimeStorage.get_stored_time()
+            datetime.datetime(2024, 1, 15, 14, 30, 25, tzinfo=<UTC>)
+        """
+        from tenant.models import DateTimeStorage as DTStorage
+
+        return DTStorage.get_stored_datetime()
+
+    @staticmethod
+    def update_time():
+        """
+        Update the stored datetime to the current time.
+        This is an alias for store_current_time() for better readability.
+
+        Returns:
+            DateTimeStorage: The updated instance
+
+        Example:
+            >>> DateTimeStorage.update_time()
+            <DateTimeStorage: DateTime: 2024-01-15 14:35:45+00:00>
+        """
+        return DateTimeStorage.store_current_time()
+
+    @staticmethod
+    def has_stored_time():
+        """
+        Check if any datetime is currently stored.
+
+        Returns:
+            bool: True if a datetime is stored, False otherwise
+
+        Example:
+            >>> DateTimeStorage.has_stored_time()
+            True
+        """
+        from tenant.models import DateTimeStorage as DTStorage
+
+        return DTStorage.has_stored_datetime()
+
+    @staticmethod
+    def get_time_since_stored():
+        """
+        Get the time difference between now and the stored datetime.
+
+        Returns:
+            timedelta or None: The time difference or None if no datetime is stored
+
+        Example:
+            >>> DateTimeStorage.get_time_since_stored()
+            datetime.timedelta(seconds=125)
+        """
+        from django.utils import timezone
+
+        stored_time = DateTimeStorage.get_stored_time()
+        if stored_time:
+            return timezone.now() - stored_time
+        return None
+
+
 def extract_use_case(name):
     # Remove leading numbers and optional org code like "ADGM-"
     cleaned = re.sub(r"^\d+\s+", "", name)  # remove leading numeric ID and spaces

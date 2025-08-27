@@ -6,6 +6,7 @@ from django.db.models import Count
 from loguru import logger
 
 from common.modules.cortex_soar import CortexSOAR
+from common.utils import DateTimeStorage
 from integration.models import (
     CredentialTypes,
     IntegrationCredentials,
@@ -245,3 +246,6 @@ def sync_soar_data():
         )
     sync_requests_for_soar.delay()
     sync_notes.delay()
+
+    DateTimeStorage.store_current_time()
+    logger.info("sync_soar_data() task completed and time updated")
