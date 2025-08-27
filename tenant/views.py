@@ -3,7 +3,7 @@ import json
 import os
 import re
 import time
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -38,7 +38,6 @@ from weasyprint import HTML
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import SEVERITY_LABELS, FilterType, PaginationConstants
 from common.modules.cyware import Cyware
-from common.utils import extract_use_case
 from integration.models import (
     CredentialTypes,
     Integration,
@@ -3951,14 +3950,11 @@ class UseCaseIncidentsView(APIView):
                 .values_list("name", flat=True)
             )
 
-            # Step 7: Process names and count occurrences
-            incident_name_counts = Counter()
+            # Step 7: Process names using the group_similar_incidents function
+            from common.utils import group_similar_incidents
 
-            for name in incident_names:
-                # Clean the incident name using the same logic as extract_use_case
-                cleaned_name = extract_use_case(name)
-                if cleaned_name:  # Only count non-empty cleaned names
-                    incident_name_counts[cleaned_name] += 1
+            # Use the grouping function that handles similarity
+            incident_name_counts = group_similar_incidents(list(incident_names))
 
             # Step 8: Get top 10 most frequent incident names
             top_10_incident_names = incident_name_counts.most_common(10)
@@ -4000,13 +3996,26 @@ class UseCaseIncidentsView(APIView):
                     .exclude(name__exact="")
                 )
 
-                # Filter incidents where the cleaned name matches the selected use case
+                # Filter incidents where the normalized name matches the selected use case
+                from difflib import SequenceMatcher
+
+                from common.utils import normalize_incident_name
+
                 filtered_incidents = []
                 for incident in all_incidents:
                     if incident.name:
-                        cleaned_name = extract_use_case(incident.name)
-                        if cleaned_name == selected_use_case_name:
-                            filtered_incidents.append(incident)
+                        normalized_name = normalize_incident_name(incident.name)
+                        if normalized_name:
+                            # Use similarity matching like in group_similar_incidents
+                            score = SequenceMatcher(
+                                None,
+                                normalized_name.lower(),
+                                selected_use_case_name.lower(),
+                            ).ratio()
+                            if (
+                                score >= 0.85
+                            ):  # Same threshold as group_similar_incidents
+                                filtered_incidents.append(incident)
 
                 # Step 13: Apply pagination
                 paginator = PageNumberPagination()
