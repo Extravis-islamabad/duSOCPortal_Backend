@@ -1457,3 +1457,68 @@ class DUSoarNotes(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.category} ({self.created})"
+
+
+class DateTimeStorage(models.Model):
+    """
+    Simple model to store a datetime value that can be updated repeatedly.
+    """
+
+    datetime_value = models.DateTimeField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "datetime_storage"
+
+    def __str__(self):
+        return f"DateTime: {self.datetime_value}"
+
+    @classmethod
+    def store_datetime(cls, datetime_value=None):
+        """
+        Store or update a datetime value. Since there's only one row, it will always update the same record.
+
+        Args:
+            datetime_value: The datetime to store. If None, uses current datetime.
+
+        Returns:
+            DateTimeStorage: The created or updated instance
+        """
+        if datetime_value is None:
+            datetime_value = timezone.now()
+
+        # Get or create the single record (there should only be one)
+        obj, created = cls.objects.get_or_create(
+            id=1,  # Always use ID=1 for the single record
+            defaults={"datetime_value": datetime_value},
+        )
+
+        # If record exists, update the datetime
+        if not created:
+            obj.datetime_value = datetime_value
+            obj.save()
+
+        return obj
+
+    @classmethod
+    def get_stored_datetime(cls):
+        """
+        Get the stored datetime value.
+
+        Returns:
+            datetime or None: The stored datetime or None if no datetime is stored
+        """
+        try:
+            return cls.objects.get(id=1).datetime_value
+        except cls.DoesNotExist:
+            return None
+
+    @classmethod
+    def has_stored_datetime(cls):
+        """
+        Check if a datetime is stored.
+
+        Returns:
+            bool: True if a datetime is stored, False otherwise
+        """
+        return cls.objects.filter(id=1).exists()
