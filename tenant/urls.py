@@ -7,6 +7,7 @@ from tenant.views import (
     AssetReportView,
     ConsolidatedReport,
     DashboardView,
+    DateTimeStorageView,
     DetailedEPSReportAPIView,
     DetailedIncidentReport,
     DownloadIncidentsView,
@@ -19,6 +20,7 @@ from tenant.views import (
     GetTenantAssetsList,
     IncidentDetailView,
     IncidentReportView,
+    IncidentSummaryView,
     IncidentsView,
     OffenseCategoriesAPIView,
     OffenseDetailsWithFlowsAndAssetsAPIView,
@@ -70,6 +72,9 @@ urlpatterns = [
         name="get-cortex-soar-tenants",
     ),
     path("get_tenant_assets/", GetTenantAssetsList.as_view(), name="get-tenant-assets"),
+    path(
+        "api/datetime-storage/", DateTimeStorageView.as_view(), name="datetime-storage"
+    ),
     path("api/asset-report/", AssetReportView.as_view(), name="asset-report"),
     # path("assets/stats/", GetTenantAssetsStats.as_view(), name="tenant-assets-stats"),
     path("get_itsm_tickets/", TenantITSMTicketsView.as_view(), name="get-itsm-tickets"),
@@ -166,11 +171,11 @@ urlpatterns = [
         name="alert-details",
     ),
     path("api/all-incidents/", AllIncidentsView.as_view(), name="all-incidents"),
-    # path(
-    #     "api/incident-summary-cards/",
-    #     IncidentSummaryView.as_view(),
-    #     name="incident-summary",
-    # ),
+    path(
+        "api/incident-summary-cards/",
+        IncidentSummaryView.as_view(),
+        name="incident-summary",
+    ),
     path(
         "api/sla-incidents/",
         SLAIncidentsView.as_view(),
