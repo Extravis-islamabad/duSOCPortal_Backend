@@ -3527,9 +3527,15 @@ class RecentIncidentsView(APIView):
             top_10_incident_names = incident_name_counts.most_common(10)
 
             # Step 7: Build simple response with only incident names and counts
+            # response_data = [
+            #     {"incident_name": incident_name, "occurrence_count": count}
+            #     for incident_name, count in top_10_incident_names
+            # ]
             response_data = [
-                {"incident_name": incident_name, "occurrence_count": count}
-                for incident_name, count in top_10_incident_names
+                {"id": idx, "incident_name": incident_name, "occurrence_count": count}
+                for idx, (incident_name, count) in enumerate(
+                    top_10_incident_names, start=1
+                )
             ]
 
             return Response(response_data, status=status.HTTP_200_OK)
