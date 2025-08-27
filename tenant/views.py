@@ -6739,32 +6739,83 @@ class DetailedIncidentReport(APIView):
 
         total_incidents_raised = incident_counts
 
-        # Use pure ORM to get incident names and priorities efficiently
-        incident_data = (
+        # Use case logic using group_similar_incidents (same as RecentIncidentsView and ConsolidatedReport)
+        # Step 1: Use ORM to get incident names efficiently with filters
+        incident_names = (
             DUCortexSOARIncidentFinalModel.objects.filter(filters)
             .filter(name__isnull=False)
             .exclude(name__exact="")
-            .values_list("name", "incident_priority")
+            .values_list("name", flat=True)
         )
 
-        # Extract use_case and keep priority using Python processing
-        use_case_priority_pairs = []
-        for name, priority in incident_data:
-            cleaned_name = extract_use_case(name)
-            if cleaned_name:  # Only include non-empty cleaned names
-                use_case_priority_pairs.append((cleaned_name, priority))
+        # Step 2: Process names using the group_similar_incidents function
+        from common.utils import group_similar_incidents
 
-        # Count frequency by (use_case, incident_priority) pair
-        use_case_counts = Counter(use_case_priority_pairs)
+        # Use the grouping function that handles similarity
+        incident_name_counts = group_similar_incidents(list(incident_names))
 
-        # Top 5 by count
-        top_5_use_cases = use_case_counts.most_common(5)
+        # Step 3: Get top 5 most frequent incident names
+        top_5_incident_names = incident_name_counts.most_common(5)
 
-        # Convert to list of dicts for JSON
-        top_5_use_cases_data = [
-            {"use_case": uc, "incident_priority": priority, "count": cnt}
-            for (uc, priority), cnt in top_5_use_cases
-        ]
+        # Step 4: Now get incidents with priorities for these top use cases
+        # We need to build the response with priority information
+        top_5_use_cases_data = []
+
+        for use_case, count in top_5_incident_names:
+            # Get priority breakdown for this use case
+            # Since we're grouping similar incidents, we need to find all incidents
+            # that match this normalized use case
+            priority_breakdown = {}
+
+            # Re-fetch incidents with priorities for this use case
+            all_incidents_data = (
+                DUCortexSOARIncidentFinalModel.objects.filter(filters)
+                .filter(name__isnull=False)
+                .exclude(name__exact="")
+                .values("name", "incident_priority")
+            )
+
+            from difflib import SequenceMatcher
+
+            from common.utils import normalize_incident_name
+
+            for incident in all_incidents_data:
+                normalized = normalize_incident_name(incident["name"])
+                if not normalized:
+                    continue
+
+                # Check if this incident belongs to the current use case group
+                score = SequenceMatcher(
+                    None, normalized.lower(), use_case.lower()
+                ).ratio()
+                if score >= 0.85:  # Same threshold as group_similar_incidents
+                    priority = incident["incident_priority"]
+                    if priority in priority_breakdown:
+                        priority_breakdown[priority] += 1
+                    else:
+                        priority_breakdown[priority] = 1
+
+            # Add the most common priority for this use case
+            if priority_breakdown:
+                most_common_priority = max(
+                    priority_breakdown, key=priority_breakdown.get
+                )
+                top_5_use_cases_data.append(
+                    {
+                        "use_case": use_case,
+                        "incident_priority": most_common_priority,
+                        "count": count,
+                    }
+                )
+            else:
+                # Fallback if no priority found
+                top_5_use_cases_data.append(
+                    {
+                        "use_case": use_case,
+                        "incident_priority": "Unknown",
+                        "count": count,
+                    }
+                )
 
         incident_closure_trends = get_incidents_trend(filter_type, filters)
 
