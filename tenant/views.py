@@ -375,19 +375,45 @@ class GetTenantAssetsList(APIView):
             # Base filter for tenant's assets
             base_filter = Q(event_collector_id__in=collector_ids)
 
-            # Step 4: Get ALL assets first for total counts (unfiltered)
+            # Step 4: Build database-level status filters
             now = timezone.now()
-            all_assets = IBMQradarAssests.objects.filter(base_filter).select_related(
+
+            # Create Q objects for basic status filtering at DB level
+            # These cover the simple cases that can be determined without complex logic
+            definitely_error_q = (
+                Q(enabled=False)
+                | Q(last_event_time__isnull=True)
+                | Q(last_event_time__exact="")
+            )
+            potentially_success_q = (
+                Q(enabled=True)
+                & ~Q(last_event_time__isnull=True)
+                & ~Q(last_event_time__exact="")
+            )
+
+            # Get counts for total statistics
+            base_queryset = IBMQradarAssests.objects.filter(base_filter).select_related(
                 "event_collector", "log_source_type"
             )
 
-            # Calculate TOTAL active/inactive counts (unfiltered)
-            total_active = 0
-            total_inactive = 0
+            # Count definitely error assets (can be done at DB level)
+            definitely_error_count = base_queryset.filter(definitely_error_q).count()
 
-            for asset in all_assets:
-                asset_status = self._get_asset_status(asset, now)
-                if asset_status == "SUCCESS":
+            # Get potentially successful assets for time-based checking
+            potentially_success_assets = list(
+                base_queryset.filter(potentially_success_q).select_related(
+                    "event_collector", "log_source_type"
+                )
+            )
+
+            # Calculate SUCCESS/ERROR for time-sensitive assets
+            total_active = 0
+            total_inactive = (
+                definitely_error_count  # Start with definitely error assets
+            )
+
+            for asset in potentially_success_assets:
+                if self._is_asset_success_based_on_time(asset, now):
                     total_active += 1
                 else:
                     total_inactive += 1
@@ -446,12 +472,62 @@ class GetTenantAssetsList(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Get filtered assets
-            filtered_assets = list(
-                IBMQradarAssests.objects.filter(filters).select_related(
-                    "event_collector", "log_source_type"
+            # Apply database-level status filtering first if status filter is provided
+            status_filter = request.query_params.get("status")
+            if status_filter:
+                status_filter = status_filter.upper()
+                if status_filter not in ["SUCCESS", "ERROR", "ALL"]:
+                    return Response(
+                        {
+                            "error": "Invalid status value. Must be 'SUCCESS', 'ERROR', or 'ALL'."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                if status_filter == "ERROR":
+                    # For ERROR: include definitely error assets + time-based error assets
+                    definitely_error_assets = list(
+                        IBMQradarAssests.objects.filter(
+                            filters & definitely_error_q
+                        ).select_related("event_collector", "log_source_type")
+                    )
+                    potentially_success_filtered = list(
+                        IBMQradarAssests.objects.filter(
+                            filters & potentially_success_q
+                        ).select_related("event_collector", "log_source_type")
+                    )
+                    time_based_error_assets = [
+                        asset
+                        for asset in potentially_success_filtered
+                        if not self._is_asset_success_based_on_time(asset, now)
+                    ]
+                    filtered_assets = definitely_error_assets + time_based_error_assets
+                elif status_filter == "SUCCESS":
+                    # For SUCCESS: only time-based successful assets
+                    potentially_success_filtered = list(
+                        IBMQradarAssests.objects.filter(
+                            filters & potentially_success_q
+                        ).select_related("event_collector", "log_source_type")
+                    )
+                    filtered_assets = [
+                        asset
+                        for asset in potentially_success_filtered
+                        if self._is_asset_success_based_on_time(asset, now)
+                    ]
+                else:  # status_filter == "ALL"
+                    # Get all filtered assets
+                    filtered_assets = list(
+                        IBMQradarAssests.objects.filter(filters).select_related(
+                            "event_collector", "log_source_type"
+                        )
+                    )
+            else:
+                # No status filter - get all assets
+                filtered_assets = list(
+                    IBMQradarAssests.objects.filter(filters).select_related(
+                        "event_collector", "log_source_type"
+                    )
                 )
-            )
 
             # Apply last event date filter if provided
             if last_event_filter:
@@ -467,23 +543,6 @@ class GetTenantAssetsList(APIView):
                         {"error": str(e)},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-
-            # Apply status filter if provided
-            if status_filter := request.query_params.get("status"):
-                status_filter = status_filter.upper()
-                if status_filter not in ["SUCCESS", "ERROR"]:
-                    return Response(
-                        {
-                            "error": "Invalid status value. Must be 'SUCCESS' or 'ERROR'."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-                filtered_assets = [
-                    asset
-                    for asset in filtered_assets
-                    if self._get_asset_status(asset, now) == status_filter
-                ]
 
             # Sort assets by creation date (newest first)
             filtered_assets.sort(
@@ -551,23 +610,45 @@ class GetTenantAssetsList(APIView):
         # If no last event time, it's ERROR
         if not asset.last_event_time:
             return "ERROR"
+
+        return (
+            "SUCCESS" if self._is_asset_success_based_on_time(asset, now) else "ERROR"
+        )
+
+    def _is_asset_success_based_on_time(self, asset, now):
+        """
+        Determine if asset is successful based on time threshold logic.
+        Separated from _get_asset_status for reusability in optimized queries.
+        """
         time_threshold_minutes = 24 * 60
         try:
-            group = asset.groups.first()
+            # Check if asset has groups and extract time threshold from description
+            if (
+                hasattr(asset, "_prefetched_objects_cache")
+                and "groups" in asset._prefetched_objects_cache
+            ):
+                # Use prefetched groups
+                groups = asset._prefetched_objects_cache["groups"]
+                group = groups[0] if groups else None
+            else:
+                # Fallback to database query
+                group = asset.groups.first()
+
             if group and group.description:
                 # Extract the first integer before the word "hour" (case-insensitive)
                 match = re.search(r"(\d+)\s*hour", group.description, re.IGNORECASE)
                 if match:
                     extracted_hours = int(match.group(1))
                     time_threshold_minutes = extracted_hours * 60
+
             last_event_timestamp = int(asset.last_event_time) / 1000
             last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
             last_event_time = timezone.make_aware(last_event_time)
             time_diff_minutes = (now - last_event_time).total_seconds() / 60
 
-            return "ERROR" if time_diff_minutes > time_threshold_minutes else "SUCCESS"
+            return time_diff_minutes <= time_threshold_minutes
         except (ValueError, TypeError):
-            return "ERROR"
+            return False
 
     def _parse_date(self, date_str):
         """Safe date parsing from string"""
@@ -1117,6 +1198,9 @@ class DashboardView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        # When no filter_type is provided, do not include trend in the response
+        include_trend = filter_type is not None
+
         # Determine date range based on filter_type
         now = timezone.now()
         start_date = None
@@ -1216,18 +1300,20 @@ class DashboardView(APIView):
                     total_incident_filters
                 ).count()
 
-                # Calculate trend based on filter type
-                (
-                    current_count,
-                    previous_count,
-                    trend_period,
-                ) = self._calculate_trend_comparison(
-                    total_incident_filters, filter_type, start_date, end_date
-                )
+                if include_trend:
+                    (
+                        current_count,
+                        previous_count,
+                        trend_period,
+                    ) = self._calculate_trend_comparison(
+                        total_incident_filters, filter_type, start_date, end_date
+                    )
 
-                percent_change = self._calculate_percentage_change(
-                    current_count, previous_count, trend_period
-                )
+                    percent_change = self._calculate_percentage_change(
+                        current_count, previous_count, trend_period
+                    )
+                else:
+                    percent_change = None
 
                 dashboard_data["total_incidents"] = {
                     "count": total_incidents,
@@ -1255,23 +1341,30 @@ class DashboardView(APIView):
                 open_tp_filters = true_positive_filters & Q(status=1)
                 open_fp_filters = false_positive_filters & Q(closed__isnull=True)
 
-                (
-                    current_open_tp,
-                    previous_open_tp,
-                    trend_period,
-                ) = self._calculate_trend_comparison(
-                    open_tp_filters, filter_type, start_date, end_date
-                )
-                current_open_fp, previous_open_fp, _ = self._calculate_trend_comparison(
-                    open_fp_filters, filter_type, start_date, end_date
-                )
+                if include_trend:
+                    (
+                        current_open_tp,
+                        previous_open_tp,
+                        trend_period,
+                    ) = self._calculate_trend_comparison(
+                        open_tp_filters, filter_type, start_date, end_date
+                    )
+                    (
+                        current_open_fp,
+                        previous_open_fp,
+                        _,
+                    ) = self._calculate_trend_comparison(
+                        open_fp_filters, filter_type, start_date, end_date
+                    )
 
-                current_total_open = current_open_tp + current_open_fp
-                previous_total_open = previous_open_tp + previous_open_fp
+                    current_total_open = current_open_tp + current_open_fp
+                    previous_total_open = previous_open_tp + previous_open_fp
 
-                percent_change = self._calculate_percentage_change(
-                    current_total_open, previous_total_open, trend_period
-                )
+                    percent_change = self._calculate_percentage_change(
+                        current_total_open, previous_total_open, trend_period
+                    )
+                else:
+                    percent_change = None
 
                 dashboard_data["open"] = {"count": open_count, "change": percent_change}
 
@@ -1293,27 +1386,30 @@ class DashboardView(APIView):
                 closed_tp_filters = true_positive_filters & Q(status=2)
                 closed_fp_filters = false_positive_filters & Q(closed__isnull=False)
 
-                (
-                    current_closed_tp,
-                    previous_closed_tp,
-                    trend_period,
-                ) = self._calculate_trend_comparison(
-                    closed_tp_filters, filter_type, start_date, end_date
-                )
-                (
-                    current_closed_fp,
-                    previous_closed_fp,
-                    _,
-                ) = self._calculate_trend_comparison(
-                    closed_fp_filters, filter_type, start_date, end_date
-                )
+                if include_trend:
+                    (
+                        current_closed_tp,
+                        previous_closed_tp,
+                        trend_period,
+                    ) = self._calculate_trend_comparison(
+                        closed_tp_filters, filter_type, start_date, end_date
+                    )
+                    (
+                        current_closed_fp,
+                        previous_closed_fp,
+                        _,
+                    ) = self._calculate_trend_comparison(
+                        closed_fp_filters, filter_type, start_date, end_date
+                    )
 
-                current_total_closed = current_closed_tp + current_closed_fp
-                previous_total_closed = previous_closed_tp + previous_closed_fp
+                    current_total_closed = current_closed_tp + current_closed_fp
+                    previous_total_closed = previous_closed_tp + previous_closed_fp
 
-                percent_change = self._calculate_percentage_change(
-                    current_total_closed, previous_total_closed, trend_period
-                )
+                    percent_change = self._calculate_percentage_change(
+                        current_total_closed, previous_total_closed, trend_period
+                    )
+                else:
+                    percent_change = None
 
                 dashboard_data["closed"] = {
                     "count": closed_count,
@@ -1327,17 +1423,20 @@ class DashboardView(APIView):
                 ).count()
 
                 # Calculate trend based on filter type for false positives
-                (
-                    current_fp,
-                    previous_fp,
-                    trend_period,
-                ) = self._calculate_trend_comparison(
-                    false_positive_filters, filter_type, start_date, end_date
-                )
+                if include_trend:
+                    (
+                        current_fp,
+                        previous_fp,
+                        trend_period,
+                    ) = self._calculate_trend_comparison(
+                        false_positive_filters, filter_type, start_date, end_date
+                    )
 
-                percent_change = self._calculate_percentage_change(
-                    current_fp, previous_fp, trend_period
-                )
+                    percent_change = self._calculate_percentage_change(
+                        current_fp, previous_fp, trend_period
+                    )
+                else:
+                    percent_change = None
 
                 dashboard_data["falsePositives"] = {
                     "count": fp_count,
@@ -1351,17 +1450,20 @@ class DashboardView(APIView):
                 ).count()
 
                 # Calculate trend based on filter type for true positives
-                (
-                    current_tp,
-                    previous_tp,
-                    trend_period,
-                ) = self._calculate_trend_comparison(
-                    true_positive_filters, filter_type, start_date, end_date
-                )
+                if include_trend:
+                    (
+                        current_tp,
+                        previous_tp,
+                        trend_period,
+                    ) = self._calculate_trend_comparison(
+                        true_positive_filters, filter_type, start_date, end_date
+                    )
 
-                percent_change = self._calculate_percentage_change(
-                    current_tp, previous_tp, trend_period
-                )
+                    percent_change = self._calculate_percentage_change(
+                        current_tp, previous_tp, trend_period
+                    )
+                else:
+                    percent_change = None
 
                 dashboard_data["truePositives"] = {
                     "count": tp_count,
