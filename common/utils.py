@@ -417,3 +417,120 @@ def extract_use_case(name):
     cleaned = re.sub(r"^\d+\s+", "", name)  # remove leading numeric ID and spaces
     cleaned = re.sub(r"^[A-Z]+-", "", cleaned)  # remove leading org code and dash
     return cleaned.strip()
+
+
+def normalize_incident_name(name):
+    """
+    Normalize incident names for better grouping and comparison.
+    This function handles various formatting issues:
+    - Removes newlines and excess whitespace
+    - Removes leading numbers
+    - Removes organization prefixes
+    - Normalizes case for comparison
+
+    Args:
+        name (str): The incident name to normalize
+
+    Returns:
+        str: The normalized incident name
+    """
+    if not name:
+        return ""
+
+    # Remove newlines and normalize whitespace
+    cleaned = " ".join(name.replace("\n", " ").split())
+
+    # Remove leading numbers (like "31607 ")
+    cleaned = re.sub(r"^\d+\s+", "", cleaned)
+
+    # Remove organization prefixes (like "ADGM-", "AEP-", etc.)
+    cleaned = re.sub(r"^[A-Z]{2,}-", "", cleaned)
+
+    # Handle specific patterns for XDR Defender-Alerts
+    # Normalize variations like "XDR Defender-Alerts containing X"
+    if "XDR Defender-Alerts" in cleaned:
+        # Extract the core alert type after "containing"
+        match = re.search(r"containing\s+(.+)$", cleaned, re.IGNORECASE)
+        if match:
+            alert_type = match.group(1).strip()
+            cleaned = f"XDR Defender-Alerts containing {alert_type}"
+        else:
+            cleaned = "XDR Defender-Alerts"
+
+    return cleaned.strip()
+
+
+def group_similar_incidents(incident_names, similarity_threshold=0.85):
+    """
+    Group similar incident names based on text similarity.
+    Uses a simple approach based on normalized names and keyword matching.
+
+    Args:
+        incident_names (list): List of incident name strings
+        similarity_threshold (float): Threshold for considering names similar (0-1)
+
+    Returns:
+        dict: Dictionary mapping normalized incident names to their occurrence counts
+    """
+    from collections import Counter
+    from difflib import SequenceMatcher
+
+    # First pass: normalize all names
+    normalized_counts = Counter()
+    name_mappings = {}  # Track original to normalized mappings
+
+    for name in incident_names:
+        if not name:
+            continue
+
+        normalized = normalize_incident_name(name)
+        if not normalized:
+            continue
+
+        # Check if this normalized name is similar to any existing group
+        best_match = None
+        best_score = 0
+
+        for existing_name in normalized_counts.keys():
+            # Calculate similarity score
+            score = SequenceMatcher(
+                None, normalized.lower(), existing_name.lower()
+            ).ratio()
+
+            # Special handling for XDR Defender-Alerts patterns
+            if (
+                "XDR Defender-Alerts" in normalized
+                and "XDR Defender-Alerts" in existing_name
+            ):
+                # If both are XDR Defender-Alerts, check the "containing" part
+                normalized_containing = re.search(
+                    r"containing\s+(.+)$", normalized, re.IGNORECASE
+                )
+                existing_containing = re.search(
+                    r"containing\s+(.+)$", existing_name, re.IGNORECASE
+                )
+
+                if normalized_containing and existing_containing:
+                    alert_type_1 = normalized_containing.group(1).lower().strip()
+                    alert_type_2 = existing_containing.group(1).lower().strip()
+
+                    # Check if the alert types are similar
+                    alert_score = SequenceMatcher(
+                        None, alert_type_1, alert_type_2
+                    ).ratio()
+                    if alert_score > 0.8:  # High similarity in alert type
+                        score = 0.95  # Consider them very similar
+
+            if score > best_score and score >= similarity_threshold:
+                best_match = existing_name
+                best_score = score
+
+        if best_match:
+            # Add to existing group
+            normalized_counts[best_match] += 1
+        else:
+            # Create new group
+            normalized_counts[normalized] += 1
+            name_mappings[normalized] = name
+
+    return normalized_counts

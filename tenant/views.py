@@ -3799,14 +3799,11 @@ class RecentIncidentsView(APIView):
                 .values_list("name", flat=True)
             )
 
-            # Step 7: Process names and count occurrences
-            incident_name_counts = Counter()
+            # Step 7: Process names and group similar incidents
+            from common.utils import group_similar_incidents
 
-            for name in incident_names:
-                # Clean the incident name using the same logic as extract_use_case
-                cleaned_name = extract_use_case(name)
-                if cleaned_name:  # Only count non-empty cleaned names
-                    incident_name_counts[cleaned_name] += 1
+            # Use the new grouping function that handles similarity
+            incident_name_counts = group_similar_incidents(list(incident_names))
 
             # Step 6: Get top 10 most frequent incident names
             top_10_incident_names = incident_name_counts.most_common(10)
