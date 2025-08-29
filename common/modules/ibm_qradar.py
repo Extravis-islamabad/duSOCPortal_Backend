@@ -707,6 +707,87 @@ class IBMQradar:
 
         return data
 
+    def _delete_stale_event_logs(self, api_data, integration_id):
+        """
+        Deletes event log assets that are no longer present in the API response,
+        but only for the specific event collectors that are in the current response.
+        This ensures data consistency by removing obsolete assets while preserving
+        assets from event collectors not included in the current sync.
+
+        :param api_data: A list of dictionaries containing event log information from API.
+        :param integration_id: The ID of the integration being synced.
+        :return: Number of deleted records.
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._delete_stale_event_logs() started: {start}")
+
+        if not api_data:
+            logger.warning("No API data provided for stale asset deletion check")
+            return 0
+
+        # Get all db_ids from the current API response
+        api_db_ids = {
+            item.get("db_id") for item in api_data if item.get("db_id") is not None
+        }
+
+        # Get distinct event collector db_ids (target_event_collector_id) from API response
+        api_event_collector_db_ids = {
+            item.get("target_event_collector_id")
+            for item in api_data
+            if item.get("target_event_collector_id") is not None
+        }
+
+        logger.info(f"Found {len(api_db_ids)} assets in API response")
+        logger.info(
+            f"Found {len(api_event_collector_db_ids)} distinct event collectors in API response: {api_event_collector_db_ids}"
+        )
+
+        deleted_count = 0
+
+        try:
+            with transaction.atomic():
+                # Only delete assets for the specific event collectors that are in this sync
+                if api_event_collector_db_ids:
+                    # First get the event collector IDs from database that match these db_ids
+                    event_collector_ids = IBMQradarEventCollector.objects.filter(
+                        db_id__in=api_event_collector_db_ids,
+                        integration_id=integration_id,
+                    ).values_list("id", flat=True)
+
+                    if event_collector_ids:
+                        deleted_count = (
+                            IBMQradarAssests.objects.filter(
+                                integration_id=integration_id,
+                                event_collector_id__in=list(event_collector_ids),
+                            )
+                            .exclude(db_id__in=api_db_ids)
+                            .delete()[0]
+                        )
+
+                        if deleted_count > 0:
+                            logger.info(
+                                f"Deleted {deleted_count} stale assets for event collectors: {api_event_collector_db_ids}"
+                            )
+                        else:
+                            logger.info("No stale assets found to delete")
+                    else:
+                        logger.warning(
+                            f"No matching event collectors found in database for db_ids: {api_event_collector_db_ids}"
+                        )
+                else:
+                    logger.warning(
+                        "No event collector db_ids found in API response, skipping deletion"
+                    )
+
+        except Exception as e:
+            logger.error(f"Error in _delete_stale_event_logs: {str(e)}")
+            transaction.rollback()
+
+        logger.success(
+            f"IBMQRadar._delete_stale_event_logs() took: {time.time() - start} seconds"
+        )
+        return deleted_count
+
     def _insert_event_logs(self, data):
         """
         Inserts or updates event log records in the IBMQradarEventLog table.
