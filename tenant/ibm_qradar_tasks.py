@@ -380,7 +380,10 @@ def sync_event_log_assets(
             return
 
         ibm_qradar._insert_event_logs(transformed_data)
-
+        deleted_count = ibm_qradar._delete_stale_event_logs(
+            api_data=transformed_data, integration_id=integration_id
+        )
+        logger.info(f"Deleted {deleted_count} stale event log assets")
         logger.info(f"Successfully synced {len(transformed_data)} event log assets")
         logger.info(
             f"QRadarTasks.sync_event_log_assets() task took {time.time() - start} seconds"
@@ -809,6 +812,7 @@ def sync_ibm_qradar_data():
         )
         sync_event_log_sources_types.delay()
         sync_offenses.delay()
+
         # sync_eps_for_domain.delay(
         #     username=result.username,
         #     password=result.password,
