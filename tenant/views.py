@@ -3,7 +3,7 @@ import json
 import os
 import re
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -38,6 +38,7 @@ from weasyprint import HTML
 from authentication.permissions import IsAdminUser, IsTenant
 from common.constants import SEVERITY_LABELS, FilterType, PaginationConstants
 from common.modules.cyware import Cyware
+from common.utils import extract_use_case
 from integration.models import (
     CredentialTypes,
     Integration,
@@ -3681,6 +3682,99 @@ class AlertDetailView(APIView):
                     )
 
 
+# class RecentIncidentsView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         """
+#         Retrieve the top 10 incident names based on cleaned incident name occurrence frequency.
+
+#         Uses Django ORM to get incident names, then processes them to remove:
+#         - Leading numbers and spaces (e.g., "31607 ")
+#         - Leading organization codes (e.g., "AEP-XDR ", "ADGM-")
+
+#         Returns only incident names and their occurrence counts.
+#         """
+#         try:
+#             # Step 1: Validate tenant
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         try:
+#             # Step 2: Check for active SOAR integration
+#             soar_integrations = tenant.company.integrations.filter(
+#                 integration_type=IntegrationTypes.SOAR_INTEGRATION,
+#                 soar_subtype=SoarSubTypes.CORTEX_SOAR,
+#                 status=True,
+#             )
+#             if not soar_integrations.exists():
+#                 return Response(
+#                     {"error": "No active SOAR integration configured for tenant."},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             # Step 3: Get SOAR tenant IDs
+#             soar_tenants = tenant.company.soar_tenants.all()
+#             if not soar_tenants:
+#                 return Response(
+#                     {"error": "No SOAR tenants found."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             soar_ids = [t.id for t in soar_tenants]
+
+#             # Step 4: Build True Positive filters (same as DetailedIncidentReport)
+#             all_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+#                 ~Q(owner__isnull=True)
+#                 & ~Q(owner__exact="")
+#                 & Q(incident_tta__isnull=False)
+#                 & Q(incident_ttn__isnull=False)
+#                 & Q(incident_ttdn__isnull=False)
+#                 & Q(itsm_sync_status__isnull=False)
+#                 & Q(itsm_sync_status__iexact="Ready")
+#                 & Q(incident_priority__isnull=False)
+#                 & ~Q(incident_priority__exact="")
+#             )
+
+#             false_positive_filters = Q(itsm_sync_status__iexact="Done")
+#             filters = all_filters | false_positive_filters
+
+#             # Step 6: Use ORM to get incident names efficiently with filters
+#             incident_names = (
+#                 DUCortexSOARIncidentFinalModel.objects.filter(filters)
+#                 .filter(name__isnull=False)
+#                 .exclude(name__exact="")
+#                 .values_list("name", flat=True)
+#             )
+
+#             # Step 7: Process names and group similar incidents
+#             from common.utils import group_similar_incidents
+
+#             # Use the new grouping function that handles similarity
+#             incident_name_counts = group_similar_incidents(list(incident_names))
+
+#             # Step 6: Get top 10 most frequent incident names
+#             top_10_incident_names = incident_name_counts.most_common(10)
+
+#             response_data = [
+#                 {"id": idx, "incident_name": incident_name, "occurrence_count": count}
+#                 for idx, (incident_name, count) in enumerate(
+#                     top_10_incident_names, start=1
+#                 )
+#             ]
+
+#             return Response(response_data, status=status.HTTP_200_OK)
+
+#         except Exception as e:
+#             return Response(
+#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
+
+
 class RecentIncidentsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -3741,6 +3835,57 @@ class RecentIncidentsView(APIView):
 
             false_positive_filters = Q(itsm_sync_status__iexact="Done")
             filters = all_filters | false_positive_filters
+            # Step 5: Apply date filtering (same logic as DetailedIncidentReport)
+            filter_type = request.query_params.get("filter_type", FilterType.WEEK.value)
+            if filter_type is not None:
+                try:
+                    filter_type = int(filter_type)
+                except ValueError:
+                    return Response({"error": "Invalid filter_type."}, status=400)
+
+            now = timezone.now()
+            start_date_str = request.query_params.get("start_date")
+            end_date_str = request.query_params.get("end_date")
+
+            try:
+                filter_type = FilterType(int(filter_type))
+                if filter_type == FilterType.TODAY:
+                    start_date = now
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.WEEK:
+                    start_date = now - timedelta(days=7)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.MONTH:
+                    start_date = now - timedelta(days=30)
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.CUSTOM_RANGE:
+                    start_date_str = request.query_params.get("start_date")
+                    end_date_str = request.query_params.get("end_date")
+                    if start_date_str and end_date_str:
+                        try:
+                            start_date = datetime.strptime(
+                                start_date_str, "%Y-%m-%d"
+                            ).date()
+                            end_date = datetime.strptime(
+                                end_date_str, "%Y-%m-%d"
+                            ).date()
+                            filters &= Q(created__date__gte=start_date) & Q(
+                                created__date__lte=end_date
+                            )
+                            if start_date > end_date:
+                                return Response(
+                                    {
+                                        "error": "Start date cannot be greater than end date."
+                                    },
+                                    status=400,
+                                )
+                        except ValueError:
+                            return Response(
+                                {"error": "Invalid date format. Use YYYY-MM-DD."},
+                                status=400,
+                            )
+            except Exception:
+                return Response({"error": "Invalid filter_type."}, status=400)
 
             # Step 6: Use ORM to get incident names efficiently with filters
             incident_names = (
@@ -3750,15 +3895,23 @@ class RecentIncidentsView(APIView):
                 .values_list("name", flat=True)
             )
 
-            # Step 7: Process names and group similar incidents
-            from common.utils import group_similar_incidents
+            # Step 7: Process names and count occurrences
+            incident_name_counts = Counter()
 
-            # Use the new grouping function that handles similarity
-            incident_name_counts = group_similar_incidents(list(incident_names))
+            for name in incident_names:
+                # Clean the incident name using the same logic as extract_use_case
+                cleaned_name = extract_use_case(name)
+                if cleaned_name:  # Only count non-empty cleaned names
+                    incident_name_counts[cleaned_name] += 1
 
             # Step 6: Get top 10 most frequent incident names
             top_10_incident_names = incident_name_counts.most_common(10)
 
+            # Step 7: Build simple response with only incident names and counts
+            # response_data = [
+            #     {"incident_name": incident_name, "occurrence_count": count}
+            #     for incident_name, count in top_10_incident_names
+            # ]
             response_data = [
                 {"id": idx, "incident_name": incident_name, "occurrence_count": count}
                 for idx, (incident_name, count) in enumerate(
@@ -3772,6 +3925,228 @@ class RecentIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+# class UseCaseIncidentsView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         """
+#         If use_case parameter is not provided:
+#         - Retrieve the top 10 incident names based on cleaned incident name occurrence frequency.
+
+#         If use_case parameter is provided (as int, 1-10):
+#         - Get the top 10 incident names first
+#         - Select the use case based on the provided index (1=first, 2=second, etc.)
+#         - Return paginated incidents that belong to that specific use case
+
+#         Query Parameters:
+#             use_case (int): Index of the use case (1-10) to filter incidents
+#             filter_type (int): Date filter type
+#             start_date (str): Start date for custom range (YYYY-MM-DD)
+#             end_date (str): End date for custom range (YYYY-MM-DD)
+#         """
+#         try:
+#             # Step 1: Validate tenant
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         try:
+#             # Step 2: Check for active SOAR integration
+#             soar_integrations = tenant.company.integrations.filter(
+#                 integration_type=IntegrationTypes.SOAR_INTEGRATION,
+#                 soar_subtype=SoarSubTypes.CORTEX_SOAR,
+#                 status=True,
+#             )
+#             if not soar_integrations.exists():
+#                 return Response(
+#                     {"error": "No active SOAR integration configured for tenant."},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             # Step 3: Get SOAR tenant IDs
+#             soar_tenants = tenant.company.soar_tenants.all()
+#             if not soar_tenants:
+#                 return Response(
+#                     {"error": "No SOAR tenants found."},
+#                     status=status.HTTP_404_NOT_FOUND,
+#                 )
+
+#             soar_ids = [t.id for t in soar_tenants]
+
+#             # Step 4: Build True Positive filters (same as DetailedIncidentReport)
+#             all_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+#                 ~Q(owner__isnull=True)
+#                 & ~Q(owner__exact="")
+#                 & Q(incident_tta__isnull=False)
+#                 & Q(incident_ttn__isnull=False)
+#                 & Q(incident_ttdn__isnull=False)
+#                 & Q(itsm_sync_status__isnull=False)
+#                 & Q(itsm_sync_status__iexact="Ready")
+#                 & Q(incident_priority__isnull=False)
+#                 & ~Q(incident_priority__exact="")
+#             )
+
+#             false_positive_filters = Q(itsm_sync_status__iexact="Done")
+#             filters = all_filters | false_positive_filters
+#             # Step 5: Apply date filtering (same logic as DetailedIncidentReport)
+#             filter_type = request.query_params.get("filter_type", FilterType.WEEK.value)
+#             if filter_type is not None:
+#                 try:
+#                     filter_type = int(filter_type)
+#                 except ValueError:
+#                     return Response({"error": "Invalid filter_type."}, status=400)
+
+#             now = timezone.now()
+#             start_date_str = request.query_params.get("start_date")
+#             end_date_str = request.query_params.get("end_date")
+
+#             try:
+#                 filter_type = FilterType(int(filter_type))
+#                 if filter_type == FilterType.WEEK:
+#                     start_date = now - timedelta(days=7)
+#                     filters &= Q(created__date__gte=start_date)
+#                 elif filter_type == FilterType.MONTH:
+#                     start_date = now - timedelta(days=30)
+#                     filters &= Q(created__date__gte=start_date)
+#                 elif filter_type == FilterType.CUSTOM_RANGE:
+#                     start_date_str = request.query_params.get("start_date")
+#                     end_date_str = request.query_params.get("end_date")
+#                     if start_date_str and end_date_str:
+#                         try:
+#                             start_date = datetime.strptime(
+#                                 start_date_str, "%Y-%m-%d"
+#                             ).date()
+#                             end_date = datetime.strptime(
+#                                 end_date_str, "%Y-%m-%d"
+#                             ).date()
+#                             filters &= Q(created__date__gte=start_date) & Q(
+#                                 created__date__lte=end_date
+#                             )
+#                             if start_date > end_date:
+#                                 return Response(
+#                                     {
+#                                         "error": "Start date cannot be greater than end date."
+#                                     },
+#                                     status=400,
+#                                 )
+#                         except ValueError:
+#                             return Response(
+#                                 {"error": "Invalid date format. Use YYYY-MM-DD."},
+#                                 status=400,
+#                             )
+#             except Exception:
+#                 return Response({"error": "Invalid filter_type."}, status=400)
+
+#             # Step 6: Use ORM to get incident names efficiently with filters
+#             incident_names = (
+#                 DUCortexSOARIncidentFinalModel.objects.filter(filters)
+#                 .filter(name__isnull=False)
+#                 .exclude(name__exact="")
+#                 .values_list("name", flat=True)
+#             )
+
+#             # Step 7: Process names using the group_similar_incidents function
+#             from common.utils import group_similar_incidents
+
+#             # Use the grouping function that handles similarity
+#             incident_name_counts = group_similar_incidents(list(incident_names))
+
+#             # Step 8: Get top 10 most frequent incident names
+#             top_10_incident_names = incident_name_counts.most_common(10)
+
+#             # Check if use_case parameter is provided
+#             use_case_param = request.query_params.get("use_case")
+#             if use_case_param is not None:
+#                 # Step 9: Validate use_case parameter
+#                 try:
+#                     use_case_index = int(use_case_param)
+#                     if use_case_index < 1 or use_case_index > 10:
+#                         return Response(
+#                             {"error": "use_case parameter must be between 1 and 10."},
+#                             status=status.HTTP_400_BAD_REQUEST,
+#                         )
+#                 except ValueError:
+#                     return Response(
+#                         {"error": "use_case parameter must be an integer."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+
+#                 # Step 10: Check if the requested use case index exists
+#                 if use_case_index > len(top_10_incident_names):
+#                     return Response(
+#                         {
+#                             "error": f"Use case index {use_case_index} not found. Only {len(top_10_incident_names)} use cases available."
+#                         },
+#                         status=status.HTTP_404_NOT_FOUND,
+#                     )
+
+#                 # Step 11: Get the selected use case name (convert from 1-based to 0-based index)
+#                 selected_use_case_name = top_10_incident_names[use_case_index - 1][0]
+
+#                 # Step 12: Filter incidents by the selected use case
+#                 # Get all incidents and filter by cleaned name matching the selected use case
+#                 all_incidents = (
+#                     DUCortexSOARIncidentFinalModel.objects.filter(filters)
+#                     .filter(name__isnull=False)
+#                     .exclude(name__exact="")
+#                 )
+
+#                 # Filter incidents where the normalized name matches the selected use case
+#                 from difflib import SequenceMatcher
+
+#                 from common.utils import normalize_incident_name
+
+#                 filtered_incidents = []
+#                 for incident in all_incidents:
+#                     if incident.name:
+#                         normalized_name = normalize_incident_name(incident.name)
+#                         if normalized_name:
+#                             # Use similarity matching like in group_similar_incidents
+#                             score = SequenceMatcher(
+#                                 None,
+#                                 normalized_name.lower(),
+#                                 selected_use_case_name.lower(),
+#                             ).ratio()
+#                             if (
+#                                 score >= 0.85
+#                             ):  # Same threshold as group_similar_incidents
+#                                 filtered_incidents.append(incident)
+
+#                 # Step 13: Apply pagination
+#                 paginator = PageNumberPagination()
+#                 paginator.page_size = PaginationConstants.PAGE_SIZE
+#                 paginated_incidents = paginator.paginate_queryset(
+#                     filtered_incidents, request
+#                 )
+
+#                 # Step 14: Serialize and return paginated results
+#                 serializer = DUCortexSOARIncidentSerializer(
+#                     paginated_incidents, many=True
+#                 )
+#                 return paginator.get_paginated_response(
+#                     {
+#                         "use_case_name": selected_use_case_name,
+#                         "incidents": serializer.data,
+#                     }
+#                 )
+
+#             else:
+#                 # Step 9: Return top 10 use cases (original functionality)
+#                 response_data = [
+#                     {"incident_name": incident_name, "occurrence_count": count}
+#                     for incident_name, count in top_10_incident_names
+#                 ]
+#                 return Response(response_data, status=status.HTTP_200_OK)
+
+#         except Exception as e:
+#             return Response(
+#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
 
 
 class UseCaseIncidentsView(APIView):
@@ -3854,7 +4229,10 @@ class UseCaseIncidentsView(APIView):
 
             try:
                 filter_type = FilterType(int(filter_type))
-                if filter_type == FilterType.WEEK:
+                if filter_type == FilterType.TODAY:
+                    start_date = now
+                    filters &= Q(created__date__gte=start_date)
+                elif filter_type == FilterType.WEEK:
                     start_date = now - timedelta(days=7)
                     filters &= Q(created__date__gte=start_date)
                 elif filter_type == FilterType.MONTH:
@@ -3897,11 +4275,14 @@ class UseCaseIncidentsView(APIView):
                 .values_list("name", flat=True)
             )
 
-            # Step 7: Process names using the group_similar_incidents function
-            from common.utils import group_similar_incidents
+            # Step 7: Process names and count occurrences
+            incident_name_counts = Counter()
 
-            # Use the grouping function that handles similarity
-            incident_name_counts = group_similar_incidents(list(incident_names))
+            for name in incident_names:
+                # Clean the incident name using the same logic as extract_use_case
+                cleaned_name = extract_use_case(name)
+                if cleaned_name:  # Only count non-empty cleaned names
+                    incident_name_counts[cleaned_name] += 1
 
             # Step 8: Get top 10 most frequent incident names
             top_10_incident_names = incident_name_counts.most_common(10)
@@ -3943,26 +4324,13 @@ class UseCaseIncidentsView(APIView):
                     .exclude(name__exact="")
                 )
 
-                # Filter incidents where the normalized name matches the selected use case
-                from difflib import SequenceMatcher
-
-                from common.utils import normalize_incident_name
-
+                # Filter incidents where the cleaned name matches the selected use case
                 filtered_incidents = []
                 for incident in all_incidents:
                     if incident.name:
-                        normalized_name = normalize_incident_name(incident.name)
-                        if normalized_name:
-                            # Use similarity matching like in group_similar_incidents
-                            score = SequenceMatcher(
-                                None,
-                                normalized_name.lower(),
-                                selected_use_case_name.lower(),
-                            ).ratio()
-                            if (
-                                score >= 0.85
-                            ):  # Same threshold as group_similar_incidents
-                                filtered_incidents.append(incident)
+                        cleaned_name = extract_use_case(incident.name)
+                        if cleaned_name == selected_use_case_name:
+                            filtered_incidents.append(incident)
 
                 # Step 13: Apply pagination
                 paginator = PageNumberPagination()
