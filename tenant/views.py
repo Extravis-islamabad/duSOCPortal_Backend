@@ -2071,6 +2071,85 @@ class IncidentDetailView(APIView):
                     {"error": "Incident not found"}, status=status.HTTP_404_NOT_FOUND
                 )
 
+            # Calculate SLA breach information
+            sla_breach_info = {
+                "tta": {"is_breached": False, "breach_minutes": 0, "sla_minutes": 0},
+                "ttn": {"is_breached": False, "breach_minutes": 0, "sla_minutes": 0},
+                "ttdn": {"is_breached": False, "breach_minutes": 0, "sla_minutes": 0},
+            }
+
+            # Get SLA metrics for the incident's priority level
+            if (
+                incident["incident_priority"]
+                and incident["occured"]
+                and incident["incident_tta"]
+                and incident["incident_ttn"]
+                and incident["incident_ttdn"]
+            ):
+                # Get SLA configuration
+                if tenant.company.is_default_sla:
+                    sla_metrics = DefaultSoarSlaMetric.objects.all()
+                else:
+                    sla_metrics = SoarTenantSlaMetric.objects.filter(
+                        soar_tenant__in=soar_tenants, company=tenant.company
+                    )
+
+                # Find matching SLA level for the incident's priority
+                sla_metric = None
+                for metric in sla_metrics:
+                    sla_level_label = SlaLevelChoices(metric.sla_level).label
+                    if incident["incident_priority"] == sla_level_label:
+                        sla_metric = metric
+                        break
+
+                if sla_metric:
+                    occured = incident["occured"]
+
+                    # Calculate TTA breach
+                    if incident["incident_tta"]:
+                        tta_delta_minutes = (
+                            incident["incident_tta"] - occured
+                        ).total_seconds() / 60
+                        sla_breach_info["tta"]["sla_minutes"] = sla_metric.tta_minutes
+                        sla_breach_info["tta"]["actual_minutes"] = round(
+                            tta_delta_minutes
+                        )
+                        if tta_delta_minutes > sla_metric.tta_minutes:
+                            sla_breach_info["tta"]["is_breached"] = True
+                            sla_breach_info["tta"]["breach_minutes"] = round(
+                                tta_delta_minutes - sla_metric.tta_minutes, 2
+                            )
+
+                    # Calculate TTN breach
+                    if incident["incident_ttn"]:
+                        ttn_delta_minutes = (
+                            incident["incident_ttn"] - occured
+                        ).total_seconds() / 60
+                        sla_breach_info["ttn"]["sla_minutes"] = sla_metric.ttn_minutes
+                        sla_breach_info["ttn"]["actual_minutes"] = round(
+                            ttn_delta_minutes
+                        )
+                        if ttn_delta_minutes > sla_metric.ttn_minutes:
+                            sla_breach_info["ttn"]["is_breached"] = True
+                            sla_breach_info["ttn"]["breach_minutes"] = round(
+                                ttn_delta_minutes - sla_metric.ttn_minutes, 2
+                            )
+
+                    # Calculate TTDN breach
+                    if incident["incident_ttdn"]:
+                        ttdn_delta_minutes = (
+                            incident["incident_ttdn"] - occured
+                        ).total_seconds() / 60
+                        sla_breach_info["ttdn"]["sla_minutes"] = sla_metric.ttdn_minutes
+                        sla_breach_info["ttdn"]["actual_minutes"] = round(
+                            ttdn_delta_minutes
+                        )
+                        if ttdn_delta_minutes > sla_metric.ttdn_minutes:
+                            sla_breach_info["ttdn"]["is_breached"] = True
+                            sla_breach_info["ttdn"]["breach_minutes"] = round(
+                                ttdn_delta_minutes - sla_metric.ttdn_minutes, 2
+                            )
+
             # Build timeline
             timeline = []
             if incident["created"]:
@@ -2248,6 +2327,7 @@ class IncidentDetailView(APIView):
                     "tta": incident["incident_tta"],
                     "ttn": incident["incident_ttn"],
                     "ttdn": incident["incident_ttdn"],
+                    "sla_breach_info": sla_breach_info,
                     "notes": notes_by_user,
                     "list_of_rules_offense": incident["list_of_rules_offense"],
                     "closing_reason": incident["reason"],
