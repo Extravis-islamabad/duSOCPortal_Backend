@@ -3741,54 +3741,6 @@ class RecentIncidentsView(APIView):
 
             false_positive_filters = Q(itsm_sync_status__iexact="Done")
             filters = all_filters | false_positive_filters
-            # Step 5: Apply date filtering (same logic as DetailedIncidentReport)
-            filter_type = request.query_params.get("filter_type", FilterType.WEEK.value)
-            if filter_type is not None:
-                try:
-                    filter_type = int(filter_type)
-                except ValueError:
-                    return Response({"error": "Invalid filter_type."}, status=400)
-
-            now = timezone.now()
-            start_date_str = request.query_params.get("start_date")
-            end_date_str = request.query_params.get("end_date")
-
-            try:
-                filter_type = FilterType(int(filter_type))
-                if filter_type == FilterType.WEEK:
-                    start_date = now - timedelta(days=7)
-                    filters &= Q(created__date__gte=start_date)
-                elif filter_type == FilterType.MONTH:
-                    start_date = now - timedelta(days=30)
-                    filters &= Q(created__date__gte=start_date)
-                elif filter_type == FilterType.CUSTOM_RANGE:
-                    start_date_str = request.query_params.get("start_date")
-                    end_date_str = request.query_params.get("end_date")
-                    if start_date_str and end_date_str:
-                        try:
-                            start_date = datetime.strptime(
-                                start_date_str, "%Y-%m-%d"
-                            ).date()
-                            end_date = datetime.strptime(
-                                end_date_str, "%Y-%m-%d"
-                            ).date()
-                            filters &= Q(created__date__gte=start_date) & Q(
-                                created__date__lte=end_date
-                            )
-                            if start_date > end_date:
-                                return Response(
-                                    {
-                                        "error": "Start date cannot be greater than end date."
-                                    },
-                                    status=400,
-                                )
-                        except ValueError:
-                            return Response(
-                                {"error": "Invalid date format. Use YYYY-MM-DD."},
-                                status=400,
-                            )
-            except Exception:
-                return Response({"error": "Invalid filter_type."}, status=400)
 
             # Step 6: Use ORM to get incident names efficiently with filters
             incident_names = (
@@ -3807,11 +3759,6 @@ class RecentIncidentsView(APIView):
             # Step 6: Get top 10 most frequent incident names
             top_10_incident_names = incident_name_counts.most_common(10)
 
-            # Step 7: Build simple response with only incident names and counts
-            # response_data = [
-            #     {"incident_name": incident_name, "occurrence_count": count}
-            #     for incident_name, count in top_10_incident_names
-            # ]
             response_data = [
                 {"id": idx, "incident_name": incident_name, "occurrence_count": count}
                 for idx, (incident_name, count) in enumerate(
