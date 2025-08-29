@@ -36,7 +36,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from weasyprint import HTML
 
 from authentication.permissions import IsAdminUser, IsTenant
-from common.constants import SEVERITY_LABELS, FilterType, PaginationConstants
+from common.constants import FilterType, PaginationConstants
 from common.modules.cyware import Cyware
 from common.utils import extract_use_case
 from integration.models import (
@@ -2505,26 +2505,28 @@ class IncidentSummaryView(APIView):
             )
             filters = filters | false_positive_filters
             # Handle filter_type (same as AllIncidentsView)
-            filter_type = request.query_params.get("filter_type")
+            # filter_type = request.query_params.get("filter_type")
             now = timezone.now()
-            if filter_type:
-                try:
-                    filter_enum = FilterType(int(filter_type))
-                    if filter_enum == FilterType.TODAY:
-                        filters &= Q(created__date=now)
-                    elif filter_enum == FilterType.WEEK:
-                        start_date = now - timedelta(days=7)
-                        filters &= Q(created__date__gte=start_date)
-                    elif filter_enum == FilterType.MONTH:
-                        start_date = now - timedelta(days=30)
-                        filters &= Q(created__date__gte=start_date)
-                except Exception:
-                    return Response(
-                        {
-                            "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
-                        },
-                        status=400,
-                    )
+            start_date = now - timedelta(hours=24)
+            filters &= Q(created__gte=start_date, created__lte=now)
+            # if filter_type:
+            #     try:
+            #         filter_enum = FilterType(int(filter_type))
+            #         if filter_enum == FilterType.TODAY:
+            #             filters &= Q(created__date=now)
+            #         elif filter_enum == FilterType.WEEK:
+            #             start_date = now - timedelta(days=7)
+            #             filters &= Q(created__date__gte=start_date)
+            #         elif filter_enum == FilterType.MONTH:
+            #             start_date = now - timedelta(days=30)
+            #             filters &= Q(created__date__gte=start_date)
+            #     except Exception:
+            #         return Response(
+            #             {
+            #                 "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
+            #             },
+            #             status=400,
+            #         )
 
             priority = request.query_params.get("priority")
             if priority:
@@ -2551,20 +2553,20 @@ class IncidentSummaryView(APIView):
             incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
 
             # Severity summary (same as original)
-            severity_counts = incidents_qs.values("severity").annotate(
-                count=Count("severity")
-            )
+            # severity_counts = incidents_qs.values("severity").annotate(
+            #     count=Count("severity")
+            # )
 
             # Initialize severity summary with all severity labels set to 0
-            severity_summary = {label: 0 for label in SEVERITY_LABELS.values()}
+            # severity_summary = {label: 0 for label in SEVERITY_LABELS.values()}
 
-            # Update counts for severities present in the data
-            for item in severity_counts:
-                severity_value = item["severity"]
-                label = SEVERITY_LABELS.get(
-                    severity_value, f"Unknown ({severity_value})"
-                )
-                severity_summary[label] = item["count"]
+            # # Update counts for severities present in the data
+            # for item in severity_counts:
+            #     severity_value = item["severity"]
+            #     label = SEVERITY_LABELS.get(
+            #         severity_value, f"Unknown ({severity_value})"
+            #     )
+            #     severity_summary[label] = item["count"]
 
             # Priority summary (using SlaLevelChoices)
             priority_counts = incidents_qs.values("incident_priority").annotate(
@@ -2585,7 +2587,7 @@ class IncidentSummaryView(APIView):
 
             # Step 4: Return both summaries
             return Response(
-                {"summary": severity_summary, "priority_summary": priority_summary},
+                {"priority_summary": priority_summary},
                 status=200,
             )
 
