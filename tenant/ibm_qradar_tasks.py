@@ -375,19 +375,23 @@ def sync_event_log_assets(
                 data, integration_id=integration_id
             )
 
-        if not isinstance(transformed_data, list):
-            logger.error("Invalid data format: Expected a list")
-            return
+            if not isinstance(transformed_data, list):
+                logger.error("Invalid data format: Expected a list")
+                return
 
-        ibm_qradar._insert_event_logs(transformed_data)
-        deleted_count = ibm_qradar._delete_stale_event_logs(
-            api_data=transformed_data, integration_id=integration_id
-        )
-        logger.info(f"Deleted {deleted_count} stale event log assets")
-        logger.info(f"Successfully synced {len(transformed_data)} event log assets")
-        logger.info(
-            f"QRadarTasks.sync_event_log_assets() task took {time.time() - start} seconds"
-        )
+            ibm_qradar._insert_event_logs(transformed_data)
+            deleted_count = ibm_qradar._delete_stale_event_logs(
+                api_data=transformed_data, integration_id=integration_id
+            )
+            logger.info(f"Deleted {deleted_count} stale event log assets")
+
+            # Update asset active status after syncing and cleaning up stale assets
+            ibm_qradar.update_asset_active_status(integration_id)
+
+            logger.info(f"Successfully synced {len(transformed_data)} event log assets")
+            logger.info(
+                f"QRadarTasks.sync_event_log_assets() task took {time.time() - start} seconds"
+            )
     except Exception as e:
         logger.error(f"Unexpected error in sync_event_log_assets: {str(e)}")
 
