@@ -329,6 +329,9 @@ class IBMQradarAssests(models.Model):
     creation_date_converted = models.DateField(null=True, blank=True)
     modified_date_converted = models.DateField(null=True, blank=True)
     last_event_date_converted = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(
+        default=False, help_text="Whether the asset is currently reporting/active"
+    )
 
     class Meta:
         db_table = "du_ibm_qradar_assets"
