@@ -1,4 +1,3 @@
-import re
 from datetime import datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -24,7 +23,6 @@ from tenant.models import (
     DefaultSoarSlaMetric,
     DUCortexSOARIncidentFinalModel,
     IBMQradarAssests,
-    IBMQradarAssetsGroup,
     IBMQradarEPS,
     SlaLevelChoices,
     SoarTenantSlaMetric,
@@ -499,8 +497,6 @@ class AssetsSummaryAPIView(APIView):
     def _calculate_assets_summary(self, companies):
         """Calculate assets summary per company"""
         companies_summary = []
-        now_dt = timezone.now()
-
         for company in companies:
             # Get all event collector IDs for this company
             collector_ids = TenantQradarMapping.objects.filter(
@@ -530,24 +526,19 @@ class AssetsSummaryAPIView(APIView):
             company_active_assets = 0
             company_no_reporting_assets = 0
 
-            # Bulk fetch asset groups for threshold determination
-            all_group_ids = set()
-            for asset in assets:
-                if asset.group_ids:
-                    all_group_ids.update(asset.group_ids)
+            company_active_assets = (
+                IBMQradarAssests.objects.filter(event_collector_id__in=collector_ids)
+                .select_related("log_source_type")
+                .filter(is_active=True)
+                .count()
+            )
 
-            groups = IBMQradarAssetsGroup.objects.filter(db_id__in=all_group_ids)
-            group_map = {g.db_id: g for g in groups}
-
-            # Process each asset
-            for asset in assets:
-                # Determine if asset is reporting
-                is_reporting = self._is_asset_reporting(asset, group_map, now_dt)
-
-                if is_reporting:
-                    company_active_assets += 1
-                else:
-                    company_no_reporting_assets += 1
+            company_no_reporting_assets = (
+                IBMQradarAssests.objects.filter(event_collector_id__in=collector_ids)
+                .select_related("log_source_type")
+                .filter(is_active=False)
+                .count()
+            )
 
             # Add to company summary
             companies_summary.append(
@@ -564,40 +555,6 @@ class AssetsSummaryAPIView(APIView):
             "companies_count": len(companies),
             "companies_summary": companies_summary,
         }
-
-    def _is_asset_reporting(self, asset, group_map, now_dt):
-        """Determine if an asset is currently reporting based on last event time"""
-        # Asset must be enabled to be considered reporting
-        if not asset.enabled:
-            return False
-
-        # Asset must have last_event_time to be considered reporting
-        if not asset.last_event_time:
-            return False
-
-        # Default threshold is 24 hours unless overridden by group description
-        threshold_minutes = 24 * 60
-
-        # Check if any group has a custom threshold
-        if asset.group_ids:
-            for gid in asset.group_ids:
-                if gid in group_map and group_map[gid].description:
-                    match = re.search(
-                        r"(\d+)\s*hour", group_map[gid].description, re.IGNORECASE
-                    )
-                    if match:
-                        threshold_minutes = int(match.group(1)) * 60
-                        break
-
-        # Check if last event time is within threshold
-        try:
-            last_event_timestamp = int(asset.last_event_time) / 1000
-            last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
-            last_event_time = timezone.make_aware(last_event_time)
-            time_diff_minutes = (now_dt - last_event_time).total_seconds() / 60
-            return time_diff_minutes <= threshold_minutes
-        except (ValueError, TypeError):
-            return False
 
 
 class IncidentPrioritySummaryAPIView(APIView):
