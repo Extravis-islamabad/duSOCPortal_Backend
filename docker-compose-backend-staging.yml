@@ -142,14 +142,14 @@ services:
       flower
       --broker=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
       --address=0.0.0.0
-      --port=5555
+      --port=5566
       --persistent=True
       --db=/data/flower.db
       --url_prefix=flower
     env_file:
       - .env
     ports:
-      - "5555:5555"
+      - 5566:5566
     depends_on:
       rabbitmq:
         condition: service_healthy
