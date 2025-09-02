@@ -325,14 +325,11 @@ class GetTenantAssetsList(APIView):
 
     def get(self, request):
         """
-        Retrieve IBM QRadar assets with status counts and pagination
+        Retrieve IBM QRadar assets with pagination
 
         Returns:
             {
                 "count": filtered_count,
-                "total_assets": total_count (sum of active + inactive),
-                "active_assets": active_count,
-                "inactive_assets": inactive_count,
                 "next": next_page_url,
                 "previous": previous_page_url,
                 "results": serialized_assets
@@ -374,63 +371,7 @@ class GetTenantAssetsList(APIView):
             # Base filter for tenant's assets
             base_filter = Q(event_collector_id__in=collector_ids)
 
-            # Step 4: Build database-level status filters
-            now = timezone.now()
-
-            # Check if we should use the pre-calculated is_active field for better performance
-            use_precalculated_status = (
-                request.query_params.get("use_precalculated", "false").lower() == "true"
-            )
-
-            # Create Q objects for basic status filtering at DB level
-            # These cover the simple cases that can be determined without complex logic
-            definitely_error_q = (
-                Q(enabled=False)
-                | Q(last_event_time__isnull=True)
-                | Q(last_event_time__exact="")
-            )
-            potentially_success_q = (
-                Q(enabled=True)
-                & ~Q(last_event_time__isnull=True)
-                & ~Q(last_event_time__exact="")
-            )
-
-            # Get counts for total statistics
-            base_queryset = IBMQradarAssests.objects.filter(base_filter).select_related(
-                "event_collector", "log_source_type"
-            )
-
-            # if use_precalculated_status:
-            # Use pre-calculated is_active field for better performance
-            total_active = base_queryset.filter(is_active=True).count()
-            total_inactive = base_queryset.filter(is_active=False).count()
-            # else:
-            #     # Use the original time-based calculation
-            #     # Count definitely error assets (can be done at DB level)
-            #     definitely_error_count = base_queryset.filter(
-            #         definitely_error_q
-            #     ).count()
-
-            #     # Get potentially successful assets for time-based checking
-            #     potentially_success_assets = list(
-            #         base_queryset.filter(potentially_success_q).select_related(
-            #             "event_collector", "log_source_type"
-            #         )
-            #     )
-
-            #     # Calculate SUCCESS/ERROR for time-sensitive assets
-            #     total_active = 0
-            #     total_inactive = (
-            #         definitely_error_count  # Start with definitely error assets
-            #     )
-
-            #     for asset in potentially_success_assets:
-            #         if self._is_asset_success_based_on_time(asset, now):
-            #             total_active += 1
-            #         else:
-            #             total_inactive += 1
-
-            # Step 7: Apply request filters for the actual results
+            # Step 4: Apply request filters for the actual results
             filters = base_filter.copy()
 
             # Name filter
@@ -496,67 +437,24 @@ class GetTenantAssetsList(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-                if use_precalculated_status:
-                    # Use pre-calculated is_active field for better performance
-                    if status_filter == "SUCCESS":
-                        filtered_assets = list(
-                            IBMQradarAssests.objects.filter(
-                                filters & Q(is_active=True)
-                            ).select_related("event_collector", "log_source_type")
-                        )
-                    elif status_filter == "ERROR":
-                        filtered_assets = list(
-                            IBMQradarAssests.objects.filter(
-                                filters & Q(is_active=False)
-                            ).select_related("event_collector", "log_source_type")
-                        )
-                    else:  # status_filter == "ALL"
-                        filtered_assets = list(
-                            IBMQradarAssests.objects.filter(filters).select_related(
-                                "event_collector", "log_source_type"
-                            )
-                        )
+                # Use is_active field for status filtering
+                if status_filter == "SUCCESS":
+                    filtered_assets = list(
+                        IBMQradarAssests.objects.filter(
+                            filters & Q(is_active=True)
+                        ).select_related("event_collector", "log_source_type")
+                    )
+                elif status_filter == "ERROR":
+                    filtered_assets = list(
+                        IBMQradarAssests.objects.filter(
+                            filters & Q(is_active=False)
+                        ).select_related("event_collector", "log_source_type")
+                    )
                 else:
-                    # Use the original time-based calculation
-                    if status_filter == "ERROR":
-                        # For ERROR: include definitely error assets + time-based error assets
-                        definitely_error_assets = list(
-                            IBMQradarAssests.objects.filter(
-                                filters & definitely_error_q
-                            ).select_related("event_collector", "log_source_type")
-                        )
-                        potentially_success_filtered = list(
-                            IBMQradarAssests.objects.filter(
-                                filters & potentially_success_q
-                            ).select_related("event_collector", "log_source_type")
-                        )
-                        time_based_error_assets = [
-                            asset
-                            for asset in potentially_success_filtered
-                            if not self._is_asset_success_based_on_time(asset, now)
-                        ]
-                        filtered_assets = (
-                            definitely_error_assets + time_based_error_assets
-                        )
-                    elif status_filter == "SUCCESS":
-                        # For SUCCESS: only time-based successful assets
-                        potentially_success_filtered = list(
-                            IBMQradarAssests.objects.filter(
-                                filters & potentially_success_q
-                            ).select_related("event_collector", "log_source_type")
-                        )
-                        filtered_assets = [
-                            asset
-                            for asset in potentially_success_filtered
-                            if self._is_asset_success_based_on_time(asset, now)
-                        ]
-                    else:  # status_filter == "ALL"
-                        # Get all filtered assets
-                        filtered_assets = list(
-                            IBMQradarAssests.objects.filter(filters).select_related(
-                                "event_collector", "log_source_type"
-                            )
-                        )
+                    return Response(
+                        {"error": "Invalid status value. Must be 'SUCCESS', 'ERROR'."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
             else:
                 # No status filter - get all assets
                 filtered_assets = list(
@@ -586,43 +484,20 @@ class GetTenantAssetsList(APIView):
                 reverse=True,
             )
 
-            # Calculate filtered active/inactive counts
-            if use_precalculated_status:
-                # Use pre-calculated is_active field for better performance
-                filtered_active = sum(1 for asset in filtered_assets if asset.is_active)
-                filtered_inactive = len(filtered_assets) - filtered_active
-            else:
-                # Use the original time-based calculation
-                filtered_active = 0
-                filtered_inactive = 0
-                for asset in filtered_assets:
-                    asset_status = self._get_asset_status(asset, now)
-                    if asset_status == "SUCCESS":
-                        filtered_active += 1
-                    else:
-                        filtered_inactive += 1
-
             # Pagination
             paginator = PageNumberPagination()
             paginator.page_size = PaginationConstants.PAGE_SIZE
             result_page = paginator.paginate_queryset(filtered_assets, request)
 
-            # Serialize results with consistent status logic
+            # Serialize results using is_active field
             serialized_data = []
             for asset in result_page:
                 asset_data = IBMQradarAssestsSerializer(asset).data
-                if use_precalculated_status:
-                    asset_data["status"] = "SUCCESS" if asset.is_active else "ERROR"
-                else:
-                    asset_data["status"] = self._get_asset_status(asset, now)
                 serialized_data.append(asset_data)
 
-            # Prepare response - ensure total is always sum of active + inactive
+            # Prepare response
             response_data = {
                 "count": len(filtered_assets),
-                "total_assets": total_active + total_inactive,
-                "active_assets": total_active,
-                "inactive_assets": total_inactive,
                 "results": serialized_data,
             }
 
