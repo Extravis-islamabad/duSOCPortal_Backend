@@ -4,6 +4,7 @@ from tenant.views import (
     AlertDetailView,
     AlertListView,
     AllIncidentsView,
+    AssetCountsView,
     AssetReportView,
     ConsolidatedReport,
     DashboardView,
@@ -17,7 +18,6 @@ from tenant.views import (
     EPSGraphAPIView,
     EventCollectorsListAPIView,
     FileTypeChoicesView,
-    GetTenantAssetsList,
     IncidentDetailView,
     IncidentReportView,
     IncidentSummaryView,
@@ -71,7 +71,8 @@ urlpatterns = [
         DuCortexSOARTenantsListView.as_view(),
         name="get-cortex-soar-tenants",
     ),
-    path("get_tenant_assets/", GetTenantAssetsList.as_view(), name="get-tenant-assets"),
+    # path("get_tenant_assets/", GetTenantAssetsList.as_view(), name="get-tenant-assets"),
+    path("api/asset-counts/", AssetCountsView.as_view(), name="asset-counts"),
     path(
         "api/datetime-storage/", DateTimeStorageView.as_view(), name="datetime-storage"
     ),
