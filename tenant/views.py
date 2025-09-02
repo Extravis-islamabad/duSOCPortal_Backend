@@ -7708,7 +7708,7 @@ class ConsolidatedReport(APIView):
             "device_coverage": device_coverage,
             "log_source_stats": log_source_stats_list,
             "sla_stats": priority_wise_counts,
-            "top_use_cases": top_use_cases,
+            "top_use_cases": top_use_cases_data,
             "eps_data": eps_data,
             "incident_clousure_trend": incident_closure_trends
             # "sla_metrics":sla_f_metrics
