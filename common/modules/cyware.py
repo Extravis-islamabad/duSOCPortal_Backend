@@ -852,7 +852,7 @@ class Cyware:
         """
         start = time.time()
         logger.info(f"Cyware.get_alert_detail() started : {start}")
-        full_url = f"{self.base_url}/{CywareConstants.ALERT_DETAIL_ENDPOINT}/{short_id}?{urllib.parse.urlencode(self.params)}"
+        full_url = f"{self.base_url}/{CywareConstants.ALERT_DETAIL_ENDPOINT}{short_id}?{urllib.parse.urlencode(self.params)}"
         try:
             response = requests.get(full_url, timeout=SSLConstants.TIMEOUT)
             response.raise_for_status()
