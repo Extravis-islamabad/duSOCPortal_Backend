@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from datetime import datetime, timezone
 
@@ -3531,3 +3532,98 @@ class IBMQradar:
         except Exception as e:
             logger.error(f"Error inserting geo events: {str(e)}")
             transaction.rollback()
+
+    def update_asset_active_status(self, integration_id):
+        """
+        Update the is_active status of assets for a specific integration.
+        This function uses the same logic as GetTenantAssetsList to determine if assets are reporting.
+
+        Args:
+            integration_id: ID of the integration to update assets for
+        """
+        from django.utils import timezone
+
+        start = time.time()
+        logger.info(
+            f"IBMQRadar.update_asset_active_status() started for integration {integration_id}"
+        )
+
+        try:
+            now = timezone.now()
+            updated_count = 0
+
+            # Get assets for this integration
+            assets = IBMQradarAssests.objects.filter(
+                integration_id=integration_id
+            ).select_related("event_collector", "log_source_type")
+
+            for asset in assets:
+                # Determine if asset is active using the same logic as GetTenantAssetsList
+                is_active = self._is_asset_active(asset, now)
+
+                # Only update if the status has changed
+                if asset.is_active != is_active:
+                    asset.is_active = is_active
+                    asset.save(update_fields=["is_active"])
+                    updated_count += 1
+
+            logger.info(
+                f"Updated {updated_count} assets' active status for integration {integration_id}"
+            )
+            logger.info(
+                f"IBMQRadar.update_asset_active_status() took {time.time() - start} seconds"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Error updating asset active status for integration {integration_id}: {str(e)}",
+                exc_info=True,
+            )
+
+    def _is_asset_active(self, asset, now):
+        from django.utils import timezone
+
+        """
+        Determine if an asset is active/reporting using the same logic as GetTenantAssetsList.
+
+        Args:
+            asset: IBMQradarAssests instance
+            now: Current datetime
+
+        Returns:
+            bool: True if asset is active, False otherwise
+        """
+        # If asset is not enabled, it's not active
+        if not asset.enabled:
+            return False
+
+        # If no last event time, it's not active
+        if not asset.last_event_time:
+            return False
+
+        # Check time-based threshold
+        time_threshold_minutes = 24 * 60  # Default 24 hours
+
+        try:
+            # Check if asset has groups and extract time threshold from description
+            group = asset.groups.first()
+
+            if group and group.description:
+                # Extract the first integer before the word "hour" (case-insensitive)
+                match = re.search(r"(\d+)\s*hour", group.description, re.IGNORECASE)
+                if match:
+                    extracted_hours = int(match.group(1))
+                    time_threshold_minutes = extracted_hours * 60
+
+            # Convert last_event_time to datetime
+            last_event_timestamp = int(asset.last_event_time) / 1000
+            last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
+            last_event_time = timezone.make_aware(last_event_time)
+
+            # Calculate time difference
+            time_diff_minutes = (now - last_event_time).total_seconds() / 60
+
+            return time_diff_minutes <= time_threshold_minutes
+
+        except (ValueError, TypeError):
+            return False
