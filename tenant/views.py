@@ -5459,8 +5459,13 @@ class SLABreachedIncidentsView(APIView):
             mitre_technique_filter = request.query_params.get("mitre_technique")
             config_item_filter = request.query_params.get("configuration_item")
             filter_type = request.query_params.get("filter", "all")
+
+            # Get date filtering parameters (new standardized approach)
+            date_filter_type = request.query_params.get("filter_type")
             start_date_str = request.query_params.get("start_date")
             end_date_str = request.query_params.get("end_date")
+
+            # Legacy date parameters (keep for backward compatibility)
             occurred_start_str = request.query_params.get("occurred_start")
             occurred_end_str = request.query_params.get("occurred_end")
             show_only = request.query_params.get(
@@ -5567,35 +5572,23 @@ class SLABreachedIncidentsView(APIView):
                 elif filter_type == "error":
                     filters &= Q(status="Error")
 
-            # Step 7: Apply date filters with validation (same as original)
-            start_date = None
-            end_date = None
+            # Step 7: Apply date filters with validation
+            # Apply new standardized date filtering (filter_type approach)
+            if date_filter_type or start_date_str or end_date_str:
+                try:
+                    date_filter = self._get_date_filter(
+                        date_filter_type, start_date_str, end_date_str
+                    )
+                    if date_filter:
+                        filters &= date_filter
+                except ValueError as e:
+                    return Response(
+                        {"error": str(e)}, status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # Legacy date filtering for occurred dates (keep for backward compatibility)
             occurred_start = None
             occurred_end = None
-
-            if start_date_str:
-                try:
-                    start_date = make_aware(
-                        datetime.strptime(start_date_str, date_format)
-                    ).date()
-                    filters &= Q(created__date__gte=start_date)
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid start_date format. Use YYYY-MM-DD."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            if end_date_str:
-                try:
-                    end_date = make_aware(
-                        datetime.strptime(end_date_str, date_format)
-                    ).date()
-                    filters &= Q(created__date__lte=end_date)
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid end_date format. Use YYYY-MM-DD."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
 
             if occurred_start_str:
                 try:
@@ -5621,13 +5614,7 @@ class SLABreachedIncidentsView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Validate date ranges
-            if start_date and end_date and start_date > end_date:
-                return Response(
-                    {"error": "start_date cannot be greater than end_date."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
+            # Validate occurred date ranges
             if occurred_start and occurred_end and occurred_start > occurred_end:
                 return Response(
                     {"error": "occurred_start cannot be greater than occurred_end."},
@@ -5776,6 +5763,99 @@ class SLABreachedIncidentsView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    def _get_date_filter(self, filter_type, start_date, end_date):
+        """
+        Get date filter based on filter_type or custom date range.
+
+        Args:
+            filter_type (str): Filter type (1=TODAY, 2=WEEK, 3=MONTH, 9=CUSTOM_RANGE)
+            start_date (str): Start date in YYYY-MM-DD format
+            end_date (str): End date in YYYY-MM-DD format
+
+        Returns:
+            Q: Django Q object for date filtering
+        """
+        from datetime import datetime, timedelta
+
+        from django.utils import timezone
+
+        now = timezone.now()
+        today = now.date()
+
+        # Handle predefined filter types
+        if filter_type:
+            try:
+                filter_type_int = int(filter_type)
+
+                if filter_type_int == FilterType.TODAY.value:
+                    # Today's incidents
+                    return Q(created__date=today)
+
+                elif filter_type_int == FilterType.WEEK.value:
+                    # Last 7 days
+                    start_date_obj = today - timedelta(days=7)
+                    return Q(created__date__gte=start_date_obj) & Q(
+                        created__date__lte=today
+                    )
+
+                elif filter_type_int == FilterType.MONTH.value:
+                    # Last 30 days
+                    start_date_obj = today - timedelta(days=30)
+                    return Q(created__date__gte=start_date_obj) & Q(
+                        created__date__lte=today
+                    )
+
+                elif filter_type_int == FilterType.CUSTOM_RANGE.value:
+                    # Custom range - requires start_date and end_date
+                    if not start_date or not end_date:
+                        raise ValueError(
+                            "Custom range requires both start_date and end_date."
+                        )
+
+                    if start_date > end_date:
+                        raise ValueError("Start date must be before end date.")
+
+                    try:
+                        start_date_obj = datetime.strptime(
+                            start_date, "%Y-%m-%d"
+                        ).date()
+                        end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+                        return Q(created__date__gte=start_date_obj) & Q(
+                            created__date__lte=end_date_obj
+                        )
+                    except ValueError:
+                        raise ValueError("Invalid date format. Use YYYY-MM-DD.")
+
+                else:
+                    raise ValueError(
+                        f"Invalid filter_type: {filter_type}. Must be 1, 2, 3, or 9."
+                    )
+
+            except ValueError as e:
+                raise ValueError(str(e))
+
+        # Handle direct start_date and end_date parameters (without filter_type)
+        if start_date or end_date:
+            date_filter = Q()
+
+            if start_date:
+                try:
+                    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+                    date_filter &= Q(created__date__gte=start_date_obj)
+                except ValueError:
+                    raise ValueError("Invalid start_date format. Use YYYY-MM-DD.")
+
+            if end_date:
+                try:
+                    end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+                    date_filter &= Q(created__date__lte=end_date_obj)
+                except ValueError:
+                    raise ValueError("Invalid end_date format. Use YYYY-MM-DD.")
+
+            return date_filter
+
+        return None
 
 
 class SLAOverviewCardsView(APIView):
