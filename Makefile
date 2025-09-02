@@ -27,7 +27,7 @@ build-backend:
 
 # Deploy backend services
 deploy-backend: build-backend
-	$(COMPOSE) up -d backend celery celery-beat celery-intel redis rabbitmq flower
+	$(COMPOSE) up -d backend celery celery-beat celery-intel redis rabbitmq
 
 # Restart backend-related services only
 restart-backend-services:

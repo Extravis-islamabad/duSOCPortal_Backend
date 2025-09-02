@@ -135,32 +135,32 @@ services:
     environment:
       - C_FORCE_ROOT=true
 
-  flower:
-    image: mher/flower
-    container_name: duSOC_Celery_Flower
-    command: >
-      flower
-      --broker=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
-      --address=0.0.0.0
-      --port=5566
-      --persistent=True
-      --db=/data/flower.db
-      --url_prefix=flower
-    env_file:
-      - .env
-    ports:
-      - 5566:5566
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - flower_data:/data
+  # flower:
+  #   image: mher/flower
+  #   container_name: duSOC_Celery_Flower
+  #   command: >
+  #     flower
+  #     --broker=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
+  #     --address=0.0.0.0
+  #     --port=5566
+  #     --persistent=True
+  #     --db=/data/flower.db
+  #     --url_prefix=flower
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - 5566:5566
+  #   depends_on:
+  #     rabbitmq:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   volumes:
+  #     - flower_data:/data
 
 
 volumes:
   # dusocportal_backend_dusocportal_backend_postgres_data:
   redis_data:
   rabbitmq_data:
-  flower_data:
+  # flower_data:
