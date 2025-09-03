@@ -98,11 +98,11 @@ class LDAP:
         """
 
         connect = ldap.initialize(
-            f"ldap://{LDAPConstants.LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
+            f"ldap://{LDAPConstants.ADMIN_LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
         )
         connect.set_option(ldap.OPT_REFERRALS, 0)
         connect.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
-        bind_dn = f"{LDAPConstants.LDAP_BIND_USER}@{LDAPConstants.BIND_DOMAIN}"
+        bind_dn = f"{LDAPConstants.LDAP_BIND_USER}@{LDAPConstants.ADMIN_BIND_DOMAIN}"
         connect.simple_bind_s(bind_dn, LDAPConstants.LDAP_BIND_PASSWORD)
         return connect
 
@@ -120,7 +120,7 @@ class LDAP:
         search_filter = "(objectClass=group)"
         attributes = ["cn"]
         result = connect.search_s(
-            LDAPConstants.BASE_DN, ldap.SCOPE_SUBTREE, search_filter, attributes
+            LDAPConstants.ADMIN_BASE_DN, ldap.SCOPE_SUBTREE, search_filter, attributes
         )
         groups = [attrs["cn"][0].decode() for dn, attrs in result if "cn" in attrs]
         connect.unbind()
@@ -149,7 +149,7 @@ class LDAP:
         # Find group DN first
         group_filter = f"(&(objectClass=group)(cn={group_name}))"
         group_result = connect.search_s(
-            LDAPConstants.BASE_DN, ldap.SCOPE_SUBTREE, group_filter, ["member"]
+            LDAPConstants.ADMIN_BASE_DN, ldap.SCOPE_SUBTREE, group_filter, ["member"]
         )
         if not group_result:
             return []
@@ -204,19 +204,19 @@ class LDAP:
 
         try:
             connect = ldap.initialize(
-                f"ldap://{LDAPConstants.LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
+                f"ldap://{LDAPConstants.ADMIN_LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
             )
             connect.set_option(ldap.OPT_REFERRALS, 0)
             connect.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
 
             # Bind as the user
-            bind_dn = f"{username}@{LDAPConstants.BIND_DOMAIN}"
+            bind_dn = f"{username}@{LDAPConstants.ADMIN_BIND_DOMAIN}"
             connect.simple_bind_s(bind_dn, password)
 
             # Search for the user DN
             search_filter = f"(sAMAccountName={username})"
             result = connect.search_s(
-                LDAPConstants.BASE_DN,
+                LDAPConstants.ADMIN_BASE_DN,
                 ldap.SCOPE_SUBTREE,
                 search_filter,
                 ["memberOf", "distinguishedName"],
@@ -260,12 +260,14 @@ class LDAP:
         logger.info(f"LDAP.fetch_all_ldap_users() started : {start}")
         try:
             connect = ldap.initialize(
-                f"ldap://{LDAPConstants.LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
+                f"ldap://{LDAPConstants.ADMIN_LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
             )
             connect.set_option(ldap.OPT_REFERRALS, 0)
             connect.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
 
-            bind_dn = f"{LDAPConstants.LDAP_BIND_USER}@{LDAPConstants.BIND_DOMAIN}"
+            bind_dn = (
+                f"{LDAPConstants.LDAP_BIND_USER}@{LDAPConstants.ADMIN_BIND_DOMAIN}"
+            )
             connect.simple_bind_s(bind_dn, LDAPConstants.LDAP_BIND_PASSWORD)
 
             # Search filter to get all user accounts
@@ -273,7 +275,10 @@ class LDAP:
             attributes = ["sAMAccountName", "distinguishedName", "mail", "displayName"]
 
             result = connect.search_s(
-                LDAPConstants.BASE_DN, ldap.SCOPE_SUBTREE, search_filter, attributes
+                LDAPConstants.ADMIN_BASE_DN,
+                ldap.SCOPE_SUBTREE,
+                search_filter,
+                attributes,
             )
             result_list = []
             for dn, attrs in result:

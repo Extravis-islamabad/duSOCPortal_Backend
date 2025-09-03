@@ -372,11 +372,11 @@ class PaginationConstants:
 
 class LDAPConstants:
     LDAP_PORT = os.getenv("LDAP_PORT", None)
-    BASE_DN = (
+    ADMIN_BASE_DN = (
         "OU=ICT Managed Services Platform,DC=mscloudinfra,DC=com"  # OU=Wipro_CSOC,
     )
-    BIND_DOMAIN = os.getenv("BIND_DOMAIN", None)
-    LDAP_SERVERS = os.getenv("LDAP_SERVERS", None)
+    ADMIN_BIND_DOMAIN = os.getenv("ADMIN_BIND_DOMAIN", None)
+    ADMIN_LDAP_SERVERS = os.getenv("ADMIN_LDAP_SERVERS", None)
     LDAP_BIND_USER = os.getenv("LDAP_BIND_USER", None)
     LDAP_BIND_PASSWORD = os.getenv("LDAP_BIND_PASSWORD", None)
 
@@ -384,7 +384,7 @@ class LDAPConstants:
         logger.warning("LDAP port is not set...")
         raise ValueError("LDAP port is not set...")
 
-    if BIND_DOMAIN is None:
+    if ADMIN_BIND_DOMAIN is None:
         logger.warning("LDAP bind domain is not set...")
         raise ValueError("LDAP bind domain is not set...")
 
@@ -396,7 +396,7 @@ class LDAPConstants:
         logger.warning("LDAP bind password is not set...")
         raise ValueError("LDAP bind password is not set...")
 
-    LDAP_SERVERS = LDAP_SERVERS.split(",")
+    ADMIN_LDAP_SERVERS = ADMIN_LDAP_SERVERS.split(",")
 
 
 class CywareConstants:
