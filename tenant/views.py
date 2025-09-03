@@ -415,6 +415,53 @@ class GetTenantAssetsList(APIView):
             # Last event date filter
             last_event_filter = request.query_params.get("last_event_date")
 
+            # Custom date range filtering (start_date and end_date)
+            start_date = request.query_params.get("start_date")
+            end_date = request.query_params.get("end_date")
+
+            # Check if either date parameter is provided - both must be provided together
+            if start_date or end_date:
+                # Validate that both dates are provided
+                if not (start_date and end_date):
+                    return Response(
+                        {
+                            "error": "Both start_date and end_date must be provided together for date filtering."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                try:
+                    # Parse the dates
+                    start_date_obj = self._parse_date(start_date)
+                    if not start_date_obj:
+                        raise ValueError(
+                            f"Invalid start_date format: {start_date}. Use YYYY-MM-DD format."
+                        )
+
+                    end_date_obj = self._parse_date(end_date)
+                    if not end_date_obj:
+                        raise ValueError(
+                            f"Invalid end_date format: {end_date}. Use YYYY-MM-DD format."
+                        )
+
+                    # Validate that start_date is not greater than end_date
+                    if start_date_obj > end_date_obj:
+                        return Response(
+                            {"error": "start_date cannot be greater than end_date."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                    # Apply date range filter on creation_date_converted at database level
+                    filters &= Q(
+                        creation_date_converted__range=[start_date_obj, end_date_obj]
+                    )
+
+                except ValueError as e:
+                    return Response(
+                        {"error": str(e)},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
             # Average EPS filter
             if average_eps := request.query_params.get("average_eps"):
                 try:
