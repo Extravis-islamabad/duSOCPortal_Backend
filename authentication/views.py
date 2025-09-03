@@ -298,30 +298,34 @@ class LDAPUsersAPIView(APIView):
 
     def get(self, request):
         # Get ad_flag query parameter and validate it's provided
-        ad_flag = request.query_params.get("ad_flag", None)
+        # ad_flag = request.query_params.get("ad_flag", None)
 
-        if not ad_flag:
-            return Response(
-                {"error": "Required ad_flag parameter is missing"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # if not ad_flag:
+        #     return Response(
+        #         {"error": "Required ad_flag parameter is missing"},
+        #         status=status.HTTP_400_BAD_REQUEST,
+        #     )
 
-        # Convert to uppercase for comparison
-        ad_flag = ad_flag.upper()
+        # # Convert to uppercase for comparison
+        # ad_flag = ad_flag.upper()
 
-        # Determine which LDAP configuration to use
-        if ad_flag == "CUSTOMER":
-            base_dn = LDAPConstants.CUSTOMER_BASE_DN
-            ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
-            bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
-        elif ad_flag == "ADMIN":
-            base_dn = LDAPConstants.ADMIN_BASE_DN
-            ldap_servers = LDAPConstants.ADMIN_LDAP_SERVERS
-            bind_domain = LDAPConstants.ADMIN_BIND_DOMAIN
-        else:
-            return Response(
-                {"error": "Invalid ad_flag value."}, status=status.HTTP_400_BAD_REQUEST
-            )
+        # # Determine which LDAP configuration to use
+        # if ad_flag == "CUSTOMER":
+        #     base_dn = LDAPConstants.CUSTOMER_BASE_DN
+        #     ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
+        #     bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
+        # elif ad_flag == "ADMIN":
+        #     base_dn = LDAPConstants.ADMIN_BASE_DN
+        #     ldap_servers = LDAPConstants.ADMIN_LDAP_SERVERS
+        #     bind_domain = LDAPConstants.ADMIN_BIND_DOMAIN
+        # else:
+        #     return Response(
+        #         {"error": "Invalid ad_flag value."}, status=status.HTTP_400_BAD_REQUEST
+        #     )
+
+        base_dn = LDAPConstants.CUSTOMER_BASE_DN
+        ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
+        bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
 
         data = LDAP.fetch_all_ldap_users(
             base_dn=base_dn,
@@ -346,32 +350,34 @@ class LDAPGroupListView(APIView):
     def get(self, request):
         try:
             # Get ad_flag query parameter and validate it's provided
-            ad_flag = request.query_params.get("ad_flag", None)
+            # ad_flag = request.query_params.get("ad_flag", None)
 
-            if not ad_flag:
-                return Response(
-                    {"error": "Required ad_flag parameter is missing"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            # if not ad_flag:
+            #     return Response(
+            #         {"error": "Required ad_flag parameter is missing"},
+            #         status=status.HTTP_400_BAD_REQUEST,
+            #     )
 
-            # Convert to uppercase for comparison
-            ad_flag = ad_flag.upper()
+            # # Convert to uppercase for comparison
+            # ad_flag = ad_flag.upper()
 
-            # Determine which LDAP configuration to use based on ad_flag
-            if ad_flag == "CUSTOMER":
-                base_dn = LDAPConstants.CUSTOMER_BASE_DN
-                ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
-                bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
-            elif ad_flag == "ADMIN":
-                base_dn = LDAPConstants.ADMIN_BASE_DN
-                ldap_servers = LDAPConstants.ADMIN_LDAP_SERVERS
-                bind_domain = LDAPConstants.ADMIN_BIND_DOMAIN
-            else:
-                return Response(
-                    {"error": "Invalid ad_flag value."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
+            # # Determine which LDAP configuration to use based on ad_flag
+            # if ad_flag == "CUSTOMER":
+            #     base_dn = LDAPConstants.CUSTOMER_BASE_DN
+            #     ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
+            #     bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
+            # elif ad_flag == "ADMIN":
+            #     base_dn = LDAPConstants.ADMIN_BASE_DN
+            #     ldap_servers = LDAPConstants.ADMIN_LDAP_SERVERS
+            #     bind_domain = LDAPConstants.ADMIN_BIND_DOMAIN
+            # else:
+            #     return Response(
+            #         {"error": "Invalid ad_flag value."},
+            #         status=status.HTTP_400_BAD_REQUEST,
+            #     )
+            base_dn = LDAPConstants.CUSTOMER_BASE_DN
+            ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
+            bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
             groups = LDAP.fetch_all_groups(
                 base_dn=base_dn,
                 ldap_server=ldap_servers[0],
@@ -395,32 +401,35 @@ class LDAPGroupUsersView(APIView):
     def get(self, request, group_name):
         try:
             # Get ad_flag query parameter and validate it's provided
-            ad_flag = request.query_params.get("ad_flag", None)
+            # ad_flag = request.query_params.get("ad_flag", None)
 
-            if not ad_flag:
-                return Response(
-                    {"error": "Required ad_flag parameter is missing"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            # if not ad_flag:
+            #     return Response(
+            #         {"error": "Required ad_flag parameter is missing"},
+            #         status=status.HTTP_400_BAD_REQUEST,
+            #     )
 
-            # Convert to uppercase for comparison
-            ad_flag = ad_flag.upper()
+            # # Convert to uppercase for comparison
+            # ad_flag = ad_flag.upper()
 
-            # Determine which LDAP configuration to use based on ad_flag
-            if ad_flag == "CUSTOMER":
-                base_dn = LDAPConstants.CUSTOMER_BASE_DN
-                ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
-                bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
-            elif ad_flag == "ADMIN":
-                base_dn = LDAPConstants.ADMIN_BASE_DN
-                ldap_servers = LDAPConstants.ADMIN_LDAP_SERVERS
-                bind_domain = LDAPConstants.ADMIN_BIND_DOMAIN
-            else:
-                return Response(
-                    {"error": "Invalid ad_flag value"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            # # Determine which LDAP configuration to use based on ad_flag
+            # if ad_flag == "CUSTOMER":
+            #     base_dn = LDAPConstants.CUSTOMER_BASE_DN
+            #     ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
+            #     bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
+            # elif ad_flag == "ADMIN":
+            #     base_dn = LDAPConstants.ADMIN_BASE_DN
+            #     ldap_servers = LDAPConstants.ADMIN_LDAP_SERVERS
+            #     bind_domain = LDAPConstants.ADMIN_BIND_DOMAIN
+            # else:
+            #     return Response(
+            #         {"error": "Invalid ad_flag value"},
+            #         status=status.HTTP_400_BAD_REQUEST,
+            #     )
 
+            base_dn = LDAPConstants.CUSTOMER_BASE_DN
+            ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
+            bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
             ldap_users = LDAP.fetch_users_in_group(
                 group_name=group_name,
                 base_dn=base_dn,
