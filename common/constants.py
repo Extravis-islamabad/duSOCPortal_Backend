@@ -380,13 +380,17 @@ class LDAPConstants:
     LDAP_BIND_USER = os.getenv("LDAP_BIND_USER", None)
     LDAP_BIND_PASSWORD = os.getenv("LDAP_BIND_PASSWORD", None)
 
+    CUSTOMER_BASE_DN = "OU=CloudU_Customers,OU=Azure-Cloud-Sync,OU=ICT_Cloud_Operations_Teams,DC=cloudu,DC=local"
+    CUSTOMER_BIND_DOMAIN = os.getenv("CUSTOMER_BIND_DOMAIN", None)
+    CUSTOMER_LDAP_SERVERS = os.getenv("CUSTOMER_LDAP_SERVERS", None)
+
     if LDAP_PORT is None:
         logger.warning("LDAP port is not set...")
         raise ValueError("LDAP port is not set...")
 
     if ADMIN_BIND_DOMAIN is None:
-        logger.warning("LDAP bind domain is not set...")
-        raise ValueError("LDAP bind domain is not set...")
+        logger.warning("ADMIN LDAP bind domain is not set...")
+        raise ValueError("ADMIN LDAP bind domain is not set...")
 
     if LDAP_BIND_USER is None:
         logger.warning("LDAP bind user is not set...")
@@ -396,7 +400,20 @@ class LDAPConstants:
         logger.warning("LDAP bind password is not set...")
         raise ValueError("LDAP bind password is not set...")
 
+    if ADMIN_LDAP_SERVERS is None:
+        logger.warning("ADMIN LDAP servers are not set...")
+        raise ValueError("ADMIN LDAP servers are not set...")
+
+    if CUSTOMER_BIND_DOMAIN is None:
+        logger.warning("CUSTOMER LDAP bind domain is not set...")
+        raise ValueError("CUSTOMER LDAP bind domain is not set...")
+
+    if CUSTOMER_LDAP_SERVERS is None:
+        logger.warning("LDAP servers are not set...")
+        raise ValueError("LDAP servers are not set...")
+
     ADMIN_LDAP_SERVERS = ADMIN_LDAP_SERVERS.split(",")
+    CUSTOMER_LDAP_SERVERS = CUSTOMER_LDAP_SERVERS.split(",")
 
 
 class CywareConstants:
