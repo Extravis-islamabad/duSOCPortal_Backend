@@ -576,6 +576,368 @@ class GetTenantAssetsList(APIView):
             raise ValueError("Invalid date format")
 
 
+class DownloadTenantAssetsExcel(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    def get(self, request):
+        """
+        Download IBM QRadar assets as Excel file with all the same filtering options
+        as GetTenantAssetsList endpoint.
+
+        Query Parameters:
+            Same as GetTenantAssetsList:
+            - name: Filter by asset name
+            - id: Filter by asset ID
+            - db_id: Filter by database ID
+            - log_source_type: Filter by log source type
+            - enabled: Filter by enabled status (true/false)
+            - last_event_date: Filter by last event date
+            - start_date & end_date: Filter by creation date range (both required)
+            - average_eps: Filter by average EPS
+            - status: Filter by status (SUCCESS/ERROR/ALL)
+            - sort: Sort by creation date (any value to enable reverse sort)
+
+        Returns:
+            Excel file download with filtered assets data
+        """
+        try:
+            # Step 1: Validate tenant
+            tenant = Tenant.objects.select_related("tenant").get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        try:
+            # Step 2: Check for active SIEM integration
+            siem_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SIEM_INTEGRATION,
+                siem_subtype=SiemSubTypes.IBM_QRADAR,
+                status=True,
+            )
+            if not siem_integrations.exists():
+                return Response(
+                    {"error": "No active SIEM integration configured for tenant."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Step 3: Get mapped collector IDs
+            collector_ids = (
+                TenantQradarMapping.objects.filter(company=tenant.company)
+                .prefetch_related("event_collectors")
+                .values_list("event_collectors__id", flat=True)
+            )
+            if not collector_ids:
+                return Response(
+                    {"detail": "No Event Collectors mapped to this tenant."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Base filter for tenant's assets
+            base_filter = Q(event_collector_id__in=collector_ids)
+
+            # Step 4: Apply request filters for the actual results
+            filters = base_filter.copy()
+
+            # Name filter
+            if name := request.query_params.get("name"):
+                filters &= Q(name__icontains=name)
+
+            sort = request.query_params.get("sort", None)
+
+            # ID filter
+            if id_filter := request.query_params.get("id"):
+                try:
+                    filters &= Q(id=int(id_filter))
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid id format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # DB ID filter
+            if db_id := request.query_params.get("db_id"):
+                try:
+                    filters &= Q(db_id=int(db_id))
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid db_id format. Must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Log source type filter
+            if log_source_type := request.query_params.get("log_source_type"):
+                filters &= Q(log_source_type__name__icontains=log_source_type)
+
+            # Enabled filter
+            if enabled := request.query_params.get("enabled"):
+                try:
+                    filters &= Q(enabled=enabled.lower() == "true")
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid enabled format. Must be true or false."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Last event date filter
+            last_event_filter = request.query_params.get("last_event_date")
+
+            # Custom date range filtering (start_date and end_date)
+            start_date = request.query_params.get("start_date")
+            end_date = request.query_params.get("end_date")
+
+            # Check if either date parameter is provided - both must be provided together
+            if start_date or end_date:
+                # Validate that both dates are provided
+                if not (start_date and end_date):
+                    return Response(
+                        {
+                            "error": "Both start_date and end_date must be provided together for date filtering."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                try:
+                    # Parse the dates
+                    start_date_obj = self._parse_date(start_date)
+                    if not start_date_obj:
+                        raise ValueError(
+                            f"Invalid start_date format: {start_date}. Use YYYY-MM-DD format."
+                        )
+
+                    end_date_obj = self._parse_date(end_date)
+                    if not end_date_obj:
+                        raise ValueError(
+                            f"Invalid end_date format: {end_date}. Use YYYY-MM-DD format."
+                        )
+
+                    # Validate that start_date is not greater than end_date
+                    if start_date_obj > end_date_obj:
+                        return Response(
+                            {"error": "start_date cannot be greater than end_date."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                    # Apply date range filter on creation_date_converted at database level
+                    filters &= Q(
+                        creation_date_converted__range=[start_date_obj, end_date_obj]
+                    )
+
+                except ValueError as e:
+                    return Response(
+                        {"error": str(e)},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Average EPS filter
+            if average_eps := request.query_params.get("average_eps"):
+                try:
+                    filters &= Q(average_eps=float(average_eps))
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid average_eps format. Must be a number."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Apply database-level status filtering first if status filter is provided
+            status_filter = request.query_params.get("status")
+            if status_filter:
+                status_filter = status_filter.upper()
+                if status_filter not in ["SUCCESS", "ERROR", "ALL"]:
+                    return Response(
+                        {
+                            "error": "Invalid status value. Must be 'SUCCESS', 'ERROR', or 'ALL'."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                # Use is_active field for status filtering
+                if status_filter == "SUCCESS":
+                    filtered_assets = list(
+                        IBMQradarAssests.objects.filter(
+                            filters & Q(is_active=True)
+                        ).select_related("event_collector", "log_source_type")
+                    )
+                elif status_filter == "ERROR":
+                    filtered_assets = list(
+                        IBMQradarAssests.objects.filter(
+                            filters & Q(is_active=False)
+                        ).select_related("event_collector", "log_source_type")
+                    )
+                else:
+                    return Response(
+                        {"error": "Invalid status value. Must be 'SUCCESS', 'ERROR'."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            else:
+                # No status filter - get all assets
+                filtered_assets = list(
+                    IBMQradarAssests.objects.filter(filters).select_related(
+                        "event_collector", "log_source_type"
+                    )
+                )
+
+            # Apply last event date filter if provided
+            if last_event_filter:
+                try:
+                    filter_date = self._parse_date(last_event_filter)
+                    filtered_assets = [
+                        asset
+                        for asset in filtered_assets
+                        if asset.last_event_date_converted == filter_date
+                    ]
+                except ValueError as e:
+                    return Response(
+                        {"error": str(e)},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            # Sort assets
+            sort_flag = False
+            if sort:
+                sort_flag = True
+            filtered_assets.sort(
+                key=lambda x: x.creation_date_converted or date.min,
+                reverse=sort_flag,
+            )
+
+            # Check if there's data to export
+            if not filtered_assets:
+                return Response(
+                    {"error": "No assets found with the specified filters."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Generate Excel file
+            return self._generate_excel(filtered_assets, start_date, end_date)
+
+        except Exception as e:
+            logger.error(f"Error in DownloadTenantAssetsExcel: {str(e)}", exc_info=True)
+            return Response(
+                {"error": "An unexpected error occurred."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _parse_date(self, date_str):
+        """Safe date parsing from string"""
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("Invalid date format")
+
+    def _generate_excel(self, assets, start_date=None, end_date=None):
+        """Generate Excel file with assets data"""
+        try:
+            # Prepare data for DataFrame
+            data = []
+            for asset in assets:
+                # Format dates for better readability in Excel
+                creation_date = (
+                    asset.creation_date_converted.strftime("%Y-%m-%d")
+                    if asset.creation_date_converted
+                    else "N/A"
+                )
+                modified_date = (
+                    asset.modified_date_converted.strftime("%Y-%m-%d")
+                    if asset.modified_date_converted
+                    else "N/A"
+                )
+                last_event_date = (
+                    asset.last_event_date_converted.strftime("%Y-%m-%d")
+                    if asset.last_event_date_converted
+                    else "N/A"
+                )
+
+                # Determine status based on is_active field
+                status_value = "SUCCESS" if asset.is_active is True else "ERROR"
+
+                data.append(
+                    {
+                        # "ID": asset.id,
+                        "ID": asset.db_id,
+                        "Name": asset.name or "N/A",
+                        "Description": asset.description or "N/A",
+                        "Event Collector": asset.event_collector.name
+                        if asset.event_collector
+                        else "N/A",
+                        "Log Source Type": asset.log_source_type.name
+                        if asset.log_source_type
+                        else "N/A",
+                        "Enabled": "Yes" if asset.enabled else "No",
+                        "Status": status_value,
+                        "Sub Status": asset.status,
+                        # "Average EPS": asset.average_eps,
+                        "Sending IP": asset.sending_ip or "N/A",
+                        "Creation Date": creation_date,
+                        "Modified Date": modified_date,
+                        "Last Event Date": last_event_date,
+                    }
+                )
+
+            # Create DataFrame
+            df = pd.DataFrame(data)
+
+            # Create Excel file in memory
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+                df.to_excel(writer, sheet_name="Tenant Assets", index=False)
+
+                # Get the worksheet to apply formatting
+                worksheet = writer.sheets["Tenant Assets"]
+
+                # Auto-adjust column widths
+                for column in worksheet.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if cell.value and len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except Exception:
+                            logger.error(".")
+                    adjusted_width = min(max_length + 2, 50)  # Prevent too wide columns
+                    worksheet.column_dimensions[column_letter].width = adjusted_width
+
+                # Add header formatting
+                from openpyxl.styles import Alignment, Font, PatternFill
+
+                header_font = Font(bold=True, color="FFFFFF")
+                header_fill = PatternFill(
+                    start_color="366092", end_color="366092", fill_type="solid"
+                )
+                header_alignment = Alignment(horizontal="center", vertical="center")
+
+                for cell in worksheet[1]:
+                    cell.font = header_font
+                    cell.fill = header_fill
+                    cell.alignment = header_alignment
+
+            buffer.seek(0)
+
+            # Generate filename
+            filename = f"tenant_assets_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            if start_date and end_date:
+                filename = f"tenant_assets_{start_date}_to_{end_date}"
+            filename += ".xlsx"
+
+            response = HttpResponse(
+                buffer.getvalue(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            response["Content-Disposition"] = f'attachment; filename="{filename}"'
+            return response
+
+        except Exception as e:
+            logger.error(f"Error generating Excel: {str(e)}")
+            return Response(
+                {"error": "Failed to generate Excel file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
 class GetTenantAssetsStats(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]

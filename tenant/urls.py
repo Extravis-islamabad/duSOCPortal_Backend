@@ -12,6 +12,7 @@ from tenant.views import (
     DetailedEPSReportAPIView,
     DetailedIncidentReport,
     DownloadIncidentsView,
+    DownloadTenantAssetsExcel,
     DuCortexSOARTenantsListView,
     DuIbmQradarTenantsListView,
     DuITSMTenantsListView,
@@ -73,6 +74,11 @@ urlpatterns = [
         name="get-cortex-soar-tenants",
     ),
     path("get_tenant_assets/", GetTenantAssetsList.as_view(), name="get-tenant-assets"),
+    path(
+        "api/tenant-assets-excel/",
+        DownloadTenantAssetsExcel.as_view(),
+        name="download-tenant-assets-excel",
+    ),
     path("api/asset-counts/", AssetCountsView.as_view(), name="asset-counts"),
     path(
         "api/datetime-storage/", DateTimeStorageView.as_view(), name="datetime-storage"
