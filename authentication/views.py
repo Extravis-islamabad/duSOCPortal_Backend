@@ -17,6 +17,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenViewBase
 
 from authentication.permissions import IsAdminUser
+from common.constants import LDAPConstants
 from common.utils import LDAP
 from tenant.models import Company
 
@@ -109,7 +110,14 @@ class UserLoginAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if username != "admin@gmail.com" and password != "123456@We":  # nosec
-            flag = LDAP._check_ldap(username, password)
+            flag = LDAP._check_ldap(
+                username,
+                password,
+                base_dn=LDAPConstants.CUSTOMER_BASE_DN,
+                ldap_server=LDAPConstants.CUSTOMER_LDAP_SERVERS,
+                ldap_port=LDAPConstants.LDAP_PORT,
+                bind_domain=LDAPConstants.CUSTOMER_BIND_DOMAIN,
+            )
             if not flag:
                 return Response(
                     {"error": "Invalid password or username"},
