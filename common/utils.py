@@ -6,8 +6,6 @@ import time
 import ldap
 from loguru import logger
 
-from common.constants import LDAPConstants
-
 
 class PasswordCreation:
     @staticmethod
@@ -84,50 +82,74 @@ class DBMappings:
 
 class LDAP:
     @staticmethod
-    def get_connection():
+    def get_connection(ldap_server, ldap_port, bind_user, bind_domain, bind_password):
         """
         Establishes and returns a connection to the LDAP server.
 
-        This method initializes an LDAP connection using the first server
-        from the list of LDAP servers and binds it using the configured
-        bind user credentials. The connection is set to not follow referrals
-        and to use protocol version 3.
+        This method initializes an LDAP connection using the provided server
+        and binds it using the provided credentials. The connection is set to
+        not follow referrals and to use protocol version 3.
+
+        Args:
+            ldap_server (str): LDAP server address.
+            ldap_port (str/int): LDAP port.
+            bind_user (str): LDAP bind user.
+            bind_domain (str): LDAP bind domain.
+            bind_password (str): LDAP bind password.
 
         Returns:
             LDAPObject: An LDAP connection object for interacting with the server.
         """
-
-        connect = ldap.initialize(
-            f"ldap://{LDAPConstants.ADMIN_LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
-        )
+        connect = ldap.initialize(f"ldap://{ldap_server}:{ldap_port}")
         connect.set_option(ldap.OPT_REFERRALS, 0)
         connect.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
-        bind_dn = f"{LDAPConstants.LDAP_BIND_USER}@{LDAPConstants.ADMIN_BIND_DOMAIN}"
-        connect.simple_bind_s(bind_dn, LDAPConstants.LDAP_BIND_PASSWORD)
+        bind_dn = f"{bind_user}@{bind_domain}"
+        connect.simple_bind_s(bind_dn, bind_password)
         return connect
 
     @staticmethod
-    def fetch_all_groups():
+    def fetch_all_groups(
+        base_dn, ldap_server, ldap_port, bind_user, bind_domain, bind_password
+    ):
         """
         Fetches all groups from LDAP server.
 
         Connects to the LDAP server, searches for all groups (objectClass=group),
         and returns a list of group names (cn attribute).
 
+        Args:
+            base_dn (str): LDAP base DN for search.
+            ldap_server (str): LDAP server address.
+            ldap_port (str/int): LDAP port.
+            bind_user (str): LDAP bind user.
+            bind_domain (str): LDAP bind domain.
+            bind_password (str): LDAP bind password.
+
         :return: List of group names
         """
-        connect = LDAP.get_connection()
+        connect = LDAP.get_connection(
+            ldap_server, ldap_port, bind_user, bind_domain, bind_password
+        )
         search_filter = "(objectClass=group)"
         attributes = ["cn"]
+
         result = connect.search_s(
-            LDAPConstants.ADMIN_BASE_DN, ldap.SCOPE_SUBTREE, search_filter, attributes
+            base_dn, ldap.SCOPE_SUBTREE, search_filter, attributes
         )
         groups = [attrs["cn"][0].decode() for dn, attrs in result if "cn" in attrs]
         connect.unbind()
         return groups
 
     @staticmethod
-    def fetch_users_in_group(group_name):
+    def fetch_users_in_group(
+        group_name,
+        base_dn,
+        ldap_server,
+        ldap_port,
+        bind_user,
+        bind_domain,
+        bind_password,
+    ):
         """
         Fetches all users in a given LDAP group.
 
@@ -138,6 +160,12 @@ class LDAP:
 
         Args:
             group_name (str): The common name of the group to search for users.
+            base_dn (str): LDAP base DN for search.
+            ldap_server (str): LDAP server address.
+            ldap_port (str/int): LDAP port.
+            bind_user (str): LDAP bind user.
+            bind_domain (str): LDAP bind domain.
+            bind_password (str): LDAP bind password.
 
         Returns:
             list: A list of dictionaries containing user details (username, email,
@@ -145,11 +173,14 @@ class LDAP:
             group is not found or if an error occurs.
         """
 
-        connect = LDAP.get_connection()
+        connect = LDAP.get_connection(
+            ldap_server, ldap_port, bind_user, bind_domain, bind_password
+        )
+
         # Find group DN first
         group_filter = f"(&(objectClass=group)(cn={group_name}))"
         group_result = connect.search_s(
-            LDAPConstants.ADMIN_BASE_DN, ldap.SCOPE_SUBTREE, group_filter, ["member"]
+            base_dn, ldap.SCOPE_SUBTREE, group_filter, ["member"]
         )
         if not group_result:
             return []
@@ -186,7 +217,9 @@ class LDAP:
         return users
 
     @staticmethod
-    def _check_ldap(username: str, password: str):
+    def _check_ldap(
+        username: str, password: str, base_dn, ldap_server, ldap_port, bind_domain
+    ):
         """
         Authenticates a user against the LDAP server.
 
@@ -197,26 +230,28 @@ class LDAP:
         Args:
             username (str): The username of the user to authenticate.
             password (str): The password corresponding to the username.
+            base_dn (str): LDAP base DN for search.
+            ldap_server (str): LDAP server address.
+            ldap_port (str/int): LDAP port.
+            bind_domain (str): LDAP bind domain.
 
         Returns:
             bool: True if the user is successfully authenticated; False otherwise.
         """
 
         try:
-            connect = ldap.initialize(
-                f"ldap://{LDAPConstants.ADMIN_LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
-            )
+            connect = ldap.initialize(f"ldap://{ldap_server}:{ldap_port}")
             connect.set_option(ldap.OPT_REFERRALS, 0)
             connect.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
 
             # Bind as the user
-            bind_dn = f"{username}@{LDAPConstants.ADMIN_BIND_DOMAIN}"
+            bind_dn = f"{username}@{bind_domain}"
             connect.simple_bind_s(bind_dn, password)
 
             # Search for the user DN
             search_filter = f"(sAMAccountName={username})"
             result = connect.search_s(
-                LDAPConstants.ADMIN_BASE_DN,
+                base_dn,
                 ldap.SCOPE_SUBTREE,
                 search_filter,
                 ["memberOf", "distinguishedName"],
@@ -246,9 +281,19 @@ class LDAP:
             return False
 
     @staticmethod
-    def fetch_all_ldap_users():
+    def fetch_all_ldap_users(
+        base_dn, ldap_server, ldap_port, bind_user, bind_domain, bind_password
+    ):
         """
         Fetches all user accounts from the LDAP server.
+
+        Args:
+            base_dn (str): LDAP base DN for search.
+            ldap_server (str): LDAP server address.
+            ldap_port (str/int): LDAP port.
+            bind_user (str): LDAP bind user.
+            bind_domain (str): LDAP bind domain.
+            bind_password (str): LDAP bind password.
 
         :return: A list of dictionaries with the following keys:
             - username: string
@@ -258,24 +303,21 @@ class LDAP:
         """
         start = time.time()
         logger.info(f"LDAP.fetch_all_ldap_users() started : {start}")
+
         try:
-            connect = ldap.initialize(
-                f"ldap://{LDAPConstants.ADMIN_LDAP_SERVERS[0]}:{LDAPConstants.LDAP_PORT}"
-            )
+            connect = ldap.initialize(f"ldap://{ldap_server}:{ldap_port}")
             connect.set_option(ldap.OPT_REFERRALS, 0)
             connect.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
 
-            bind_dn = (
-                f"{LDAPConstants.LDAP_BIND_USER}@{LDAPConstants.ADMIN_BIND_DOMAIN}"
-            )
-            connect.simple_bind_s(bind_dn, LDAPConstants.LDAP_BIND_PASSWORD)
+            bind_dn = f"{bind_user}@{bind_domain}"
+            connect.simple_bind_s(bind_dn, bind_password)
 
             # Search filter to get all user accounts
             search_filter = "(&(objectClass=user)(sAMAccountName=*))"
             attributes = ["sAMAccountName", "distinguishedName", "mail", "displayName"]
 
             result = connect.search_s(
-                LDAPConstants.ADMIN_BASE_DN,
+                base_dn,
                 ldap.SCOPE_SUBTREE,
                 search_filter,
                 attributes,
