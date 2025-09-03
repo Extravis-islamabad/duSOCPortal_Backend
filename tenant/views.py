@@ -377,6 +377,7 @@ class GetTenantAssetsList(APIView):
             if name := request.query_params.get("name"):
                 filters &= Q(name__icontains=name)
 
+            sort = request.query_params.get("sort", None)
             # ID filter
             if id_filter := request.query_params.get("id"):
                 try:
@@ -476,11 +477,12 @@ class GetTenantAssetsList(APIView):
                         {"error": str(e)},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-
-            # Sort assets by creation date (newest first)
+            sort_flag = False
+            if sort:
+                sort_flag = True
             filtered_assets.sort(
                 key=lambda x: x.creation_date_converted or date.min,
-                reverse=True,
+                reverse=sort_flag,
             )
 
             # Pagination
