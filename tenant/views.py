@@ -1999,6 +1999,9 @@ class IncidentsView(APIView):
         if false_positives:
             # For false positives only, use false_positive_filters
             filters = false_positive_filters
+        elif not false_positives:
+            # For true positives only, use true_positive_filters
+            filters = true_positive_filters
         else:
             # Include both true positives AND false positives (same as DashboardView)
             filters = true_positive_filters | false_positive_filters
