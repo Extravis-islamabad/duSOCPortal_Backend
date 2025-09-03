@@ -1,7 +1,6 @@
 import io
 import json
 import os
-import re
 import time
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
@@ -517,58 +516,6 @@ class GetTenantAssetsList(APIView):
                 {"error": "An unexpected error occurred."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-    def _get_asset_status(self, asset, now):
-        """
-        Determine asset status based on enabled flag and last event time
-        FIXED: Consistent logic for both counting and filtering
-        """
-        # If asset is not enabled, it's always ERROR
-        if not asset.enabled:
-            return "ERROR"
-
-        # If no last event time, it's ERROR
-        if not asset.last_event_time:
-            return "ERROR"
-
-        return (
-            "SUCCESS" if self._is_asset_success_based_on_time(asset, now) else "ERROR"
-        )
-
-    def _is_asset_success_based_on_time(self, asset, now):
-        """
-        Determine if asset is successful based on time threshold logic.
-        Separated from _get_asset_status for reusability in optimized queries.
-        """
-        time_threshold_minutes = 24 * 60
-        try:
-            # Check if asset has groups and extract time threshold from description
-            if (
-                hasattr(asset, "_prefetched_objects_cache")
-                and "groups" in asset._prefetched_objects_cache
-            ):
-                # Use prefetched groups
-                groups = asset._prefetched_objects_cache["groups"]
-                group = groups[0] if groups else None
-            else:
-                # Fallback to database query
-                group = asset.groups.first()
-
-            if group and group.description:
-                # Extract the first integer before the word "hour" (case-insensitive)
-                match = re.search(r"(\d+)\s*hour", group.description, re.IGNORECASE)
-                if match:
-                    extracted_hours = int(match.group(1))
-                    time_threshold_minutes = extracted_hours * 60
-
-            last_event_timestamp = int(asset.last_event_time) / 1000
-            last_event_time = datetime.utcfromtimestamp(last_event_timestamp)
-            last_event_time = timezone.make_aware(last_event_time)
-            time_diff_minutes = (now - last_event_time).total_seconds() / 60
-
-            return time_diff_minutes <= time_threshold_minutes
-        except (ValueError, TypeError):
-            return False
 
     def _parse_date(self, date_str):
         """Safe date parsing from string"""
