@@ -3153,6 +3153,18 @@ class EPSGraphAPIView(APIView):
 
         # Format EPS data with improved interval formatting
         eps_data = []
+        total_peak_eps_count = (
+            0  # Total counter for all records exceeding contracted volume
+        )
+
+        # Get contracted volume for comparison
+        mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
+        contracted_volume = mapping.contracted_volume if mapping else None
+        contracted_volume_type = mapping.contracted_volume_type if mapping else None
+        contracted_volume_type_display = (
+            mapping.get_contracted_volume_type_display() if mapping else None
+        )
+
         for entry in eps_data_raw:
             interval_value = entry["interval"]
             peak_row = (
@@ -3177,30 +3189,41 @@ class EPSGraphAPIView(APIView):
             else:
                 interval_str = entry["interval"].strftime("%Y-%m-%d")
 
+            peak_eps_value = float(
+                Decimal(entry["peak_eps"]).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+            )
+            average_eps_value = float(
+                Decimal(entry["average_eps"]).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+            )
+
+            # Count how many records in this interval have peak_eps exceeding contracted volume
+            interval_peak_count = 0
+            if contracted_volume:
+                # Query to count all records in this interval where peak_eps > contracted_volume
+                interval_peak_count = (
+                    IBMQradarEPS.objects.filter(**filter_kwargs)
+                    .annotate(interval=time_trunc)
+                    .filter(
+                        interval=interval_value,
+                        peak_eps__gt=contracted_volume,  # Count where peak_eps exceeds contracted volume
+                    )
+                    .count()
+                )
+                total_peak_eps_count += interval_peak_count
+
             eps_data.append(
                 {
                     "interval": interval_str,
-                    "average_eps": float(
-                        Decimal(entry["average_eps"]).quantize(
-                            Decimal("0.01"), rounding=ROUND_HALF_UP
-                        )
-                    ),
-                    "peak_eps": float(
-                        Decimal(entry["peak_eps"]).quantize(
-                            Decimal("0.01"), rounding=ROUND_HALF_UP
-                        )
-                    ),
+                    "average_eps": average_eps_value,
+                    "peak_eps": peak_eps_value,
                     "peak_eps_time": peak_eps_time,
+                    "peak_eps_count": interval_peak_count,  # Count of records exceeding threshold in this interval
                 }
             )
-
-        # Contracted volume info
-        mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
-        contracted_volume = mapping.contracted_volume if mapping else None
-        contracted_volume_type = mapping.contracted_volume_type if mapping else None
-        contracted_volume_type_display = (
-            mapping.get_contracted_volume_type_display() if mapping else None
-        )
 
         return Response(
             {
@@ -3208,6 +3231,7 @@ class EPSGraphAPIView(APIView):
                 "contracted_volume_type": contracted_volume_type,
                 "contracted_volume_type_display": contracted_volume_type_display,
                 "eps_graph": eps_data,
+                "total_peak_eps_count": total_peak_eps_count,  # Total count of all records exceeding contracted volume
             },
             status=status.HTTP_200_OK,
         )
