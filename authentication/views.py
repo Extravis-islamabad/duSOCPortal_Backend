@@ -114,7 +114,7 @@ class UserLoginAPIView(APIView):
                 username,
                 password,
                 base_dn=LDAPConstants.CUSTOMER_BASE_DN,
-                ldap_server=LDAPConstants.CUSTOMER_LDAP_SERVERS,
+                ldap_server=LDAPConstants.CUSTOMER_LDAP_SERVERS[0],
                 ldap_port=LDAPConstants.LDAP_PORT,
                 bind_domain=LDAPConstants.CUSTOMER_BIND_DOMAIN,
             )
