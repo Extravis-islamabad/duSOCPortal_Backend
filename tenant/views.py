@@ -852,7 +852,7 @@ class DownloadTenantAssetsExcel(APIView):
                 )
 
                 # Determine status based on is_active field
-                status_value = "SUCCESS" if asset.is_active is True else "ERROR"
+                status_value = "ACTIVE" if asset.is_active is True else "IN ACTIVE"
 
                 data.append(
                     {
