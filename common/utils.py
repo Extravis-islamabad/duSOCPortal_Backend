@@ -258,11 +258,13 @@ class LDAP:
             )
 
             if not result:
+                connect.unbind()
                 logger.error(f"User {username} not found in LDAP directory.")
                 return False
             else:
                 dn, attributes = result[0]
                 logger.info(f"Successfully authenticated: {username}")
+                connect.unbind()
                 return True
                 print(f"Distinguished Name: {dn}")
 
@@ -344,6 +346,62 @@ class LDAP:
             logger.exception(
                 f"An error occurred in LDAP.fetch_all_ldap_users(): {str(e)}"
             )
+            return []
+
+    @staticmethod
+    def fetch_user_groups(
+        username, base_dn, ldap_server, ldap_port, bind_user, bind_domain, bind_password
+    ):
+        """
+        Fetches all groups that a user belongs to in LDAP.
+
+        Args:
+            username (str): The username (sAMAccountName) to get groups for.
+            base_dn (str): LDAP base DN for search.
+            ldap_server (str): LDAP server address.
+            ldap_port (str/int): LDAP port.
+            bind_user (str): LDAP bind user.
+            bind_domain (str): LDAP bind domain.
+            bind_password (str): LDAP bind password.
+
+        Returns:
+            list: A list of group names (cn) that the user belongs to.
+        """
+        try:
+            connect = LDAP.get_connection(
+                ldap_server, ldap_port, bind_user, bind_domain, bind_password
+            )
+
+            # Search for the user's distinguished name and group memberships
+            search_filter = f"(sAMAccountName={username})"
+            attributes = ["memberOf"]
+
+            result = connect.search_s(
+                base_dn, ldap.SCOPE_SUBTREE, search_filter, attributes
+            )
+
+            if not result:
+                connect.unbind()
+                logger.warning(f"User {username} not found in LDAP directory.")
+                return []
+
+            _, user_attrs = result[0]
+            member_of = user_attrs.get("memberOf", [])
+
+            # Extract group names from DN strings
+            group_names = []
+            for group_dn in member_of:
+                group_dn_str = group_dn.decode()
+                # Extract CN from DN (e.g., "CN=GroupName,OU=...") -> "GroupName"
+                cn_match = re.search(r"CN=([^,]+)", group_dn_str)
+                if cn_match:
+                    group_names.append(cn_match.group(1))
+
+            connect.unbind()
+            return group_names
+
+        except Exception as e:
+            logger.error(f"Error fetching user groups: {str(e)}")
             return []
 
 
