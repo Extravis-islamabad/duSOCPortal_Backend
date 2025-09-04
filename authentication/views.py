@@ -323,9 +323,9 @@ class LDAPUsersAPIView(APIView):
                 {"error": "Invalid ad_flag value."}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        base_dn = LDAPConstants.CUSTOMER_BASE_DN
-        ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
-        bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
+        # base_dn = LDAPConstants.CUSTOMER_BASE_DN
+        # ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
+        # bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
 
         data = LDAP.fetch_all_ldap_users(
             base_dn=base_dn,
@@ -375,9 +375,9 @@ class LDAPGroupListView(APIView):
                     {"error": "Invalid ad_flag value."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            base_dn = LDAPConstants.CUSTOMER_BASE_DN
-            ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
-            bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
+            # base_dn = LDAPConstants.CUSTOMER_BASE_DN
+            # ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
+            # bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
             groups = LDAP.fetch_all_groups(
                 base_dn=base_dn,
                 ldap_server=ldap_servers[0],
@@ -427,9 +427,9 @@ class LDAPGroupUsersView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            base_dn = LDAPConstants.CUSTOMER_BASE_DN
-            ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
-            bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
+            # base_dn = LDAPConstants.CUSTOMER_BASE_DN
+            # ldap_servers = LDAPConstants.CUSTOMER_LDAP_SERVERS
+            # bind_domain = LDAPConstants.CUSTOMER_BIND_DOMAIN
             ldap_users = LDAP.fetch_users_in_group(
                 group_name=group_name,
                 base_dn=base_dn,
