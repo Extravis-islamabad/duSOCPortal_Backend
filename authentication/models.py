@@ -41,6 +41,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     hashed_password = models.CharField(max_length=255, blank=True, null=True)
     is_super_admin = models.BooleanField(default=False)
     is_admin = models.BooleanField(default=False)
+    is_read_only = models.BooleanField(default=False)
     is_tenant = models.BooleanField(default=False)  # Needed for admin access
     is_active = models.BooleanField(default=True)
     is_deleted = models.BooleanField(default=False)
