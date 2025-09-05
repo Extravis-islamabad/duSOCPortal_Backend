@@ -41,7 +41,14 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
         params = self.get_query_params()
         token = params.get("token")
         self.user = await self.get_user_from_token(token)
-        if not self.user or not self.user.is_admin:
+        if (
+            not self.user
+            or not self.user.is_admin
+            or not self.user.is_super_admin
+            or not self.user.is_active
+            or self.user.is_deleted
+            or not self.user.is_read_only
+        ):
             await self.close()
             return
 
@@ -52,7 +59,7 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
 
         # Send initial tenant count on connection
         integration_count = await database_sync_to_async(
-            lambda: Integration.objects.filter(admin=self.user).count()
+            lambda: Integration.objects.count()
         )()
         tenanat_count = await database_sync_to_async(
             lambda: Tenant.objects.filter(created_by=self.user).count()
@@ -122,7 +129,7 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
                 memory_usage = psutil.virtual_memory().percent
                 cache.get("tenant_count", 0)
                 integration_count = await database_sync_to_async(
-                    lambda: Integration.objects.filter(admin=self.user).count()
+                    lambda: Integration.objects.count()
                 )()
                 tenanat_count = await database_sync_to_async(
                     lambda: Tenant.objects.filter(created_by=self.user).count()
