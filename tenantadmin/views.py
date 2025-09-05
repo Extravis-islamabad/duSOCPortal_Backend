@@ -1973,7 +1973,7 @@ class CompanyToolsAPIView(APIView):
     """
 
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request):
         company_id = request.query_params.get("company_id")
@@ -1986,18 +1986,16 @@ class CompanyToolsAPIView(APIView):
             if company_id:
                 # Get tools for specific company
                 try:
-                    company = Company.objects.get(
-                        id=company_id, created_by=request.user
-                    )
+                    company = Company.objects.get(id=company_id)
                     companies = [company]
                 except Company.DoesNotExist:
                     return Response(
-                        {"error": "Company not found or unauthorized."},
+                        {"error": "Company not found"},
                         status=status.HTTP_404_NOT_FOUND,
                     )
             else:
-                # Get tools for all companies owned by this admin
-                companies = Company.objects.filter(created_by=request.user)
+                # Get tools for all companies
+                companies = Company.objects.all()
                 if not companies.exists():
                     return Response(
                         {
