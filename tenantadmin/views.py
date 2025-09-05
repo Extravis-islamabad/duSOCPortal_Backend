@@ -203,8 +203,8 @@ class TenantDetailAPIView(APIView):
             f"Tenant detail request by user: {request.user.username} for company_id: {company_id}"
         )
         try:
-            # Get company created by this admin
-            company = Company.objects.get(id=company_id, created_by=request.user)
+            # Get company
+            company = Company.objects.get(id=company_id)
             # Get the primary tenant associated with this company
             tenant = Tenant.objects.filter(company=company).first()
             if not tenant:
@@ -214,12 +214,10 @@ class TenantDetailAPIView(APIView):
                 )
         except Company.DoesNotExist:
             logger.warning(
-                f"Company with id {company_id} not found or not owned by {request.user.username}"
+                f"Company with id {company_id} not found by {request.user.username}"
             )
             return Response(
-                {
-                    "error": "Company not found or you do not have permission to view it."
-                },
+                {"error": "Company not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
