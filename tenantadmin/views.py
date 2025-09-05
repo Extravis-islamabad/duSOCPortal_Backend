@@ -139,7 +139,7 @@ class DeleteTenantByCompanyView(APIView):
 
     def delete(self, request, company_id):
         try:
-            company = Company.objects.get(id=company_id, created_by=request.user)
+            company = Company.objects.get(id=company_id)
         except Exception:
             return Response(
                 {"error": "Company with the given ID does not exist."},
