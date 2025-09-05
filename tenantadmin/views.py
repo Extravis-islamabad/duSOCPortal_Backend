@@ -102,7 +102,7 @@ class TenantInactiveView(APIView):
 
     def post(self, request, company_id):
         try:
-            company = Company.objects.get(id=company_id, created_by=request.user)
+            company = Company.objects.get(id=company_id)
         except Exception:
             return Response(
                 {"error": "Company with the given ID does not exist."},
@@ -111,9 +111,9 @@ class TenantInactiveView(APIView):
 
         # Get all tenant users under this company
         tenant_users = User.objects.filter(
-            id__in=Tenant.objects.filter(
-                company=company, created_by=request.user
-            ).values_list("tenant__id", flat=True),
+            id__in=Tenant.objects.filter(company=company).values_list(
+                "tenant__id", flat=True
+            ),
             is_active=True,
             is_deleted=False,
         )
