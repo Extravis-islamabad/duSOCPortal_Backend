@@ -28,5 +28,7 @@ class IsReadonlyAdminUser(BasePermission):
 
     def has_permission(self, request, view):
         return bool(request.user.is_authenticated) and (
-            request.user.is_admin or request.user.is_super_admin or request.is_read_only
+            request.user.is_admin
+            or request.user.is_super_admin
+            or request.user.is_read_only
         )

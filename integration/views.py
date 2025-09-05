@@ -1,5 +1,4 @@
 from cryptography.fernet import Fernet
-from loguru import logger
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -155,26 +154,13 @@ class IntegrationTypesView(APIView):
 
 class CredentialTypesListAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request):
         credential_types = [
             {"id": choice[0], "text": choice[1]} for choice in CredentialTypes.choices
         ]
         return Response(credential_types, status=status.HTTP_200_OK)
-
-
-class GetIBMQradarTenants(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
-
-    def get(self, request):
-        logger.info("Getting IBM QRadar tenants")
-        with IBMQradar() as ibm_qradar:
-            data = ibm_qradar._get_tenants()
-            if data:
-                return Response({"data": data}, status=status.HTTP_200_OK)
-        return Response({"data": []}, status=status.HTTP_200_OK)
 
 
 class IntegrationCreateAPIView(APIView):
@@ -309,7 +295,7 @@ class TestIntegrationAPIView(APIView):
 
 class TestIntegrationConnectionAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request, integration_id):
         try:
