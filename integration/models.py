@@ -1,6 +1,8 @@
 from django.db import models
 from django.forms import ValidationError
 
+from authentication.models import User
+
 
 class IntegrationTypes(models.IntegerChoices):
     SIEM_INTEGRATION = 1, "SIEM Integration"
@@ -38,6 +40,22 @@ class CredentialTypes(models.IntegerChoices):
 
 
 class Integration(models.Model):
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name="created_integrations",
+        null=True,
+        blank=True,
+        help_text="User who created this integration",
+    )
+    modified_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name="modified_integrations",
+        null=True,
+        blank=True,
+        help_text="User who last modified this integration",
+    )
     integration_type = models.IntegerField(
         choices=IntegrationTypes.choices, default=IntegrationTypes.SIEM_INTEGRATION
     )
