@@ -74,9 +74,9 @@ class CompanyTenantSettingsUpdateAPIView(APIView):
 
     def put(self, request, company_id):
         try:
-            company = Company.objects.get(id=company_id, created_by=request.user)
+            company = Company.objects.get(id=company_id)
         except Company.DoesNotExist:
-            return Response({"error": "Company not found or unauthorized."}, status=404)
+            return Response({"error": "Company not found."}, status=404)
 
         serializer = CompanyTenantUpdateSerializer(
             company, data=request.data, context={"request": request, "company": company}
