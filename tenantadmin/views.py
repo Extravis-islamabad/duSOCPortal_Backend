@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.models import User
-from authentication.permissions import IsAdminUser
+from authentication.permissions import IsAdminUser, IsReadonlyAdminUser
 from common.constants import APIConstants, FilterType, PaginationConstants
 from tenant.cortex_soar_tasks import sync_soar_data
 from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
@@ -272,11 +272,11 @@ class TenantsByCompanyAPIView(APIView):
 
 class DistinctCompaniesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request):
         companies = (
-            Company.objects.filter(created_by=request.user)
+            Company.objects.all()
             .annotate(
                 active_tenant_count=Count(
                     "tenants",
@@ -742,7 +742,7 @@ class IncidentStatusSummaryAPIView(APIView):
     """
 
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request):
         company_id = request.query_params.get("company_id")
@@ -756,9 +756,7 @@ class IncidentStatusSummaryAPIView(APIView):
             if company_id:
                 # Get incidents for specific company
                 try:
-                    company = Company.objects.get(
-                        id=company_id, created_by=request.user
-                    )
+                    company = Company.objects.get(id=company_id)
                     companies = [company]
                 except Company.DoesNotExist:
                     return Response(
@@ -766,8 +764,8 @@ class IncidentStatusSummaryAPIView(APIView):
                         status=status.HTTP_404_NOT_FOUND,
                     )
             else:
-                # Get incidents for all companies owned by this admin
-                companies = Company.objects.filter(created_by=request.user)
+                # Get incidents for all companies
+                companies = Company.objects.all()
                 if not companies.exists():
                     return Response(
                         {
