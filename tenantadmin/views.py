@@ -298,7 +298,7 @@ class DistinctCompaniesAPIView(APIView):
 
 class NonActiveTenantsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request):
         logger.info(
@@ -307,7 +307,7 @@ class NonActiveTenantsAPIView(APIView):
 
         # Step 1: Annotate companies with count of inactive tenants
         companies = (
-            Company.objects.filter(created_by=request.user)
+            Company.objects.all()
             .annotate(
                 inactive_tenant_count=Count(
                     "tenants",
