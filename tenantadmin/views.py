@@ -558,7 +558,7 @@ class IncidentPrioritySummaryAPIView(APIView):
     """
 
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request):
         company_id = request.query_params.get("company_id")
@@ -573,9 +573,7 @@ class IncidentPrioritySummaryAPIView(APIView):
             if company_id:
                 # Get incidents for specific company
                 try:
-                    company = Company.objects.get(
-                        id=company_id, created_by=request.user
-                    )
+                    company = Company.objects.get(id=company_id)
                     companies = [company]
                 except Company.DoesNotExist:
                     return Response(
@@ -583,8 +581,8 @@ class IncidentPrioritySummaryAPIView(APIView):
                         status=status.HTTP_404_NOT_FOUND,
                     )
             else:
-                # Get incidents for all companies owned by this admin
-                companies = Company.objects.filter(created_by=request.user)
+                # Get incidents for all companies
+                companies = Company.objects.all()
                 if not companies.exists():
                     return Response(
                         {
@@ -919,7 +917,7 @@ class TenantSLAMatrixAPIView(APIView):
     """
 
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request):
         company_id = request.query_params.get("company_id")
@@ -933,9 +931,7 @@ class TenantSLAMatrixAPIView(APIView):
             if company_id:
                 # Get SLA matrix for specific company
                 try:
-                    company = Company.objects.get(
-                        id=company_id, created_by=request.user
-                    )
+                    company = Company.objects.get(id=company_id)
                     companies = [company]
                 except Company.DoesNotExist:
                     return Response(
@@ -943,8 +939,8 @@ class TenantSLAMatrixAPIView(APIView):
                         status=status.HTTP_404_NOT_FOUND,
                     )
             else:
-                # Get SLA matrix for all companies owned by this admin
-                companies = Company.objects.filter(created_by=request.user)
+                # Get SLA matrix for all companies
+                companies = Company.objects.all()
                 if not companies.exists():
                     return Response(
                         {
