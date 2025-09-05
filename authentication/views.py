@@ -17,7 +17,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenViewBase
 
 from authentication.permissions import IsAdminUser
-from common.constants import LDAPConstants
+from common.constants import LDAPConstants, RBACConstants
 from common.utils import LDAP
 from tenant.models import Company
 
@@ -464,6 +464,172 @@ class LDAPGroupUsersView(APIView):
         except Exception as e:
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class AdminLoginAPIView(APIView):
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "username": openapi.Schema(type=openapi.TYPE_STRING),
+                "password": openapi.Schema(type=openapi.TYPE_STRING),
+            },
+            required=["username", "password"],
+        )
+    )
+    def post(self, request):
+        """
+        Authenticates an admin user against ADMIN_AD and creates/updates admin user based on LDAP group membership.
+
+        The Admin login will use the ADMIN_AD. Users who can access and login to the portal will come under these groups:
+        - CSOC_SOAR_ADMIN (super_admin)
+        - CSOC_SOAR_SR_SECURITY_ANALYST (admin)
+        - CSOC_SOAR_ANALYST (read_only)
+
+        If a user exists in more than one mentioned group, they cannot login as admin.
+
+        For first-time admin login, username and password will be taken, checked against LDAP,
+        validated for single group membership, then user will be created.
+
+        Authentication is always done against LDAP - no passwords are stored in DB.
+
+        Args:
+            username (str): Admin username
+            password (str): Admin password
+
+        Returns:
+            JSON response with JWT tokens on success or error message on failure.
+        """
+        start = time.time()
+        username = request.data.get("username")
+        password = request.data.get("password")
+
+        # Validate input
+        if not username or not password:
+            logger.info(f"AdminLoginAPIView.post took {time.time() - start} seconds")
+            return Response(
+                {"error": "Please provide both username and password"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # Always authenticate against ADMIN_AD first
+            ldap_auth_success = LDAP._check_ldap(
+                username,
+                password,
+                base_dn=LDAPConstants.ADMIN_BASE_DN,
+                ldap_server=LDAPConstants.ADMIN_LDAP_SERVERS[0],
+                ldap_port=LDAPConstants.LDAP_PORT,
+                bind_domain=LDAPConstants.ADMIN_BIND_DOMAIN,
+            )
+
+            if not ldap_auth_success:
+                return Response(
+                    {"error": "Invalid LDAP credentials"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
+            # Check if user exists in database
+            existing_user = User.objects.filter(
+                username__iexact=username, is_active=True, is_deleted=False
+            ).first()
+
+            # If user doesn't exist, this is first-time login - create user
+            if not existing_user:
+                # Get user's LDAP groups
+                user_groups = LDAP.fetch_user_groups(
+                    username=username,
+                    base_dn=LDAPConstants.ADMIN_BASE_DN,
+                    ldap_server=LDAPConstants.ADMIN_LDAP_SERVERS[0],
+                    ldap_port=LDAPConstants.LDAP_PORT,
+                    bind_user=LDAPConstants.LDAP_BIND_USER,
+                    bind_domain=LDAPConstants.ADMIN_BIND_DOMAIN,
+                    bind_password=LDAPConstants.LDAP_BIND_PASSWORD,
+                )
+
+                # Check for valid admin groups
+                valid_groups = [
+                    RBACConstants.SUPER_ADMIN_GROUP,
+                    RBACConstants.ADMIN_GROUP,
+                    RBACConstants.READ_ONLY_USER_GROUP,
+                ]
+
+                user_valid_groups = [
+                    group for group in user_groups if group in valid_groups
+                ]
+
+                # Check if user is in more than one valid group
+                if len(user_valid_groups) > 1:
+                    return Response(
+                        {
+                            "error": "User belongs to multiple admin groups. Access denied."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                # Check if user is in at least one valid group
+                if not user_valid_groups:
+                    return Response(
+                        {"error": "User is not a member of any valid admin groups"},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+                # Determine role based on group membership
+                user_group = user_valid_groups[0]
+                is_super_admin = False
+                is_admin = False
+                is_read_only = False
+
+                if user_group == RBACConstants.SUPER_ADMIN_GROUP:
+                    is_super_admin = True
+                elif user_group == RBACConstants.ADMIN_GROUP:
+                    is_admin = True
+                elif user_group == RBACConstants.READ_ONLY_USER_GROUP:
+                    is_read_only = True
+
+                # Create new admin user without storing password
+                user = User.objects.create(
+                    username=username,
+                    name=username,  # You might want to get display name from LDAP
+                    is_super_admin=is_super_admin,
+                    is_admin=is_admin,
+                    is_read_only=is_read_only,
+                    is_active=True,
+                    is_deleted=False,
+                    # No password stored - authentication is always done via LDAP
+                )
+
+                logger.info(
+                    f"Created new admin user: {username} with role: {user_group}"
+                )
+
+            else:
+                # User exists, LDAP authentication already succeeded above
+                # No need to check stored password as we rely entirely on LDAP
+                user = existing_user
+
+            # Update last login
+            user.last_login = timezone.now()
+            user.save(update_fields=["last_login"])
+
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+
+            logger.info(f"AdminLoginAPIView.post took {time.time() - start} seconds")
+            return Response(
+                {
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            logger.error(f"An error occurred in AdminLoginAPIView.post: {str(e)}")
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
