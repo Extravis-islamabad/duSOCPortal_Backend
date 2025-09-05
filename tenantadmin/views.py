@@ -232,16 +232,14 @@ class TenantDetailAPIView(APIView):
 
 class TenantsByCompanyAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request, company_id):
         try:
-            company = Company.objects.get(id=company_id, created_by=request.user)
+            company = Company.objects.get(id=company_id)
         except Company.DoesNotExist:
             return Response(
-                {
-                    "error": "Company with the given ID does not exist or is not owned by the user."
-                },
+                {"error": "Company with the given ID does not exist."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
