@@ -41,12 +41,9 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
         params = self.get_query_params()
         token = params.get("token")
         self.user = await self.get_user_from_token(token)
-        if (
-            not self.user
+        if (not self.user or not self.user.is_active or self.user.is_deleted) and (
+            not self.user.is_super_admin
             or not self.user.is_admin
-            or not self.user.is_super_admin
-            or not self.user.is_active
-            or self.user.is_deleted
             or not self.user.is_read_only
         ):
             await self.close()
