@@ -181,7 +181,7 @@ class IntegrationCreateAPIView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = IntegrationSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save(admin=request.user)
+            serializer.save()
             return Response(
                 {"message": "Integration created successfully"},
                 status=status.HTTP_201_CREATED,
