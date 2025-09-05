@@ -174,10 +174,10 @@ class ReactivateTenantUsersAPIView(APIView):
 
     def post(self, request, company_id):
         try:
-            company = Company.objects.get(id=company_id, created_by=request.user)
+            company = Company.objects.get(id=company_id)
         except Company.DoesNotExist:
             return Response(
-                {"error": "Company not found or not owned by the user."},
+                {"error": "Company not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
