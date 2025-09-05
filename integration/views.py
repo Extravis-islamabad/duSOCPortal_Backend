@@ -345,7 +345,7 @@ class TestIntegrationConnectionAPIView(APIView):
 
 class GetIntegrationInstanceListView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def post(self, request):
         integration_type = request.data.get("integration_type")
