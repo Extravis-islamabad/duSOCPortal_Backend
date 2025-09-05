@@ -414,6 +414,9 @@ class LDAPConstants:
 
     ADMIN_LDAP_SERVERS = ADMIN_LDAP_SERVERS.split(",")
     CUSTOMER_LDAP_SERVERS = CUSTOMER_LDAP_SERVERS.split(",")
+    if EnvConstants.LOCAL:
+        ADMIN_LDAP_SERVERS = ["localhost"]
+        CUSTOMER_LDAP_SERVERS = ["localhost"]
 
 
 class RBACConstants:
