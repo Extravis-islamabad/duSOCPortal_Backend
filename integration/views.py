@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from authentication.permissions import IsAdminUser
+from authentication.permissions import IsAdminUser, IsReadonlyAdminUser
 from common.constants import EncryptedKeyConstants
 from common.modules.cortex_soar import CortexSOAR
 from common.modules.cyware import Cyware
@@ -178,10 +178,13 @@ class GetIBMQradarTenants(APIView):
 
 
 class IntegrationCreateAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
     def post(self, request, *args, **kwargs):
         serializer = IntegrationSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            serializer.save(created_by=request.user, modified_by=request.user)
             return Response(
                 {"message": "Integration created successfully"},
                 status=status.HTTP_201_CREATED,
@@ -191,7 +194,7 @@ class IntegrationCreateAPIView(APIView):
 
 class GetAllIntegrationsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request):
         integrations = Integration.objects.all().prefetch_related("credentials")

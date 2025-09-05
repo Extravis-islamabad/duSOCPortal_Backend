@@ -88,7 +88,6 @@ class IntegrationSerializer(serializers.ModelSerializer):
         model = Integration
         fields = [
             "id",
-            "admin",
             "integration_type",
             "siem_subtype",
             "soar_subtype",
@@ -272,10 +271,18 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
         )
 
     def get_modified_by(self, obj):
-        return obj.admin.username if obj.admin else None
+        return (
+            obj.modified_by.username
+            if obj.modified_by
+            else (obj.created_by.username if obj.created_by else "System")
+        )
 
     def get_modified_by_id(self, obj):
-        return obj.admin.id if obj.admin else None
+        return (
+            obj.modified_by.id
+            if obj.modified_by
+            else (obj.created_by.id if obj.created_by else None)
+        )
 
     def get_tenant_count(self, obj):
         if obj.integration_type == IntegrationTypes.SIEM_INTEGRATION:
