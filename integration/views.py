@@ -115,7 +115,7 @@ def test_integration_connection(
 
 class IntegrationTypesView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request):
         siem_subtypes = [
