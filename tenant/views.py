@@ -3718,11 +3718,16 @@ class EPSGraphAPIView(APIView):
                 .order_by("created_at")  # get earliest if multiple match
                 .first()
             )
-            peak_eps_time = (
-                peak_row.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-                if peak_row and peak_row.created_at
-                else None
-            )
+
+            # Format peak_eps_time with timezone adjustment for TODAY filter
+            peak_eps_time = None
+            if peak_row and peak_row.created_at:
+                if filter_enum == FilterType.TODAY:
+                    # Add 4 hours for TODAY filter
+                    adjusted_time = peak_row.created_at + timedelta(hours=4)
+                    peak_eps_time = adjusted_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+                else:
+                    peak_eps_time = peak_row.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
 
             if filter_enum == FilterType.TODAY:
                 interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
