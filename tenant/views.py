@@ -1574,8 +1574,18 @@ class DashboardView(APIView):
 
             # Total Incidents (True Positives + False Positives only)
             if not filter_list or "total_incidents" in filter_list:
+                # Using the specified query structure for total incidents
                 total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                    total_incident_filters
+                    cortex_soar_tenant__in=soar_ids,
+                    status__in=["1", "2"],
+                    itsm_sync_status__in=["Done", "Ready"],
+                    owner__isnull=False,
+                    owner__gt="",
+                    incident_tta__isnull=False,
+                    incident_ttn__isnull=False,
+                    incident_ttdn__isnull=False,
+                    incident_priority__isnull=False,
+                    incident_priority__gt="",
                 ).count()
 
                 if include_trend:
@@ -1601,19 +1611,21 @@ class DashboardView(APIView):
                     ).count(),
                 }
 
-            # Open Incidents based on True Positives (status=1) and False Positives (not closed)
+            # Open Incidents based on status=2
             if not filter_list or "open" in filter_list:
-                # True Positives with status=1 (open)
-                open_true_positives = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=1
+                # Using the specified query structure for open incidents
+                open_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
+                    status="2",
+                    itsm_sync_status__in=["Done", "Ready"],
+                    owner__isnull=False,
+                    owner__gt="",
+                    incident_tta__isnull=False,
+                    incident_ttn__isnull=False,
+                    incident_ttdn__isnull=False,
+                    incident_priority__isnull=False,
+                    incident_priority__gt="",
                 ).count()
-
-                # False Positives that are not closed (Done status but no closed date)
-                open_false_positives = DUCortexSOARIncidentFinalModel.objects.filter(
-                    false_positive_filters, closed__isnull=True
-                ).count()
-
-                open_count = open_true_positives + open_false_positives
 
                 # Calculate trend based on filter type for open incidents
                 open_tp_filters = true_positive_filters & Q(status=1)
@@ -1646,19 +1658,21 @@ class DashboardView(APIView):
 
                 dashboard_data["open"] = {"count": open_count, "change": percent_change}
 
-            # Closed Incidents based on True Positives (status=2) and False Positives (with closed date)
+            # Closed Incidents based on status=1
             if not filter_list or "closed" in filter_list:
-                # True Positives with status=2 (closed)
-                closed_true_positives = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters, status=2
+                # Using the specified query structure for closed incidents
+                closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
+                    status="1",
+                    itsm_sync_status__in=["Done", "Ready"],
+                    owner__isnull=False,
+                    owner__gt="",
+                    incident_tta__isnull=False,
+                    incident_ttn__isnull=False,
+                    incident_ttdn__isnull=False,
+                    incident_priority__isnull=False,
+                    incident_priority__gt="",
                 ).count()
-
-                # False Positives that are closed (Done status with closed date)
-                closed_false_positives = DUCortexSOARIncidentFinalModel.objects.filter(
-                    false_positive_filters, closed__isnull=False
-                ).count()
-
-                closed_count = closed_true_positives + closed_false_positives
 
                 # Calculate trend based on filter type for closed incidents
                 closed_tp_filters = true_positive_filters & Q(status=2)
@@ -1696,8 +1710,17 @@ class DashboardView(APIView):
 
             # False Positives (Done incidents)
             if not filter_list or "falsePositives" in filter_list:
+                # Using the specified query structure for false positives
                 fp_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    false_positive_filters
+                    cortex_soar_tenant__in=soar_ids,
+                    itsm_sync_status="Done",
+                    owner__isnull=False,
+                    owner__gt="",
+                    incident_tta__isnull=False,
+                    incident_ttn__isnull=False,
+                    incident_ttdn__isnull=False,
+                    incident_priority__isnull=False,
+                    incident_priority__gt="",
                 ).count()
 
                 # Calculate trend based on filter type for false positives
@@ -1723,8 +1746,17 @@ class DashboardView(APIView):
 
             # True Positives (Ready incidents with all required fields)
             if not filter_list or "truePositives" in filter_list:
+                # Using the specified query structure for true positives
                 tp_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                    true_positive_filters
+                    cortex_soar_tenant__in=soar_ids,
+                    itsm_sync_status="Ready",
+                    owner__isnull=False,
+                    owner__gt="",
+                    incident_tta__isnull=False,
+                    incident_ttn__isnull=False,
+                    incident_ttdn__isnull=False,
+                    incident_priority__isnull=False,
+                    incident_priority__gt="",
                 ).count()
 
                 # Calculate trend based on filter type for true positives
