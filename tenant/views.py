@@ -1589,12 +1589,25 @@ class DashboardView(APIView):
                 ).count()
 
                 if include_trend:
+                    # Create new query for trend calculation with the updated query structure
+                    trend_filters = Q(
+                        cortex_soar_tenant__in=soar_ids,
+                        status__in=["1", "2"],
+                        itsm_sync_status__in=["Done", "Ready"],
+                        owner__isnull=False,
+                        owner__gt="",
+                        incident_tta__isnull=False,
+                        incident_ttn__isnull=False,
+                        incident_ttdn__isnull=False,
+                        incident_priority__isnull=False,
+                        incident_priority__gt="",
+                    )
                     (
                         current_count,
                         previous_count,
                         trend_period,
                     ) = self._calculate_trend_comparison(
-                        total_incident_filters, filter_type, start_date, end_date
+                        trend_filters, filter_type, start_date, end_date
                     )
 
                     percent_change = self._calculate_percentage_change(
@@ -1603,20 +1616,10 @@ class DashboardView(APIView):
                 else:
                     percent_change = None
 
-                dashboard_data["total_incidents"] = {
-                    "count": total_incidents,
-                    "change": percent_change,
-                    "new": DUCortexSOARIncidentFinalModel.objects.filter(
-                        total_incident_filters, created__date=today
-                    ).count(),
-                }
-
-            # Open Incidents based on status=2
-            if not filter_list or "open" in filter_list:
-                # Using the specified query structure for open incidents
-                open_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                # Calculate new incidents for today using the updated query structure
+                new_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
                     cortex_soar_tenant__in=soar_ids,
-                    status="2",
+                    status__in=["1", "2"],
                     itsm_sync_status__in=["Done", "Ready"],
                     owner__isnull=False,
                     owner__gt="",
@@ -1625,43 +1628,19 @@ class DashboardView(APIView):
                     incident_ttdn__isnull=False,
                     incident_priority__isnull=False,
                     incident_priority__gt="",
+                    created__date=today,
                 ).count()
 
-                # Calculate trend based on filter type for open incidents
-                open_tp_filters = true_positive_filters & Q(status=1)
-                open_fp_filters = false_positive_filters & Q(closed__isnull=True)
+                dashboard_data["total_incidents"] = {
+                    "count": total_incidents,
+                    "change": percent_change,
+                    "new": new_incidents,
+                }
 
-                if include_trend:
-                    (
-                        current_open_tp,
-                        previous_open_tp,
-                        trend_period,
-                    ) = self._calculate_trend_comparison(
-                        open_tp_filters, filter_type, start_date, end_date
-                    )
-                    (
-                        current_open_fp,
-                        previous_open_fp,
-                        _,
-                    ) = self._calculate_trend_comparison(
-                        open_fp_filters, filter_type, start_date, end_date
-                    )
-
-                    current_total_open = current_open_tp + current_open_fp
-                    previous_total_open = previous_open_tp + previous_open_fp
-
-                    percent_change = self._calculate_percentage_change(
-                        current_total_open, previous_total_open, trend_period
-                    )
-                else:
-                    percent_change = None
-
-                dashboard_data["open"] = {"count": open_count, "change": percent_change}
-
-            # Closed Incidents based on status=1
-            if not filter_list or "closed" in filter_list:
-                # Using the specified query structure for closed incidents
-                closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
+            # Open Incidents based on status=1
+            if not filter_list or "open" in filter_list:
+                # Using the specified query structure for open incidents
+                open_count = DUCortexSOARIncidentFinalModel.objects.filter(
                     cortex_soar_tenant__in=soar_ids,
                     status="1",
                     itsm_sync_status__in=["Done", "Ready"],
@@ -1674,31 +1653,76 @@ class DashboardView(APIView):
                     incident_priority__gt="",
                 ).count()
 
-                # Calculate trend based on filter type for closed incidents
-                closed_tp_filters = true_positive_filters & Q(status=2)
-                closed_fp_filters = false_positive_filters & Q(closed__isnull=False)
-
+                # Calculate trend based on filter type for open incidents using the updated query structure
                 if include_trend:
+                    trend_filters = Q(
+                        cortex_soar_tenant__in=soar_ids,
+                        status="1",
+                        itsm_sync_status__in=["Done", "Ready"],
+                        owner__isnull=False,
+                        owner__gt="",
+                        incident_tta__isnull=False,
+                        incident_ttn__isnull=False,
+                        incident_ttdn__isnull=False,
+                        incident_priority__isnull=False,
+                        incident_priority__gt="",
+                    )
                     (
-                        current_closed_tp,
-                        previous_closed_tp,
+                        current_count,
+                        previous_count,
                         trend_period,
                     ) = self._calculate_trend_comparison(
-                        closed_tp_filters, filter_type, start_date, end_date
+                        trend_filters, filter_type, start_date, end_date
                     )
-                    (
-                        current_closed_fp,
-                        previous_closed_fp,
-                        _,
-                    ) = self._calculate_trend_comparison(
-                        closed_fp_filters, filter_type, start_date, end_date
-                    )
-
-                    current_total_closed = current_closed_tp + current_closed_fp
-                    previous_total_closed = previous_closed_tp + previous_closed_fp
 
                     percent_change = self._calculate_percentage_change(
-                        current_total_closed, previous_total_closed, trend_period
+                        current_count, previous_count, trend_period
+                    )
+                else:
+                    percent_change = None
+
+                dashboard_data["open"] = {"count": open_count, "change": percent_change}
+
+            # Closed Incidents based on status=2
+            if not filter_list or "closed" in filter_list:
+                # Using the specified query structure for closed incidents
+                closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_soar_tenant__in=soar_ids,
+                    status="2",
+                    itsm_sync_status__in=["Done", "Ready"],
+                    owner__isnull=False,
+                    owner__gt="",
+                    incident_tta__isnull=False,
+                    incident_ttn__isnull=False,
+                    incident_ttdn__isnull=False,
+                    incident_priority__isnull=False,
+                    incident_priority__gt="",
+                ).count()
+
+                # Calculate trend based on filter type for closed incidents using the updated query structure
+                if include_trend:
+                    trend_filters = Q(
+                        cortex_soar_tenant__in=soar_ids,
+                        status="2",
+                        itsm_sync_status__in=["Done", "Ready"],
+                        owner__isnull=False,
+                        owner__gt="",
+                        incident_tta__isnull=False,
+                        incident_ttn__isnull=False,
+                        incident_ttdn__isnull=False,
+                        incident_priority__isnull=False,
+                        incident_priority__gt="",
+                    )
+                    (
+                        current_count,
+                        previous_count,
+                        trend_period,
+                    ) = self._calculate_trend_comparison(
+                        trend_filters, filter_type, start_date, end_date
+                    )
+
+                    percent_change = self._calculate_percentage_change(
+                        current_count, previous_count, trend_period
                     )
                 else:
                     percent_change = None
@@ -1723,14 +1747,25 @@ class DashboardView(APIView):
                     incident_priority__gt="",
                 ).count()
 
-                # Calculate trend based on filter type for false positives
+                # Calculate trend based on filter type for false positives using the updated query structure
                 if include_trend:
+                    trend_filters = Q(
+                        cortex_soar_tenant__in=soar_ids,
+                        itsm_sync_status="Done",
+                        owner__isnull=False,
+                        owner__gt="",
+                        incident_tta__isnull=False,
+                        incident_ttn__isnull=False,
+                        incident_ttdn__isnull=False,
+                        incident_priority__isnull=False,
+                        incident_priority__gt="",
+                    )
                     (
                         current_fp,
                         previous_fp,
                         trend_period,
                     ) = self._calculate_trend_comparison(
-                        false_positive_filters, filter_type, start_date, end_date
+                        trend_filters, filter_type, start_date, end_date
                     )
 
                     percent_change = self._calculate_percentage_change(
@@ -1759,14 +1794,25 @@ class DashboardView(APIView):
                     incident_priority__gt="",
                 ).count()
 
-                # Calculate trend based on filter type for true positives
+                # Calculate trend based on filter type for true positives using the updated query structure
                 if include_trend:
+                    trend_filters = Q(
+                        cortex_soar_tenant__in=soar_ids,
+                        itsm_sync_status="Ready",
+                        owner__isnull=False,
+                        owner__gt="",
+                        incident_tta__isnull=False,
+                        incident_ttn__isnull=False,
+                        incident_ttdn__isnull=False,
+                        incident_priority__isnull=False,
+                        incident_priority__gt="",
+                    )
                     (
                         current_tp,
                         previous_tp,
                         trend_period,
                     ) = self._calculate_trend_comparison(
-                        true_positive_filters, filter_type, start_date, end_date
+                        trend_filters, filter_type, start_date, end_date
                     )
 
                     percent_change = self._calculate_percentage_change(
