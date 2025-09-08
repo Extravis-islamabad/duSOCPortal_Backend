@@ -8276,8 +8276,8 @@ class DetailedEPSReportAPIView(APIView):
                 peak_row.created_at if peak_row and peak_row.created_at else None
             )
 
-            peak_dt = peak_eps_time + timedelta(hours=4)
-            peak_str = peak_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            # peak_dt = peak_eps_time + timedelta(hours=4)
+            peak_str = peak_eps_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
             if filter_enum == FilterType.TODAY:
                 interval = entry["interval"]
