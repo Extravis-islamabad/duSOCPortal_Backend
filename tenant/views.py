@@ -1574,8 +1574,8 @@ class DashboardView(APIView):
 
             # Total Incidents (True Positives + False Positives only)
             if not filter_list or "total_incidents" in filter_list:
-                # Using the specified query structure for total incidents
-                total_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+                # Using the specified query structure for total incidents with date filtering
+                total_incidents_query = DUCortexSOARIncidentFinalModel.objects.filter(
                     cortex_soar_tenant__in=soar_ids,
                     status__in=["1", "2"],
                     itsm_sync_status__in=["Done", "Ready"],
@@ -1586,7 +1586,29 @@ class DashboardView(APIView):
                     incident_ttdn__isnull=False,
                     incident_priority__isnull=False,
                     incident_priority__gt="",
-                ).count()
+                )
+
+                # Apply date filters if provided
+                if start_date or end_date:
+                    if start_date:
+                        if filter_type == FilterType.TODAY:
+                            total_incidents_query = total_incidents_query.filter(
+                                created__date=start_date.date()
+                            )
+                        else:
+                            total_incidents_query = total_incidents_query.filter(
+                                created__date__gte=start_date.date()
+                                if hasattr(start_date, "date")
+                                else start_date
+                            )
+                    if end_date:
+                        total_incidents_query = total_incidents_query.filter(
+                            created__date__lte=end_date.date()
+                            if hasattr(end_date, "date")
+                            else end_date
+                        )
+
+                total_incidents = total_incidents_query.count()
 
                 if include_trend:
                     # Create new query for trend calculation with the updated query structure
@@ -1639,8 +1661,8 @@ class DashboardView(APIView):
 
             # Open Incidents based on status=1
             if not filter_list or "open" in filter_list:
-                # Using the specified query structure for open incidents
-                open_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                # Using the specified query structure for open incidents with date filtering
+                open_incidents_query = DUCortexSOARIncidentFinalModel.objects.filter(
                     cortex_soar_tenant__in=soar_ids,
                     status="1",
                     itsm_sync_status__in=["Done", "Ready"],
@@ -1651,7 +1673,29 @@ class DashboardView(APIView):
                     incident_ttdn__isnull=False,
                     incident_priority__isnull=False,
                     incident_priority__gt="",
-                ).count()
+                )
+
+                # Apply date filters if provided
+                if start_date or end_date:
+                    if start_date:
+                        if filter_type == FilterType.TODAY:
+                            open_incidents_query = open_incidents_query.filter(
+                                created__date=start_date.date()
+                            )
+                        else:
+                            open_incidents_query = open_incidents_query.filter(
+                                created__date__gte=start_date.date()
+                                if hasattr(start_date, "date")
+                                else start_date
+                            )
+                    if end_date:
+                        open_incidents_query = open_incidents_query.filter(
+                            created__date__lte=end_date.date()
+                            if hasattr(end_date, "date")
+                            else end_date
+                        )
+
+                open_count = open_incidents_query.count()
 
                 # Calculate trend based on filter type for open incidents using the updated query structure
                 if include_trend:
@@ -1685,8 +1729,8 @@ class DashboardView(APIView):
 
             # Closed Incidents based on status=2
             if not filter_list or "closed" in filter_list:
-                # Using the specified query structure for closed incidents
-                closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                # Using the specified query structure for closed incidents with date filtering
+                closed_incidents_query = DUCortexSOARIncidentFinalModel.objects.filter(
                     cortex_soar_tenant__in=soar_ids,
                     status="2",
                     itsm_sync_status__in=["Done", "Ready"],
@@ -1697,7 +1741,29 @@ class DashboardView(APIView):
                     incident_ttdn__isnull=False,
                     incident_priority__isnull=False,
                     incident_priority__gt="",
-                ).count()
+                )
+
+                # Apply date filters if provided
+                if start_date or end_date:
+                    if start_date:
+                        if filter_type == FilterType.TODAY:
+                            closed_incidents_query = closed_incidents_query.filter(
+                                created__date=start_date.date()
+                            )
+                        else:
+                            closed_incidents_query = closed_incidents_query.filter(
+                                created__date__gte=start_date.date()
+                                if hasattr(start_date, "date")
+                                else start_date
+                            )
+                    if end_date:
+                        closed_incidents_query = closed_incidents_query.filter(
+                            created__date__lte=end_date.date()
+                            if hasattr(end_date, "date")
+                            else end_date
+                        )
+
+                closed_count = closed_incidents_query.count()
 
                 # Calculate trend based on filter type for closed incidents using the updated query structure
                 if include_trend:
@@ -1734,8 +1800,8 @@ class DashboardView(APIView):
 
             # False Positives (Done incidents)
             if not filter_list or "falsePositives" in filter_list:
-                # Using the specified query structure for false positives
-                fp_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                # Using the specified query structure for false positives with date filtering
+                fp_query = DUCortexSOARIncidentFinalModel.objects.filter(
                     cortex_soar_tenant__in=soar_ids,
                     itsm_sync_status="Done",
                     owner__isnull=False,
@@ -1745,7 +1811,27 @@ class DashboardView(APIView):
                     incident_ttdn__isnull=False,
                     incident_priority__isnull=False,
                     incident_priority__gt="",
-                ).count()
+                )
+
+                # Apply date filters if provided
+                if start_date or end_date:
+                    if start_date:
+                        if filter_type == FilterType.TODAY:
+                            fp_query = fp_query.filter(created__date=start_date.date())
+                        else:
+                            fp_query = fp_query.filter(
+                                created__date__gte=start_date.date()
+                                if hasattr(start_date, "date")
+                                else start_date
+                            )
+                    if end_date:
+                        fp_query = fp_query.filter(
+                            created__date__lte=end_date.date()
+                            if hasattr(end_date, "date")
+                            else end_date
+                        )
+
+                fp_count = fp_query.count()
 
                 # Calculate trend based on filter type for false positives using the updated query structure
                 if include_trend:
@@ -1781,8 +1867,8 @@ class DashboardView(APIView):
 
             # True Positives (Ready incidents with all required fields)
             if not filter_list or "truePositives" in filter_list:
-                # Using the specified query structure for true positives
-                tp_count = DUCortexSOARIncidentFinalModel.objects.filter(
+                # Using the specified query structure for true positives with date filtering
+                tp_query = DUCortexSOARIncidentFinalModel.objects.filter(
                     cortex_soar_tenant__in=soar_ids,
                     itsm_sync_status="Ready",
                     owner__isnull=False,
@@ -1792,7 +1878,27 @@ class DashboardView(APIView):
                     incident_ttdn__isnull=False,
                     incident_priority__isnull=False,
                     incident_priority__gt="",
-                ).count()
+                )
+
+                # Apply date filters if provided
+                if start_date or end_date:
+                    if start_date:
+                        if filter_type == FilterType.TODAY:
+                            tp_query = tp_query.filter(created__date=start_date.date())
+                        else:
+                            tp_query = tp_query.filter(
+                                created__date__gte=start_date.date()
+                                if hasattr(start_date, "date")
+                                else start_date
+                            )
+                    if end_date:
+                        tp_query = tp_query.filter(
+                            created__date__lte=end_date.date()
+                            if hasattr(end_date, "date")
+                            else end_date
+                        )
+
+                tp_count = tp_query.count()
 
                 # Calculate trend based on filter type for true positives using the updated query structure
                 if include_trend:
