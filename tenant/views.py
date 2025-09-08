@@ -837,21 +837,32 @@ class DownloadTenantAssetsExcel(APIView):
             data = []
             for asset in assets:
                 # Format dates for better readability in Excel
-                creation_date = (
-                    asset.creation_date_converted.strftime("%Y-%m-%d")
-                    if asset.creation_date_converted
-                    else "N/A"
-                )
-                modified_date = (
-                    asset.modified_date_converted.strftime("%Y-%m-%d")
-                    if asset.modified_date_converted
-                    else "N/A"
-                )
-                last_event_date = (
-                    asset.last_event_date_converted.strftime("%Y-%m-%d")
-                    if asset.last_event_date_converted
-                    else "N/A"
-                )
+                # Handle timestamp format (milliseconds since epoch)
+                def format_timestamp_date(timestamp_value):
+                    if timestamp_value:
+                        try:
+                            # If it's a timestamp in milliseconds
+                            if isinstance(timestamp_value, (int, float)) or (
+                                isinstance(timestamp_value, str)
+                                and timestamp_value.isdigit()
+                            ):
+                                timestamp_seconds = int(timestamp_value) / 1000
+                                return datetime.fromtimestamp(
+                                    timestamp_seconds
+                                ).strftime("%Y-%m-%d")
+                            # If it's already a datetime object
+                            elif hasattr(timestamp_value, "strftime"):
+                                return timestamp_value.strftime("%Y-%m-%d")
+                            # If it's a string that might be a timestamp
+                            else:
+                                return str(timestamp_value)
+                        except (ValueError, TypeError, OSError):
+                            return "N/A"
+                    return "N/A"
+
+                creation_time = format_timestamp_date(asset.creation_date)
+                modified_time = format_timestamp_date(asset.modified_date)
+                last_event_time = format_timestamp_date(asset.last_event_time)
 
                 # Determine status based on is_active field
                 status_value = "ACTIVE" if asset.is_active is True else "IN ACTIVE"
@@ -873,9 +884,9 @@ class DownloadTenantAssetsExcel(APIView):
                         "Sub Status": asset.status,
                         "Average EPS": asset.average_eps,
                         # "Sending IP": asset.sending_ip or "N/A",
-                        "Onboarding Date": creation_date,
-                        "Modified Date": modified_date,
-                        "Last Event Date": last_event_date,
+                        "Onboarding Date": creation_time,
+                        "Modified Date": modified_time,
+                        "Last Event Date": last_event_time,
                     }
                 )
 
