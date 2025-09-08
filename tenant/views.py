@@ -562,8 +562,8 @@ class GetTenantAssetsList(APIView):
         except Exception as e:
             logger.error(f"Error in GetTenantAssetsList: {str(e)}", exc_info=True)
             return Response(
-                {"error": "An unexpected error occurred."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"error": f"An unexpected error occurred. {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
     def _parse_date(self, date_str):
@@ -687,17 +687,9 @@ class DownloadTenantAssetsExcel(APIView):
             start_date = request.query_params.get("start_date")
             end_date = request.query_params.get("end_date")
 
-            # Check if either date parameter is provided - both must be provided together
-            if start_date or end_date:
-                # Validate that both dates are provided
-                if not (start_date and end_date):
-                    return Response(
-                        {
-                            "error": "Both start_date and end_date must be provided together for date filtering."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
+            # Apply date filtering only if both dates are provided
+            # If neither is provided, export all data without date filtering
+            if start_date and end_date:
                 try:
                     # Parse the dates
                     start_date_obj = self._parse_date(start_date)
@@ -729,6 +721,16 @@ class DownloadTenantAssetsExcel(APIView):
                         {"error": str(e)},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
+            elif start_date or end_date:
+                # If only one date is provided, return an error
+                return Response(
+                    {
+                        "error": "Both start_date and end_date must be provided together for date filtering, or omit both to export all data."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # If neither start_date nor end_date is provided, no date filtering is applied
+            # This will export all assets for the tenant
 
             # Average EPS filter
             if average_eps := request.query_params.get("average_eps"):
@@ -869,9 +871,9 @@ class DownloadTenantAssetsExcel(APIView):
                         "Enabled": "Yes" if asset.enabled else "No",
                         "Status": status_value,
                         "Sub Status": asset.status,
-                        # "Average EPS": asset.average_eps,
-                        "Sending IP": asset.sending_ip or "N/A",
-                        "Creation Date": creation_date,
+                        "Average EPS": asset.average_eps,
+                        # "Sending IP": asset.sending_ip or "N/A",
+                        "Onboarding Date": creation_date,
                         "Modified Date": modified_date,
                         "Last Event Date": last_event_date,
                     }
