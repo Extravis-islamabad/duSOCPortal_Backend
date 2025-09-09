@@ -317,7 +317,7 @@ class IBMQradarConstants:
 
     AQL_QUERY_FOR_GEOLOCATION = "SELECT sourceip, GEO::LOOKUP(sourceip, 'geo_json') AS geo FROM events group by sourceip"
     AQL_EPS_UPDATED_QUERY = """SELECT DOMAINNAME(domainid) AS 'client',"Hostname" AS 'Hostname',MAX("Value") AS 'Peak EPS', AVG("Value") AS 'Average EPS',DATEFORMAT(endtime,'YYYY-MM-dd hh:mm:ss') AS 'Time',NOW() AS 'Current Timestamp (ms)' from events where ( "Metric ID"='EventRate' AND "deviceType"='368' ) GROUP BY "Hostname" """
-
+    # AQL_EPS_UPDATED_QUERY = """SELECT DATEFORMAT(starttime,'yyyy-MM-dd hh:mm') AS 'Start Time', DATEFORMAT(endtime, 'yyyy-MM-dd hh:mm') AS Storage_time,DOMAINNAME(domainid) AS 'client',"Hostname" AS 'Hostname',MAX("Value") AS 'Peak EPS', AVG("Value") AS 'Average EPS',DATEFORMAT(endtime,'YYYY-MM-dd hh:mm:ss') AS 'Time',NOW() AS 'Current Timestamp (ms)' from events where ( "Metric ID"='EventRate' AND "deviceType"='368' ) GROUP BY "Hostname" START '2025-09-08 00:00' STOP '2025-09-09 00:00' """
     # adding two more queries given by Mutahir
     AQL_QUERY_FOR_DOMAIN_EVENTS_AEP = """SELECT DATEFORMAT(starttime,'YYYY-MM-dd hh:mm') as 'startTime', DOMAINNAME(domainid) AS 'DOMAIN_NAME', categoryname(category - category % 1000) AS 'High Level Category', categoryname(category) AS 'Event Name', COUNT(*) AS 'Count' from events where (category - category % 1000)='5000' GROUP BY (category - category % 1000), category order by "Count" desc last 1 DAYS"""
 
