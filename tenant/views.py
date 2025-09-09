@@ -222,13 +222,25 @@ class EventCollectorsListAPIView(APIView):
     """
 
     def get(self, request, *args, **kwargs):
+        # Check if integration_id is provided
+        integration_id = request.query_params.get("integration_id", None)
+
+        if not integration_id:
+            return Response(
+                {"error": "Pass a valid integration_id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
-            event_collectors = IBMQradarEventCollector.objects.all()
+            # Filter event collectors by integration_id
+            event_collectors = IBMQradarEventCollector.objects.filter(
+                integration_id=integration_id
+            )
             serializer = IBMQradarEventCollectorSerializer(event_collectors, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response(
-                {"error": f"Failed to retrieve event collectors: {str(e)}"},
+                {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
