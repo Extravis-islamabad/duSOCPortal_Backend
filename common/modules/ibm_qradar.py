@@ -1355,7 +1355,7 @@ class IBMQradar:
             df.groupby("client")
             .agg(
                 {
-                    "Peak EPS": "sum",
+                    "Peak EPS": "max",
                     "Average EPS": "sum",
                     "Time": "min",  # or 'max' depending on desired logic
                     "Current Timestamp (ms)": "max",  # or 'min' as needed
