@@ -265,9 +265,25 @@ class DuCortexSOARTenantsListView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        tenants = DuCortexSOARTenants.objects.all()
-        serializer = DuCortexSOARTenantsSerializer(tenants, many=True)
-        return Response(serializer.data)
+        # Check if integration_id is provided
+        integration_id = request.query_params.get("integration_id", None)
+
+        if not integration_id:
+            return Response(
+                {"error": "Pass a valid integration_id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # Filter tenants by integration_id
+            tenants = DuCortexSOARTenants.objects.filter(integration_id=integration_id)
+            serializer = DuCortexSOARTenantsSerializer(tenants, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class TestView(APIView):
