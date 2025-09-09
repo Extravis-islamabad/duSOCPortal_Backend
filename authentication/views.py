@@ -483,14 +483,15 @@ class AdminLoginAPIView(APIView):
         Authenticates an admin user against ADMIN_AD and creates/updates admin user based on LDAP group membership.
 
         The Admin login will use the ADMIN_AD. Users who can access and login to the portal will come under these groups:
-        - CSOC_SOAR_ADMIN (super_admin)
-        - CSOC_SOAR_SR_SECURITY_ANALYST (admin)
-        - CSOC_SOAR_ANALYST (read_only)
+        - CSOC_SOAR_ADMIN (super_admin) - Highest privilege
+        - CSOC_SOAR_SR_SECURITY_ANALYST (admin) - Medium privilege
+        - CSOC_SOAR_ANALYST (read_only) - Lowest privilege
 
-        If a user exists in more than one mentioned group, they cannot login as admin.
+        If a user exists in more than one mentioned group, they will be assigned the highest privilege level.
+        Group hierarchy: SUPER_ADMIN > ADMIN > READ_ONLY
 
         For first-time admin login, username and password will be taken, checked against LDAP,
-        validated for single group membership, then user will be created.
+        group membership evaluated, and user will be created with highest available privilege.
 
         Authentication is always done against LDAP - no passwords are stored in DB.
 
@@ -559,15 +560,6 @@ class AdminLoginAPIView(APIView):
                     group for group in user_groups if group in valid_groups
                 ]
 
-                # Check if user is in more than one valid group
-                if len(user_valid_groups) > 1:
-                    return Response(
-                        {
-                            "error": "User belongs to multiple admin groups. Access denied."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
                 # Check if user is in at least one valid group
                 if not user_valid_groups:
                     return Response(
@@ -575,18 +567,25 @@ class AdminLoginAPIView(APIView):
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
-                # Determine role based on group membership
-                user_group = user_valid_groups[0]
+                # If user belongs to multiple groups, assign highest privileges
+                # Group hierarchy: SUPER_ADMIN > ADMIN > READ_ONLY
                 is_super_admin = False
                 is_admin = False
                 is_read_only = False
+                assigned_role = None
 
-                if user_group == RBACConstants.SUPER_ADMIN_GROUP:
+                # Check for highest privilege first (Super Admin)
+                if RBACConstants.SUPER_ADMIN_GROUP in user_valid_groups:
                     is_super_admin = True
-                elif user_group == RBACConstants.ADMIN_GROUP:
+                    assigned_role = RBACConstants.SUPER_ADMIN_GROUP
+                # Then check for Admin privilege
+                elif RBACConstants.ADMIN_GROUP in user_valid_groups:
                     is_admin = True
-                elif user_group == RBACConstants.READ_ONLY_USER_GROUP:
+                    assigned_role = RBACConstants.ADMIN_GROUP
+                # Finally assign Read Only if that's the only role
+                elif RBACConstants.READ_ONLY_USER_GROUP in user_valid_groups:
                     is_read_only = True
+                    assigned_role = RBACConstants.READ_ONLY_USER_GROUP
 
                 # Create new admin user without storing password
                 user = User.objects.create(
@@ -601,7 +600,7 @@ class AdminLoginAPIView(APIView):
                 )
 
                 logger.info(
-                    f"Created new admin user: {username} with role: {user_group}"
+                    f"Created new admin user: {username} with role: {assigned_role}"
                 )
 
             else:
