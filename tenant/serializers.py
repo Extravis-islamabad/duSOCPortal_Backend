@@ -71,6 +71,8 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
     access_key = serializers.CharField(required=False, allow_blank=True)
     secret_key = serializers.CharField(required=False, allow_blank=True)
     base_url = serializers.CharField(required=False, allow_blank=True)
+    phone_number = serializers.CharField(required=False, allow_blank=True)
+    country = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, data):
         if "integration_ids" in data:
@@ -162,6 +164,10 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
             )
         if "is_defualt_threat_intel" in validated_data:
             company.is_defualt_threat_intel = validated_data["is_defualt_threat_intel"]
+        if "phone_number" in validated_data:
+            company.phone_number = validated_data["phone_number"]
+        if "country" in validated_data:
+            company.country = validated_data["country"]
 
         company.save()
 
