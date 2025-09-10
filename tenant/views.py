@@ -529,6 +529,22 @@ class GetTenantAssetsList(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
+            # Sub status filter (filters on the actual status field)
+            sub_status_filter = request.query_params.get("sub_status")
+            if sub_status_filter:
+                # Support multiple values separated by commas
+                sub_status_values = [
+                    value.strip()
+                    for value in sub_status_filter.split(",")
+                    if value.strip()
+                ]
+                if sub_status_values:
+                    # Create OR condition for multiple sub_status values
+                    sub_status_q = Q()
+                    for value in sub_status_values:
+                        sub_status_q |= Q(status__icontains=value)
+                    filters &= sub_status_q
+
             # Apply database-level status filtering first if status filter is provided
             status_filter = request.query_params.get("status")
             if status_filter:
@@ -653,6 +669,7 @@ class DownloadTenantAssetsExcel(APIView):
             - start_date & end_date: Filter by creation date range (both required)
             - average_eps: Filter by average EPS
             - status: Filter by status (SUCCESS/ERROR/ALL)
+            - sub_status: Filter by sub status (comma-separated values supported)
             - sort: Sort by creation date (any value to enable reverse sort)
 
         Returns:
@@ -798,6 +815,22 @@ class DownloadTenantAssetsExcel(APIView):
                         {"error": "Invalid average_eps format. Must be a number."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
+
+            # Sub status filter (filters on the actual status field)
+            sub_status_filter = request.query_params.get("sub_status")
+            if sub_status_filter:
+                # Support multiple values separated by commas
+                sub_status_values = [
+                    value.strip()
+                    for value in sub_status_filter.split(",")
+                    if value.strip()
+                ]
+                if sub_status_values:
+                    # Create OR condition for multiple sub_status values
+                    sub_status_q = Q()
+                    for value in sub_status_values:
+                        sub_status_q |= Q(status__icontains=value)
+                    filters &= sub_status_q
 
             # Apply database-level status filtering first if status filter is provided
             status_filter = request.query_params.get("status")
