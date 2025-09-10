@@ -1280,7 +1280,7 @@ class IncidentCompletionStatusAPIView(APIView):
     """
 
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsReadonlyAdminUser]
 
     def get(self, request):
         company_id = request.query_params.get("company_id")
@@ -1297,12 +1297,12 @@ class IncidentCompletionStatusAPIView(APIView):
         )
 
         try:
-            # Get company owned by this admin
+            # Get company
             try:
-                company = Company.objects.get(id=company_id, created_by=request.user)
+                company = Company.objects.get(id=company_id)
             except Company.DoesNotExist:
                 return Response(
-                    {"error": "Company not found or unauthorized."},
+                    {"error": "Company not found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
