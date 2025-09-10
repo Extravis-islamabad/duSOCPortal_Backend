@@ -799,6 +799,32 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     }
                 )
 
+            # New validation: ensure event collectors are not already assigned to any other tenant/company
+            # Gather all requested event collector IDs across provided QRadar tenants
+            requested_event_collector_ids = set()
+            for qt in data["qradar_tenants"]:
+                for ec_id in qt.get("event_collector_ids", []):
+                    requested_event_collector_ids.add(ec_id)
+
+            if requested_event_collector_ids:
+                # Find event collectors already linked in any existing TenantQradarMapping
+                assigned_event_collectors = (
+                    TenantQradarMapping.objects.filter(
+                        event_collectors__id__in=list(requested_event_collector_ids)
+                    )
+                    .values_list("event_collectors__id", flat=True)
+                    .distinct()
+                )
+                if assigned_event_collectors:
+                    raise serializers.ValidationError(
+                        {
+                            "qradar_tenants": (
+                                "Event collectors already assigned to another tenant: "
+                                f"{list(assigned_event_collectors)}"
+                            )
+                        }
+                    )
+
         if "itsm_tenant_ids" in data:
             itsm_ids = data["itsm_tenant_ids"]
             already_assigned = DuITSMTenants.objects.filter(
