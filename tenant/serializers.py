@@ -402,7 +402,15 @@ class TenantDetailSerializer(serializers.ModelSerializer):
         try:
             return DUCortexSOARIncidentFinalModel.objects.filter(
                 cortex_soar_tenant__in=obj.soar_tenants.all(),
+                status__in=["1", "2"],
                 itsm_sync_status__in=["Done", "Ready"],
+                owner__isnull=False,
+                owner__gt="",
+                incident_tta__isnull=False,
+                incident_ttn__isnull=False,
+                incident_ttdn__isnull=False,
+                incident_priority__isnull=False,
+                incident_priority__gt="",
             ).count()
         except Exception:
             return 0
@@ -1338,7 +1346,15 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
     def get_total_incidents(self, obj):
         return DUCortexSOARIncidentFinalModel.objects.filter(
             cortex_soar_tenant__in=obj.soar_tenants.all(),
+            status__in=["1", "2"],
             itsm_sync_status__in=["Done", "Ready"],
+            owner__isnull=False,
+            owner__gt="",
+            incident_tta__isnull=False,
+            incident_ttn__isnull=False,
+            incident_ttdn__isnull=False,
+            incident_priority__isnull=False,
+            incident_priority__gt="",
         ).count()
 
     def get_active_incidents(self, obj):
@@ -1463,7 +1479,15 @@ class NonActiveCompanySerializer(serializers.ModelSerializer):
     def get_total_incidents(self, obj):
         return DUCortexSOARIncidentFinalModel.objects.filter(
             cortex_soar_tenant__in=obj.soar_tenants.all(),
+            status__in=["1", "2"],
             itsm_sync_status__in=["Done", "Ready"],
+            owner__isnull=False,
+            owner__gt="",
+            incident_tta__isnull=False,
+            incident_ttn__isnull=False,
+            incident_ttdn__isnull=False,
+            incident_priority__isnull=False,
+            incident_priority__gt="",
         ).count()
 
     def get_active_incidents(self, obj):
