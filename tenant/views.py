@@ -79,7 +79,6 @@ from tenant.models import (
     ReconEventLog,
     SlaLevelChoices,
     SoarTenantSlaMetric,
-    SourceIPGeoLocation,
     SuspiciousEventLog,
     Tenant,
     TenantPermissionChoices,
@@ -106,7 +105,6 @@ from tenant.serializers import (
     IBMQradarAssestsSerializer,
     IBMQradarEventCollectorSerializer,
     RecentIncidentsSerializer,
-    SourceIPGeoLocationSerializer,
     TenantRoleSerializer,
 )
 
@@ -7416,14 +7414,14 @@ class IncidentReportView(APIView):
             return Response({"error": str(e)}, status=500)
 
 
-class SourceIPGeoLocationListView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsTenant]
+# class SourceIPGeoLocationListView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
 
-    def get(self, request):
-        records = SourceIPGeoLocation.objects.all().order_by("-created_at")[:50]
-        serializer = SourceIPGeoLocationSerializer(records, many=True)
-        return Response(serializer.data)
+#     def get(self, request):
+#         records = SourceIPGeoLocation.objects.all().order_by("-created_at")[:50]
+#         serializer = SourceIPGeoLocationSerializer(records, many=True)
+#         return Response(serializer.data)
 
 
 class FileTypeChoicesView(APIView):

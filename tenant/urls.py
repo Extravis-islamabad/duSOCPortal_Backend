@@ -36,7 +36,6 @@ from tenant.views import (
     SLAOverviewCardsView,
     SLASeverityIncidentsView,
     SLASeverityMetricsView,
-    SourceIPGeoLocationListView,
     TenantAPIView,
     TenantCortexSOARIncidentsAPIView,
     TenantITSMTicketDetailView,
@@ -215,11 +214,11 @@ urlpatterns = [
         name="sla-overview-cards",
     ),
     path("api/incident-report/", IncidentReportView.as_view(), name="incident-report"),
-    path(
-        "source-ip-geolocations/",
-        SourceIPGeoLocationListView.as_view(),
-        name="source-ip-geolocations",
-    ),
+    # path(
+    #     "source-ip-geolocations/",
+    #     SourceIPGeoLocationListView.as_view(),
+    #     name="source-ip-geolocations",
+    # ),
     path("file-type-choices/", FileTypeChoicesView.as_view(), name="file-type-choices"),
     path(
         "incidents/download/",
