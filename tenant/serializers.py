@@ -708,10 +708,10 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 {"ldap_users": "Each user must have a non-empty ldap_group."}
             )
 
-        if not any(user.get("is_admin") for user in ldap_users):
-            raise serializers.ValidationError(
-                {"ldap_users": "At least one user must be marked as is_admin=True"}
-            )
+        # if not any(user.get("is_admin") for user in ldap_users):
+        #     raise serializers.ValidationError(
+        #         {"ldap_users": "At least one user must be marked as is_admin=True"}
+        #     )
 
         integration_ids = data.get("integration_ids", [])
         if integration_ids:
@@ -896,15 +896,21 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     **validated_data,
                 )
 
-                role_type = (
-                    TenantRole.TenantRoleChoices.TENANT_ADMIN
-                    if user_data.get("is_admin")
-                    else TenantRole.TenantRoleChoices.TENANT_USER
-                )
+                # role_type = (
+                #     TenantRole.TenantRoleChoices.TENANT_ADMIN
+                #     if user_data.get("is_admin")
+                #     else TenantRole.TenantRoleChoices.TENANT_USER
+                # )
+                # role = TenantRole.objects.create(
+                #     tenant=tenant,
+                #     name="Tenant Admin" if role_type == 1 else "Tenant User",
+                #     role_type=role_type,
+                # )
+
                 role = TenantRole.objects.create(
                     tenant=tenant,
-                    name="Tenant Admin" if role_type == 1 else "Tenant User",
-                    role_type=role_type,
+                    name=TenantRole.TenantRoleChoices.TENANT_USER.label,
+                    role_type=TenantRole.TenantRoleChoices.TENANT_USER,
                 )
 
                 for permission in role_permissions:
