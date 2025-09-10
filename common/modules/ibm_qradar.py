@@ -39,7 +39,6 @@ from tenant.models import (
     MonthlyAvgEpsLog,
     ReconEventLog,
     RemoteUsersCount,
-    SourceIPGeoLocation,
     SuccessfulLogonEvent,
     SuspiciousEventLog,
     TopAlertEventLog,
@@ -3520,18 +3519,18 @@ class IBMQradar:
 
         return transformed
 
-    def insert_geo_events(self, transformed_data: list):
-        """
-        Inserts cleaned geo event data using dict unpacking (**).
-        """
+    # def insert_geo_events(self, transformed_data: list):
+    #     """
+    #     Inserts cleaned geo event data using dict unpacking (**).
+    #     """
 
-        try:
-            objects = [SourceIPGeoLocation(**item) for item in transformed_data]
-            logger.info(f"Inserting {len(objects)} geo events")
-            SourceIPGeoLocation.objects.bulk_create(objects, ignore_conflicts=True)
-        except Exception as e:
-            logger.error(f"Error inserting geo events: {str(e)}")
-            transaction.rollback()
+    #     try:
+    #         objects = [SourceIPGeoLocation(**item) for item in transformed_data]
+    #         logger.info(f"Inserting {len(objects)} geo events")
+    #         SourceIPGeoLocation.objects.bulk_create(objects, ignore_conflicts=True)
+    #     except Exception as e:
+    #         logger.error(f"Error inserting geo events: {str(e)}")
+    #         transaction.rollback()
 
     def update_asset_active_status(self, integration_id):
         """
