@@ -7735,7 +7735,7 @@ class DownloadIncidentsView(APIView):
             )
 
 
-def get_incidents_trend(filter_type, filters):
+def get_incidents_trend(filter_type, filters, start_date=None, end_date=None):
     if filter_type == FilterType.WEEK:
         time_trunc = TruncDay("occured")
     elif filter_type == FilterType.MONTH:
@@ -7743,8 +7743,15 @@ def get_incidents_trend(filter_type, filters):
     elif filter_type == FilterType.CUSTOM_RANGE:
         time_trunc = TruncDate("occured")
 
+    # Apply additional filtering on occured field to match the grouping logic
+    trend_filters = filters
+    if start_date:
+        trend_filters = trend_filters & Q(occured__date__gte=start_date)
+    if end_date:
+        trend_filters = trend_filters & Q(occured__date__lte=end_date)
+
     incident_trend_qs = (
-        DUCortexSOARIncidentFinalModel.objects.filter(filters)
+        DUCortexSOARIncidentFinalModel.objects.filter(trend_filters)
         .annotate(interval=time_trunc)
         .values("interval")
         .annotate(
@@ -7980,7 +7987,24 @@ class DetailedIncidentReport(APIView):
                 }
             )
 
-        incident_closure_trends = get_incidents_trend(filter_type, filters)
+        # Extract the date parameters for the trend function
+        trend_start_date = None
+        trend_end_date = None
+
+        if filter_type == FilterType.CUSTOM_RANGE and start_date_str and end_date_str:
+            try:
+                trend_start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                trend_end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                pass  # Use None values if parsing fails
+        elif filter_type == FilterType.WEEK:
+            trend_start_date = (now - timedelta(days=7)).date()
+        elif filter_type == FilterType.MONTH:
+            trend_start_date = (now - timedelta(days=30)).date()
+
+        incident_closure_trends = get_incidents_trend(
+            filter_type, filters, trend_start_date, trend_end_date
+        )
 
         data = {
             "severity_of_incidents": severity_of_incidents,
