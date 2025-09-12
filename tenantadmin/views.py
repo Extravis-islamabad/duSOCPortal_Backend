@@ -82,12 +82,42 @@ class CompanyTenantSettingsUpdateAPIView(APIView):
             company, data=request.data, context={"request": request, "company": company}
         )
         if serializer.is_valid():
+            # Count new users before update
+            ldap_users = request.data.get("ldap_users", [])
+            existing_company_users = (
+                set(
+                    company.tenants.filter(
+                        tenant__is_active=True, tenant__is_deleted=False
+                    ).values_list("tenant__username", flat=True)
+                )
+                if ldap_users
+                else set()
+            )
+
+            new_users_count = (
+                len(
+                    [
+                        user_data
+                        for user_data in ldap_users
+                        if user_data.get("username") not in existing_company_users
+                    ]
+                )
+                if ldap_users
+                else 0
+            )
+
             serializer.save()
             logger.success(
                 f"Company settings and tenant sync completed for company_id={company_id}"
             )
+
+            response_message = "Company settings updated successfully."
+            if new_users_count > 0:
+                response_message += f" {new_users_count} new user(s) added."
+
             return Response(
-                {"message": "Company settings updated successfully."}, status=200
+                {"message": response_message, "new_users_added": new_users_count},
+                status=200,
             )
         else:
             logger.warning(

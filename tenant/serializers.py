@@ -73,6 +73,11 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
     base_url = serializers.CharField(required=False, allow_blank=True)
     phone_number = serializers.CharField(required=False, allow_blank=True)
     country = serializers.CharField(required=False, allow_blank=True)
+    ldap_users = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        write_only=True,
+    )
 
     def validate(self, data):
         if "integration_ids" in data:
@@ -142,6 +147,58 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                         }
                     )
 
+        # Validate ldap_users if provided
+        if "ldap_users" in data:
+            ldap_users = data["ldap_users"]
+
+            if ldap_users:  # Only validate if not empty
+                # Check for duplicate usernames in the payload
+                usernames = [u["username"] for u in ldap_users]
+                if len(usernames) != len(set(usernames)):
+                    raise serializers.ValidationError(
+                        {"ldap_users": "Duplicate usernames detected in the payload"}
+                    )
+
+                # Validate each user has required fields
+                for user_data in ldap_users:
+                    if not user_data.get("username"):
+                        raise serializers.ValidationError(
+                            {"ldap_users": "Each user must have a username."}
+                        )
+                    if not user_data.get("ldap_group"):
+                        raise serializers.ValidationError(
+                            {
+                                "ldap_users": "Each user must have a non-empty ldap_group."
+                            }
+                        )
+
+                # Check if users already exist in the system (across all companies)
+                existing_usernames = set(
+                    User.objects.filter(
+                        username__in=usernames, is_active=True, is_deleted=False
+                    ).values_list("username", flat=True)
+                )
+
+                # Get users already in this company
+                company = self.context.get("company")
+                if company:
+                    existing_company_users = set(
+                        company.tenants.filter(
+                            tenant__is_active=True, tenant__is_deleted=False
+                        ).values_list("tenant__username", flat=True)
+                    )
+
+                    # Users that exist in system but NOT in this company should raise error
+                    users_in_other_companies = (
+                        existing_usernames - existing_company_users
+                    )
+                    if users_in_other_companies:
+                        raise serializers.ValidationError(
+                            {
+                                "ldap_users": f"User(s) with username(s) {list(users_in_other_companies)} already exist in another company."
+                            }
+                        )
+
         return data
 
     def update(self, company, validated_data):
@@ -153,6 +210,66 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
         soar_ids = validated_data.get("soar_tenant_ids", None)
         qradar_data = validated_data.get("qradar_tenants", None)
         is_defualt_threat_intel = validated_data.get("is_defualt_threat_intel", None)
+        ldap_users = validated_data.get("ldap_users", [])
+        created_by = self.context["request"].user
+
+        # Handle LDAP user onboarding - only add new users
+        if ldap_users:
+            # Get existing company users to filter out duplicates
+            existing_company_users = set(
+                company.tenants.filter(
+                    tenant__is_active=True, tenant__is_deleted=False
+                ).values_list("tenant__username", flat=True)
+            )
+
+            # Filter out users that already exist in this company
+            new_users_to_add = [
+                user_data
+                for user_data in ldap_users
+                if user_data["username"] not in existing_company_users
+            ]
+
+            with transaction.atomic():
+                for user_data in new_users_to_add:
+                    email = user_data.get("email")
+                    email = None if email == "N/A" else email
+
+                    # Create or get the user
+                    user, created = User.objects.get_or_create(
+                        username=user_data["username"],
+                        defaults={
+                            "email": email,
+                            "name": user_data.get("name"),
+                            "is_tenant": True,
+                            "is_active": True,
+                        },
+                    )
+
+                    # Create tenant for this user under the company
+                    ldap_group = user_data["ldap_group"]
+                    tenant = Tenant.objects.create(
+                        tenant=user,
+                        company=company,
+                        created_by=created_by,
+                        ldap_group=ldap_group,
+                    )
+
+                    # Create default role for the new tenant
+                    role = TenantRole.objects.create(
+                        tenant=tenant,
+                        name=TenantRole.TenantRoleChoices.TENANT_USER.label,
+                        role_type=TenantRole.TenantRoleChoices.TENANT_USER,
+                    )
+
+                    # Add permissions if specified
+                    if permissions is not None:
+                        for perm in permissions:
+                            TenantRolePermissions.objects.create(
+                                role=role, permission=perm
+                            )
+
+                    # Add to tenants list to be processed later
+                    tenants = company.tenants.all()  # Refresh the queryset
 
         if "integration_ids" in validated_data:
             company.integrations.set(Integration.objects.filter(id__in=integration_ids))
