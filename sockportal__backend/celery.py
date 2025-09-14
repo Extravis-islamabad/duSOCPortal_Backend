@@ -36,6 +36,10 @@ app.conf.beat_schedule = {
             minute="*/5"
         ),  # Run at the whenever the minute will 5 of any hour means running it every hour
     },
+    "qradar-daily-sync-tasks": {
+        "task": "tenant.ibm_qradar_tasks.sync_ibm_tenant_daily_eps",
+        "schedule": crontab(minute="30", hour="1"),  # Run at 1:30 AM every day
+    },
     # "qradar-tenant-daily-sync-tasks": {
     #     "task": "tenant.ibm_qradar_tasks.sync_ibm_qradar_daily_sync",
     #     "schedule": crontab(minute="55", hour="23"),  # Run at 11:55 PM every day
