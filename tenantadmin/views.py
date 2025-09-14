@@ -326,6 +326,172 @@ class DistinctCompaniesAPIView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
+class TenantManagementAPIView(APIView):
+    """
+    API endpoint to manage individual tenants within a company.
+    Accepts company_id and tenant_id to delete or deactivate the tenant.
+
+    Query Parameters:
+    - is_deleted: If 'true', permanently deletes the tenant and user
+    - is_active: If 'false', deactivates the tenant's user account
+    """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def delete(self, request, company_id, tenant_id):
+        """
+        Handle DELETE request to delete or deactivate a specific tenant.
+        """
+        # Get query parameters
+        is_deleted = request.query_params.get("is_deleted", "").lower() == "true"
+        is_active_param = request.query_params.get("is_active", "").lower()
+
+        # Validate company exists
+        try:
+            company = Company.objects.get(id=company_id)
+        except Company.DoesNotExist:
+            return Response(
+                {"error": "Company with the given ID does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Validate tenant exists and belongs to the company
+        try:
+            tenant = Tenant.objects.get(id=tenant_id, company=company)
+        except Tenant.DoesNotExist:
+            return Response(
+                {
+                    "error": "Tenant with the given ID does not exist or does not belong to this company."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get the associated user
+        user = tenant.tenant
+        if not user:
+            return Response(
+                {"error": "No user associated with this tenant."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Handle deletion
+        if is_deleted:
+            # Permanently delete the tenant and user
+            username = user.username
+            tenant_id_str = str(tenant.id)
+
+            # Delete the user (this will cascade delete the tenant due to FK constraint)
+            user.delete()
+
+            logger.info(
+                f"Tenant {tenant_id_str} and user '{username}' permanently deleted from company '{company.company_name}' by {request.user.username}"
+            )
+
+            return Response(
+                {
+                    "message": f"Tenant and user '{username}' have been permanently deleted from company '{company.company_name}'.",
+                    "company_id": company_id,
+                    "tenant_id": tenant_id,
+                    "action": "deleted",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # Handle deactivation
+        elif is_active_param == "false":
+            # Deactivate the user
+            user.is_active = False
+            user.save()
+
+            logger.info(
+                f"User '{user.username}' deactivated for tenant {tenant.id} in company '{company.company_name}' by {request.user.username}"
+            )
+
+            return Response(
+                {
+                    "message": f"User '{user.username}' has been deactivated.",
+                    "company_id": company_id,
+                    "tenant_id": tenant_id,
+                    "user_id": user.id,
+                    "action": "deactivated",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # If neither parameter is provided correctly
+        else:
+            return Response(
+                {
+                    "error": "Please provide either 'is_deleted=true' to delete the tenant or 'is_active=false' to deactivate the user."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    def patch(self, request, company_id, tenant_id):
+        """
+        Handle PATCH request to update tenant status (activate/deactivate).
+        """
+        # Validate company exists
+        try:
+            company = Company.objects.get(id=company_id)
+        except Company.DoesNotExist:
+            return Response(
+                {"error": "Company with the given ID does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Validate tenant exists and belongs to the company
+        try:
+            tenant = Tenant.objects.get(id=tenant_id, company=company)
+        except Tenant.DoesNotExist:
+            return Response(
+                {
+                    "error": "Tenant with the given ID does not exist or does not belong to this company."
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get the associated user
+        user = tenant.tenant
+        if not user:
+            return Response(
+                {"error": "No user associated with this tenant."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get the is_active status from request body
+        is_active = request.data.get("is_active")
+
+        if is_active is None:
+            return Response(
+                {"error": "Please provide 'is_active' field in the request body."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Update user's active status
+        user.is_active = bool(is_active)
+        user.save()
+
+        action = "activated" if user.is_active else "deactivated"
+
+        logger.info(
+            f"User '{user.username}' {action} for tenant {tenant.id} in company '{company.company_name}' by {request.user.username}"
+        )
+
+        return Response(
+            {
+                "message": f"User '{user.username}' has been {action}.",
+                "company_id": company_id,
+                "tenant_id": tenant_id,
+                "user_id": user.id,
+                "is_active": user.is_active,
+                "action": action,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class NonActiveTenantsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
