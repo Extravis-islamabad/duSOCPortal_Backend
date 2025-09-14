@@ -389,6 +389,29 @@ class IBMQradarEPS(models.Model):
         db_table = "du_ibm_qradar_eps"
 
 
+class IBMQradarDailyEPS(models.Model):
+    domain = models.ForeignKey(
+        DuIbmQradarTenants,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_daily_eps",
+    )
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_ibm_qradar_daily_eps",
+        null=True,
+        blank=True,
+    )
+    average_eps = models.FloatField(default=0)
+    peak_eps = models.FloatField(default=0)
+    qradar_end_time = models.DateTimeField()
+    created_at = models.DateTimeField(blank=True, null=True, default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "du_ibm_qradar_daily_eps"
+
+
 class CustomerEPS(models.Model):
     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
