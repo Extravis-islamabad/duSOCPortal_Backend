@@ -617,6 +617,50 @@ def sync_eps_for_domain(
             logger.info("Completed QRadarTasks.sync_eps_for_domain() task")
 
 
+@shared_task
+def sync_eps_for_domain_daily(
+    username: str, password: str, ip_address: str, port: int, integration_id: int
+):
+    from datetime import datetime, timedelta
+
+    # End date = today at 00:00
+    end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    start_date = end_date - timedelta(days=1)
+
+    start_date_str = start_date.strftime("%Y-%m-%d %H:%M")
+    end_date_str = end_date.strftime("%Y-%m-%d %H:%M")
+
+    # Move window one day back
+    end_date = start_date
+
+    with IBMQradar(
+        username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_eps_for_domain_daily() task ")
+        logger.info(f"Date range: {start_date_str} to {end_date_str}")
+
+        # Format the query with date parameters
+        formatted_query = IBMQradarConstants.AQL_EPS_DAILY_UPDATED_QUERY.format(
+            start_date=start_date_str, end_date=end_date_str
+        )
+
+        search_id = ibm_qradar._get_do_aql_query(query=formatted_query)
+        flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
+        if not flag:
+            logger.warning(
+                f"IBM QRadar Daily EPS sync failed for integration {integration_id}"
+            )
+            return
+        data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+        transformed_data = ibm_qradar._transform_eps_data_from_named_fields_daily(
+            data_list=data, integration=integration_id, start_date=start_date
+        )
+        if transformed_data:
+            ibm_qradar._insert_daily_eps(transformed_data)
+            logger.info(f"Inserted {len(transformed_data)} daily EPS records")
+            logger.info("Completed QRadarTasks.sync_eps_for_domain_daily() task")
+
+
 # @shared_task
 # def sync_geo_location_child(
 #     username: str, password: str, ip_address: str, port: int, integration_id: int
@@ -655,6 +699,23 @@ def sync_ibm_tenant_eps():
     )
     for result in results:
         sync_eps_for_domain.delay(
+            username=result.username,
+            password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+
+@shared_task
+def sync_ibm_tenant_daily_eps():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.USERNAME_PASSWORD,
+    )
+    for result in results:
+        sync_eps_for_domain_daily(
             username=result.username,
             password=result.password,
             ip_address=result.ip_address,
