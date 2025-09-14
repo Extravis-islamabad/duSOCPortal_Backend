@@ -715,7 +715,7 @@ def sync_ibm_tenant_daily_eps():
         credential_type=CredentialTypes.USERNAME_PASSWORD,
     )
     for result in results:
-        sync_eps_for_domain_daily(
+        sync_eps_for_domain_daily.delay(
             username=result.username,
             password=result.password,
             ip_address=result.ip_address,
