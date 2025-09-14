@@ -24,6 +24,7 @@ from tenant.models import (
     EventCountLog,
     IBMQradarAssests,
     IBMQradarAssetsGroup,
+    IBMQradarDailyEPS,
     IBMQradarEPS,
     IBMQradarEventCollector,
     IBMQradarLogSourceTypes,
@@ -1391,6 +1392,56 @@ class IBMQradar:
 
         return eps_dict
 
+    def _transform_eps_data_from_named_fields_daily(
+        self, data_list, integration, start_date
+    ):
+        """
+        Transforms EPS data for daily records using client name and hostname to model foreign keys.
+        Sets created_at to the provided start_date.
+        """
+        df = pd.DataFrame(data_list)
+        eps_summary = (
+            df.groupby("client")
+            .agg(
+                {
+                    "Peak EPS": "max",
+                    "Average EPS": "sum",
+                    "Time": "min",  # or 'max' depending on desired logic
+                    "Current Timestamp (ms)": "max",  # or 'min' as needed
+                }
+            )
+            .reset_index()
+        )
+
+        domain_map = DBMappings.get_name_to_id_mapping(DuIbmQradarTenants)
+
+        eps_summary["tenant_id"] = eps_summary["client"].map(domain_map)
+        eps_summary.dropna(subset=["tenant_id"], inplace=True)
+        eps_summary.drop(columns=["Current Timestamp (ms)", "client"], inplace=True)
+        eps_summary["integration_id"] = integration
+
+        eps_summary["qradar_end_time"] = eps_summary["Time"].apply(
+            lambda t: datetime.strptime(t, "%Y-%m-%d %H:%M:%S")
+        )
+
+        # Set created_at to the start_date parameter
+        eps_summary["created_at"] = start_date
+
+        eps_summary.rename(
+            columns={
+                "Peak EPS": "peak_eps",
+                "Average EPS": "average_eps",
+                "tenant_id": "domain_id",
+                "Time": "qradar_end_time",
+            },
+            inplace=True,
+        )
+        eps_summary["domain_id"] = eps_summary["domain_id"].astype(int)
+
+        eps_dict = eps_summary.to_dict(orient="records")
+
+        return eps_dict
+
     def _transform_high_level_category_data_from_named_fields(self, data_list):
         """
         Transforms high-level QRadar category count data to model-ready dicts.
@@ -1921,6 +1972,32 @@ class IBMQradar:
             )
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._insert_eps(): {str(e)}")
+            transaction.rollback()
+
+    def _insert_daily_eps(self, data):
+        """
+        Inserts EPS records into the IBMQradarDailyEPS table.
+
+        :param data: A list of IBMQradarDailyEPS objects or dicts.
+        """
+        start = time.time()
+        logger.info(f"IBMQRadar._insert_daily_eps() started at: {start}")
+
+        try:
+            with transaction.atomic():
+                IBMQradarDailyEPS.objects.bulk_create(
+                    [
+                        IBMQradarDailyEPS(**item) for item in data
+                    ],  # make model instances
+                )
+            logger.info(f"Inserted EPS records: {len(data)}")
+            logger.success(
+                f"IBMQRadar._insert_daily_eps() took: {time.time() - start:.2f} seconds"
+            )
+        except Exception as e:
+            logger.error(
+                f"An error occurred in IBMQradar._insert_daily_eps(): {str(e)}"
+            )
             transaction.rollback()
 
     # def _insert_eps(self, data):
