@@ -7496,6 +7496,39 @@ class DownloadIncidentsView(APIView):
     Includes both true positives and false positives, supports date range filtering.
     """
 
+    def _get_date_range_for_filter_type(self, filter_type_value):
+        """
+        Returns start_date and end_date based on FilterType enum value
+        """
+        now = make_aware(datetime.now())
+        today = now.date()
+
+        try:
+            filter_type_int = int(filter_type_value)
+
+            if filter_type_int == FilterType.TODAY.value:  # DAILY
+                return today, today
+
+            elif filter_type_int == FilterType.WEEK.value:  # WEEKLY
+                # Last 7 days
+                start_date = today - timedelta(days=7)
+                return start_date, today
+
+            elif filter_type_int == FilterType.MONTH.value:  # MONTHLY
+                # Last 30 days
+                start_date = today - timedelta(days=30)
+                return start_date, today
+
+            elif filter_type_int == FilterType.CUSTOM_RANGE.value:
+                # Custom range should be handled by start_date/end_date parameters
+                return None, None
+
+            else:
+                return None, None
+
+        except (ValueError, AttributeError):
+            return None, None
+
     def get(self, request):
         try:
             # Step 1: Get current tenant
@@ -7523,9 +7556,35 @@ class DownloadIncidentsView(APIView):
 
         soar_ids = [t.id for t in soar_tenants]
 
-        # Step 4: Parse query parameters
+        # Step 4: Parse all query parameters (like IncidentsView)
+        # All filters from IncidentsView
+        id_filter = request.query_params.get("id")
+        db_id_filter = request.query_params.get("db_id")
+        account_filter = request.query_params.get("account")
+        name_filter = request.query_params.get("name")
+        description_filter = request.query_params.get("description")
+        status_filter = request.query_params.get("status")
+        priority_filter = request.query_params.get("priority")
+        phase_filter = request.query_params.get("phase")
+        assignee_filter = request.query_params.get("assignee")
+        playbook_filter = request.query_params.get("playbook")
+        sla_filter = request.query_params.get("sla")
+        mitre_tactic_filter = request.query_params.get("mitre_tactic")
+        mitre_technique_filter = request.query_params.get("mitre_technique")
+        config_item_filter = request.query_params.get("configuration_item")
+        filter_type = request.query_params.get("filter", "all")
+
+        # Date filter parameters
+        date_filter_type = request.query_params.get("filter_type")  # FilterType enum
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
+        occurred_start_str = request.query_params.get("occurred_start")
+        occurred_end_str = request.query_params.get("occurred_end")
+        false_positives = (
+            request.query_params.get("false_positives", "").lower() == "true"
+        )
+
+        # File type parameter
         file_type = request.query_params.get("file_type")
 
         # Step 5: Validate file_type is required
@@ -7547,38 +7606,10 @@ class DownloadIncidentsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Step 7: Parse and validate dates if provided
-        date_format = "%Y-%m-%d"
-        start_date = None
-        end_date = None
+        # Step 7: Initialize filters (same as IncidentsView)
+        date_format = "%Y-%m-%d"  # Expected format for date inputs
 
-        # Check if both dates are provided together
-        if start_date_str and end_date_str:
-            try:
-                start_date = datetime.strptime(start_date_str, date_format).date()
-                end_date = datetime.strptime(end_date_str, date_format).date()
-            except ValueError:
-                return Response(
-                    {"error": "Invalid date format. Use YYYY-MM-DD."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            # Step 8: Validate date range
-            if end_date < start_date:
-                return Response(
-                    {"error": "end_date cannot be before start_date."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        elif start_date_str or end_date_str:
-            # If only one date is provided, return an error
-            return Response(
-                {
-                    "error": "Both start_date and end_date must be provided together, or omit both to download all data."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Step 9: Build filters (same logic as IncidentsView)
+        # Step 8: Build base filters (same logic as IncidentsView)
         # Base filters for True Positives (Ready incidents with all required fields)
         true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
             ~Q(owner__isnull=True)
@@ -7597,15 +7628,176 @@ class DownloadIncidentsView(APIView):
             itsm_sync_status__iexact="Done"
         )
 
-        # Include both true positives AND false positives (same as IncidentsView)
-        filters = true_positive_filters | false_positive_filters
+        # Handle false positives parameter
+        if false_positives:
+            # For false positives only, use false_positive_filters
+            filters = false_positive_filters
+        else:
+            # Include both true positives AND false positives (same as IncidentsView)
+            filters = true_positive_filters | false_positive_filters
 
-        # Step 10: Apply date filters if provided
-        if start_date and end_date:
-            filters &= Q(created__date__gte=start_date)
-            filters &= Q(created__date__lte=end_date)
+        # Step 9: Apply non-date filters (same as IncidentsView)
+        if id_filter:
+            filters &= Q(id=id_filter)
 
-        # Step 11: Query incidents
+        if db_id_filter:
+            try:
+                db_id_value = int(db_id_filter)
+                filters &= Q(db_id=db_id_value)
+            except ValueError:
+                return Response(
+                    {"error": "Invalid db_id format. Must be an integer."}, status=400
+                )
+
+        if account_filter:
+            filters &= Q(account__icontains=account_filter)
+
+        if name_filter:
+            filters &= Q(name__icontains=name_filter)
+
+        if description_filter:
+            filters &= Q(name__icontains=description_filter)
+
+        if status_filter:
+            filters &= Q(status__iexact=status_filter)
+
+        if priority_filter:
+            filters &= Q(incident_priority__iexact=priority_filter)
+
+        if phase_filter:
+            filters &= Q(incident_phase__iexact=phase_filter)
+
+        if assignee_filter:
+            filters &= Q(owner__iexact=assignee_filter)
+
+        if playbook_filter:
+            filters &= Q(playbook_id=playbook_filter)
+
+        if sla_filter:
+            try:
+                sla_value = int(sla_filter)
+                filters &= Q(sla=sla_value)
+            except ValueError:
+                return Response(
+                    {"error": "Invalid sla format. Must be an integer."}, status=400
+                )
+
+        # Add MITRE and configuration item filters
+        if mitre_tactic_filter:
+            filters &= Q(mitre_tactic__icontains=mitre_tactic_filter)
+
+        if mitre_technique_filter:
+            filters &= Q(mitre_technique__icontains=mitre_technique_filter)
+
+        if config_item_filter:
+            filters &= Q(configuration_item__icontains=config_item_filter)
+
+        # Apply filter_type only if status_filter and assignee_filter are not provided
+        if filter_type != "all" and not (status_filter or assignee_filter):
+            if filter_type == "unassigned":
+                filters &= Q(owner__isnull=True)
+            elif filter_type == "pending":
+                filters &= Q(status="Pending")
+            elif filter_type == "false-positive":
+                filters &= Q(status="False Positive")
+            elif filter_type == "closed":
+                filters &= Q(status="Closed")
+            elif filter_type == "error":
+                filters &= Q(status="Error")
+
+        # Step 10: Apply date filters with validation (same as IncidentsView)
+        start_date = None
+        end_date = None
+        occurred_start = None
+        occurred_end = None
+
+        # Handle date_filter_type (FilterType enum)
+        if date_filter_type:
+            (
+                filter_start_date,
+                filter_end_date,
+            ) = self._get_date_range_for_filter_type(date_filter_type)
+
+            if filter_start_date is not None and filter_end_date is not None:
+                # Apply the filter type date range to created field
+                filters &= Q(created__date__gte=filter_start_date)
+                filters &= Q(created__date__lte=filter_end_date)
+                start_date = filter_start_date
+                end_date = filter_end_date
+            elif date_filter_type != str(FilterType.CUSTOM_RANGE.value):
+                return Response(
+                    {
+                        "error": f"Invalid date_filter_type: {date_filter_type}. Must be 1-9."
+                    },
+                    status=400,
+                )
+
+        # Handle custom date ranges (only if not using predefined filter type or if using CUSTOM_RANGE)
+        if not date_filter_type or date_filter_type == str(
+            FilterType.CUSTOM_RANGE.value
+        ):
+            if start_date_str:
+                try:
+                    start_date = make_aware(
+                        datetime.strptime(start_date_str, date_format)
+                    ).date()
+                    filters &= Q(created__date__gte=start_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid start_date format. Use YYYY-MM-DD."},
+                        status=400,
+                    )
+
+            if end_date_str:
+                try:
+                    end_date = make_aware(
+                        datetime.strptime(end_date_str, date_format)
+                    ).date()
+                    filters &= Q(created__date__lte=end_date)
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid end_date format. Use YYYY-MM-DD."},
+                        status=400,
+                    )
+
+        # Handle occurred date filters (these work independently of date_filter_type)
+        if occurred_start_str:
+            try:
+                occurred_start = make_aware(
+                    datetime.strptime(occurred_start_str, date_format)
+                ).date()
+                filters &= Q(occured__date__gte=occurred_start)
+            except ValueError:
+                return Response(
+                    {"error": "Invalid occurred_start format. Use YYYY-MM-DD."},
+                    status=400,
+                )
+
+        if occurred_end_str:
+            try:
+                occurred_end = make_aware(
+                    datetime.strptime(occurred_end_str, date_format)
+                ).date()
+                filters &= Q(occured__date__lte=occurred_end)
+            except ValueError:
+                return Response(
+                    {"error": "Invalid occurred_end format. Use YYYY-MM-DD."},
+                    status=400,
+                )
+
+        # Validate date ranges
+        if start_date and end_date and start_date > end_date:
+            return Response(
+                {"error": "start_date cannot be greater than end_date."}, status=400
+            )
+
+        if occurred_start and occurred_end and occurred_start > occurred_end:
+            return Response(
+                {"error": "occurred_start cannot be greater than occurred_end."},
+                status=400,
+            )
+
+        # Step 11: Query incidents with all fields (same as IncidentsView)
         try:
             queryset = (
                 DUCortexSOARIncidentFinalModel.objects.filter(filters)
@@ -7616,16 +7808,36 @@ class DownloadIncidentsView(APIView):
                     "name",
                     "status",
                     "incident_priority",
+                    "incident_phase",
+                    "created",
+                    "created_at",
+                    "owner",
+                    "playbook_id",
                     "occured",
+                    "sla",
                     "mitre_tactic",
                     "mitre_technique",
+                    "configuration_item",
                 )
                 .order_by("-created")
             )
 
-            # Step 12: Process incidents for offense data
+            # Step 12: Process incidents for offense data (enhanced to match IncidentsView)
             incidents = []
+            offense_db_ids = {
+                int(part)
+                for row in queryset
+                if row["name"]
+                for part in [row["name"].split()[0]]
+                if part.isdigit()
+            }
+
+            # Bulk fetch related offenses
+            offenses = IBMQradarOffense.objects.filter(db_id__in=offense_db_ids)
+            offense_map = {str(o.db_id): o.id for o in offenses}
+
             for row in queryset:
+                # Format dates
                 if row["occured"]:
                     try:
                         dt_utc = row["occured"]
@@ -7637,18 +7849,65 @@ class DownloadIncidentsView(APIView):
                         occured_at_str = "N/A"
                 else:
                     occured_at_str = "N/A"
-                status_label = "OPEN" if int(row["status"]) == 1 else "CLOSED"
+
+                if row["created"]:
+                    try:
+                        created_date = (
+                            row["created"].isoformat() if row["created"] else "N/A"
+                        )
+                    except Exception:
+                        created_date = "N/A"
+                else:
+                    created_date = "N/A"
+
+                # Extract offense ID from name
+                name = row.get("name") or ""
+                parts = name.split()
+                offense_db_id = None
+                offense_id = None
+
+                if name and parts and parts[0].isdigit():
+                    offense_db_id = parts[0]
+                    offense_id = (
+                        offense_map.get(offense_db_id) if offense_db_id else None
+                    )
+
+                # Extract description from name
+                description = (
+                    (
+                        row["name"].strip().split(" ", 1)[1]
+                        if len(row["name"].strip().split(" ", 1)) > 1
+                        else row["name"]
+                    )
+                    if row.get("name")
+                    else ""
+                )
+
+                # Format status
+                try:
+                    status_label = "OPEN" if int(row["status"]) == 1 else "CLOSED"
+                except (ValueError, TypeError):
+                    status_label = row["status"] if row.get("status") else "N/A"
 
                 incidents.append(
                     {
                         "ID": str(row["db_id"]),
-                        "ACCOUNT": row["account"],
-                        "NAME": row["name"],
+                        "ACCOUNT": row["account"] or "N/A",
+                        "NAME": row["name"] or "N/A",
+                        "DESCRIPTION": description,
                         "STATUS": status_label,
-                        "INCIDENT_PRIORITY": row["incident_priority"],
-                        "OCCURED_AT": occured_at_str,
-                        "MITRE_TACTIC": row["mitre_tactic"],
-                        "MITRE_TECHNIQUE": row["mitre_technique"],
+                        "PRIORITY": row["incident_priority"] or "N/A",
+                        "PHASE": row["incident_phase"] or "N/A",
+                        "ASSIGNEE": row["owner"] or "Unassigned",
+                        "PLAYBOOK": row["playbook_id"] or "N/A",
+                        "SLA": row["sla"] or "N/A",
+                        "CREATED": created_date,
+                        "OCCURRED": occured_at_str,
+                        "MITRE_TACTIC": row["mitre_tactic"] or "N/A",
+                        "MITRE_TECHNIQUE": row["mitre_technique"] or "N/A",
+                        "CONFIG_ITEM": row["configuration_item"] or "N/A",
+                        "OFFENSE_ID": offense_id or "N/A",
+                        "OFFENSE_DB_ID": offense_db_id or "N/A",
                     }
                 )
 
