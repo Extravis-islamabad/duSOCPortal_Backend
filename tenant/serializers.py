@@ -361,6 +361,9 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="tenant.username", read_only=True)
     email = serializers.EmailField(source="tenant.email", read_only=True)
     user_id = serializers.IntegerField(source="tenant.id", read_only=True)  # ✅ Add this
+    is_active = serializers.BooleanField(
+        source="tenant.is_active", read_only=True
+    )  # Add is_active status
     permissions = serializers.SerializerMethodField()
     tenant_admin = serializers.SerializerMethodField()
     created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
@@ -380,6 +383,7 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
             "user_id",
             "username",
             "email",
+            "is_active",  # Add to fields list
             "company_name",
             "phone_number",
             "industry",

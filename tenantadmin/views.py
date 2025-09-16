@@ -271,15 +271,38 @@ class TenantsByCompanyAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # Get filter parameter for active/inactive users
+        is_active_filter = request.query_params.get("is_active")
+
         logger.info(
-            f"Tenants by company ID '{company_id}' requested by user: {request.user.username}"
+            f"Tenants by company ID '{company_id}' requested by user: {request.user.username}, "
+            f"is_active filter: {is_active_filter}"
         )
 
+        # Base query - don't filter by is_active initially
         tenants = Tenant.objects.filter(
             company=company,
-            tenant__is_active=True,
             tenant__is_deleted=False,
-        ).order_by("-created_at")
+        )
+
+        # Apply active/inactive filter based on query parameter
+        if is_active_filter is not None:
+            if is_active_filter.lower() == "true":
+                tenants = tenants.filter(tenant__is_active=True)
+                logger.info("Filtering for active tenants only")
+            elif is_active_filter.lower() == "false":
+                tenants = tenants.filter(tenant__is_active=False)
+                logger.info("Filtering for inactive tenants only")
+            else:
+                return Response(
+                    {
+                        "error": "Invalid value for is_active parameter. Use 'true' or 'false'."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        # If no filter provided, return all non-deleted tenants (both active and inactive)
+
+        tenants = tenants.order_by("-created_at")
 
         paginator = PageNumberPagination()
         paginator.page_size = PaginationConstants.PAGE_SIZE
@@ -289,8 +312,13 @@ class TenantsByCompanyAPIView(APIView):
             paginated_tenants, many=True, context={"request": request}
         )
 
+        # Get counts for logging
+        active_count = tenants.filter(tenant__is_active=True).count()
+        inactive_count = tenants.filter(tenant__is_active=False).count()
+
         logger.success(
-            f"Retrieved {tenants.count()} tenants for company: {company.company_name}"
+            f"Retrieved {tenants.count()} tenants for company: {company.company_name} "
+            f"(Active: {active_count}, Inactive: {inactive_count})"
         )
 
         return paginator.get_paginated_response(serializer.data)
