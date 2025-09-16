@@ -933,11 +933,6 @@ class DownloadTenantAssetsExcel(APIView):
                     if asset.creation_date_converted
                     else "N/A"
                 )
-                modified_date = (
-                    asset.modified_date_converted.strftime("%Y-%m-%d")
-                    if asset.modified_date_converted
-                    else "N/A"
-                )
                 last_event_date = (
                     asset.last_event_date_converted.strftime("%Y-%m-%d")
                     if asset.last_event_date_converted
@@ -952,20 +947,14 @@ class DownloadTenantAssetsExcel(APIView):
                         # "ID": asset.id,
                         "ID": asset.db_id,
                         "Name": asset.name or "N/A",
-                        "Description": asset.description or "N/A",
-                        "Event Collector": asset.event_collector.name
-                        if asset.event_collector
-                        else "N/A",
                         "Log Source Type": asset.log_source_type.name
                         if asset.log_source_type
                         else "N/A",
-                        "Enabled": "Yes" if asset.enabled else "No",
                         "Status": status_value,
                         "Sub Status": asset.status,
                         "Average EPS": asset.average_eps,
                         # "Sending IP": asset.sending_ip or "N/A",
                         "Onboarding Date": creation_date,
-                        "Modified Date": modified_date,
                         "Last Event Date": last_event_date,
                     }
                 )
