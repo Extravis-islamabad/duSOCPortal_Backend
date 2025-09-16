@@ -7493,7 +7493,7 @@ class DownloadIncidentsView(APIView):
     permission_classes = [IsTenant]
     """
     Download incidents data in PDF or Excel format based on IncidentsView logic.
-    Filters out false positives and supports date range filtering.
+    Includes both true positives and false positives, supports date range filtering.
     """
 
     def get(self, request):
@@ -7578,9 +7578,9 @@ class DownloadIncidentsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Step 9: Build filters (exclude false positives, include only true positives)
-        filters = Q(cortex_soar_tenant__in=soar_ids)
-        filters &= (
+        # Step 9: Build filters (same logic as IncidentsView)
+        # Base filters for True Positives (Ready incidents with all required fields)
+        true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
             ~Q(owner__isnull=True)
             & ~Q(owner__exact="")
             & Q(incident_tta__isnull=False)
@@ -7591,6 +7591,14 @@ class DownloadIncidentsView(APIView):
             & Q(incident_priority__isnull=False)
             & ~Q(incident_priority__exact="")
         )
+
+        # Base filters for False Positives (Done incidents)
+        false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+            itsm_sync_status__iexact="Done"
+        )
+
+        # Include both true positives AND false positives (same as IncidentsView)
+        filters = true_positive_filters | false_positive_filters
 
         # Step 10: Apply date filters if provided
         if start_date and end_date:
