@@ -7539,13 +7539,7 @@ class DownloadIncidentsView(APIView):
         end_date_str = request.query_params.get("end_date")
         file_type = request.query_params.get("file_type")
 
-        # Step 5: Validate required parameters
-        if not start_date_str or not end_date_str:
-            return Response(
-                {"error": "Both start_date and end_date are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        # Step 5: Validate file_type is required
         if not file_type:
             return Response(
                 {"error": "file_type parameter is required."},
@@ -7564,21 +7558,34 @@ class DownloadIncidentsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Step 7: Parse and validate dates
+        # Step 7: Parse and validate dates if provided
         date_format = "%Y-%m-%d"
-        try:
-            start_date = datetime.strptime(start_date_str, date_format).date()
-            end_date = datetime.strptime(end_date_str, date_format).date()
-        except ValueError:
-            return Response(
-                {"error": "Invalid date format. Use YYYY-MM-DD."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        start_date = None
+        end_date = None
 
-        # Step 8: Validate date range
-        if end_date < start_date:
+        # Check if both dates are provided together
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, date_format).date()
+                end_date = datetime.strptime(end_date_str, date_format).date()
+            except ValueError:
+                return Response(
+                    {"error": "Invalid date format. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Step 8: Validate date range
+            if end_date < start_date:
+                return Response(
+                    {"error": "end_date cannot be before start_date."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif start_date_str or end_date_str:
+            # If only one date is provided, return an error
             return Response(
-                {"error": "end_date cannot be before start_date."},
+                {
+                    "error": "Both start_date and end_date must be provided together, or omit both to download all data."
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -7596,9 +7603,10 @@ class DownloadIncidentsView(APIView):
             & ~Q(incident_priority__exact="")
         )
 
-        # Step 10: Apply date filters
-        filters &= Q(created__date__gte=start_date)
-        filters &= Q(created__date__lte=end_date)
+        # Step 10: Apply date filters if provided
+        if start_date and end_date:
+            filters &= Q(created__date__gte=start_date)
+            filters &= Q(created__date__lte=end_date)
 
         # Step 11: Query incidents
         try:
@@ -7648,8 +7656,13 @@ class DownloadIncidentsView(APIView):
                 )
 
             if not incidents:
+                error_msg = "No incidents found"
+                if start_date and end_date:
+                    error_msg += f" for the date range {start_date} to {end_date}."
+                else:
+                    error_msg += "."
                 return Response(
-                    {"error": "No incidents found for the specified date range."},
+                    {"error": error_msg},
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
@@ -7707,7 +7720,12 @@ class DownloadIncidentsView(APIView):
             ).write_pdf()
 
             response = HttpResponse(pdf_file, content_type="application/pdf")
-            filename = f"incidents_report_{start_date}_to_{end_date}.pdf"
+            if start_date and end_date:
+                filename = f"incidents_report_{start_date}_to_{end_date}.pdf"
+            else:
+                filename = (
+                    f"incidents_report_all_{datetime.now().strftime('%Y%m%d')}.pdf"
+                )
             response["Content-Disposition"] = f'attachment; filename="{filename}"'
             return response
 
@@ -7751,7 +7769,12 @@ class DownloadIncidentsView(APIView):
                 buffer.getvalue(),
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
-            filename = f"incidents_report_{start_date}_to_{end_date}.xlsx"
+            if start_date and end_date:
+                filename = f"incidents_report_{start_date}_to_{end_date}.xlsx"
+            else:
+                filename = (
+                    f"incidents_report_all_{datetime.now().strftime('%Y%m%d')}.xlsx"
+                )
             response["Content-Disposition"] = f'attachment; filename="{filename}"'
             return response
 
