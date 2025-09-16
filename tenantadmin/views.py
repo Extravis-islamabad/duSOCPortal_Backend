@@ -501,23 +501,40 @@ class NonActiveTenantsAPIView(APIView):
             f"Non-active tenant companies requested by: {request.user.username}"
         )
 
-        # Step 1: Annotate companies with count of inactive tenants
+        # Step 1: Annotate companies with counts of total, inactive, and active tenants
         companies = (
             Company.objects.all()
             .annotate(
+                total_tenant_count=Count(
+                    "tenants",
+                    filter=Q(tenants__tenant__isnull=False),
+                    distinct=True,
+                ),
                 inactive_tenant_count=Count(
                     "tenants",
                     filter=Q(tenants__tenant__is_active=False),
                     distinct=True,
-                )
+                ),
+                active_tenant_count=Count(
+                    "tenants",
+                    filter=Q(tenants__tenant__is_active=True),
+                    distinct=True,
+                ),
             )
-            .filter(inactive_tenant_count__gt=0)
+            # Only include companies where:
+            # 1. They have at least one tenant (total_tenant_count > 0)
+            # 2. ALL tenants are inactive (active_tenant_count = 0 and inactive_tenant_count > 0)
+            .filter(
+                total_tenant_count__gt=0,
+                active_tenant_count=0,
+                inactive_tenant_count__gt=0,
+            )
             .order_by("id")
         )
 
         if not companies.exists():
             return Response(
-                {"message": "No companies found with inactive tenants."},
+                {"message": "No companies found where all users are inactive."},
                 status=200,
             )
 
@@ -531,7 +548,9 @@ class NonActiveTenantsAPIView(APIView):
             paginated_companies, many=True, context={"request": request}
         )
 
-        logger.success(f"Found {companies.count()} companies with inactive tenants.")
+        logger.success(
+            f"Found {companies.count()} companies where all users are inactive."
+        )
 
         return paginator.get_paginated_response(serializer.data)
 
