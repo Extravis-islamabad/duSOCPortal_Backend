@@ -49,7 +49,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
+from tenant.ibm_qradar_tasks import sync_ibm_tenant_daily_eps
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -71,6 +71,7 @@ from tenant.models import (
     EventCountLog,
     FileTypeChoices,
     IBMQradarAssests,
+    IBMQradarDailyEPS,
     IBMQradarEPS,
     IBMQradarEventCollector,
     IBMQradarOffense,
@@ -301,7 +302,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_ibm_qradar_data()
+        sync_ibm_tenant_daily_eps()
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
@@ -3733,7 +3734,7 @@ class EPSGraphAPIView(APIView):
             start_time = dubai_midnight.astimezone(pytz_timezone("UTC"))
             time_trunc = TruncHour("created_at")
         elif filter_enum == FilterType.WEEK:
-            start_time = now - timedelta(days=6)
+            start_time = now - timedelta(days=7)
             time_trunc = TruncDay("created_at")
         elif filter_enum == FilterType.MONTH:
             # Get start of current month and show 4 weeks (28 days back from now)
@@ -3743,9 +3744,9 @@ class EPSGraphAPIView(APIView):
             start_str = request.query_params.get("start_date")
             end_str = request.query_params.get("end_date")
             try:
-                start_time = datetime.strptime(start_str, "%Y-%m-%d")
-                end_time = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
-                if start_time > end_time:
+                start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
+                if start_date > end_date:
                     return Response(
                         {"error": "Start date must be before end date."},
                         status=status.HTTP_400_BAD_REQUEST,
@@ -3772,13 +3773,35 @@ class EPSGraphAPIView(APIView):
         # Filtering logic
         filter_kwargs = {"domain_id__in": qradar_tenant_ids}
         if filter_enum == FilterType.CUSTOM_RANGE:
-            filter_kwargs["created_at__range"] = (start_time, end_time)
-        else:
+            # Use date filtering on qradar_end_time for custom range
+            filter_kwargs["qradar_end_time__date__gte"] = start_date
+            filter_kwargs["qradar_end_time__date__lte"] = end_date
+        elif filter_enum == FilterType.TODAY:
+            # Use created_at for TODAY filter (hourly data)
             filter_kwargs["created_at__gte"] = start_time
+        else:
+            # Use qradar_end_time date filtering for WEEK and MONTH
+            if filter_enum == FilterType.WEEK:
+                # Last 7 days based on qradar_end_time
+                filter_kwargs["qradar_end_time__date__gte"] = (
+                    now - timedelta(days=7)
+                ).date()
+                filter_kwargs["qradar_end_time__date__lte"] = now.date()
+            elif filter_enum == FilterType.MONTH:
+                # Last 28 days based on qradar_end_time
+                filter_kwargs["qradar_end_time__date__gte"] = (
+                    now - timedelta(days=28)
+                ).date()
+                filter_kwargs["qradar_end_time__date__lte"] = now.date()
 
-        # Query EPS data
+        # Query EPS data - Use IBMQradarEPS for TODAY filter, IBMQradarDailyEPS for others
+        if filter_enum == FilterType.TODAY:
+            eps_model = IBMQradarEPS
+        else:
+            eps_model = IBMQradarDailyEPS
+
         eps_data_raw = (
-            IBMQradarEPS.objects.filter(**filter_kwargs)
+            eps_model.objects.filter(**filter_kwargs)
             .annotate(interval=time_trunc)
             .values("interval")
             .annotate(average_eps=Avg("average_eps"), peak_eps=Max("peak_eps"))
@@ -3801,23 +3824,28 @@ class EPSGraphAPIView(APIView):
 
         for entry in eps_data_raw:
             interval_value = entry["interval"]
+            # Get the peak row for this interval to get the appropriate timestamp
             peak_row = (
-                IBMQradarEPS.objects.filter(**filter_kwargs)
+                eps_model.objects.filter(**filter_kwargs)
                 .annotate(interval=time_trunc)
                 .filter(interval=interval_value, peak_eps=entry["peak_eps"])
-                .order_by("created_at")  # get earliest if multiple match
+                .order_by("qradar_end_time")  # get earliest if multiple match
                 .first()
             )
 
-            # Format peak_eps_time with timezone adjustment for TODAY filter
+            # Use created_at for TODAY filter, qradar_end_time for others
             peak_eps_time = None
-            if peak_row and peak_row.created_at:
+            if peak_row:
                 if filter_enum == FilterType.TODAY:
-                    # Add 4 hours for TODAY filter
-                    adjusted_time = peak_row.created_at + timedelta(hours=4)
-                    peak_eps_time = adjusted_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    # Use created_at for TODAY filter and add 4 hours for display
+                    if peak_row.created_at:
+                        adjusted_time = peak_row.created_at + timedelta(hours=4)
+                        peak_eps_time = adjusted_time.strftime("%Y-%m-%dT%H:%M:%SZ")
                 else:
-                    peak_eps_time = peak_row.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    # Use qradar_end_time for other filters and add 4 hours for display
+                    if peak_row.qradar_end_time:
+                        adjusted_time = peak_row.qradar_end_time + timedelta(hours=4)
+                        peak_eps_time = adjusted_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
             if filter_enum == FilterType.TODAY:
                 interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -3844,7 +3872,7 @@ class EPSGraphAPIView(APIView):
             if contracted_volume:
                 # Query to count all records in this interval where peak_eps > contracted_volume
                 interval_peak_count = (
-                    IBMQradarEPS.objects.filter(**filter_kwargs)
+                    eps_model.objects.filter(**filter_kwargs)
                     .annotate(interval=time_trunc)
                     .filter(
                         interval=interval_value,
