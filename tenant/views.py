@@ -7764,12 +7764,17 @@ class DownloadIncidentsView(APIView):
 
 
 def get_incidents_trend(filter_type, filters, start_date=None, end_date=None):
-    if filter_type == FilterType.WEEK:
+    if filter_type == FilterType.TODAY:
+        time_trunc = TruncHour("occured")
+    elif filter_type == FilterType.WEEK:
         time_trunc = TruncDay("occured")
     elif filter_type == FilterType.MONTH:
         time_trunc = TruncWeek("occured")
     elif filter_type == FilterType.CUSTOM_RANGE:
         time_trunc = TruncDate("occured")
+    else:
+        # Default to day truncation if filter type is not recognized
+        time_trunc = TruncDay("occured")
 
     # Apply additional filtering on occured field to match the grouping logic
     trend_filters = filters
@@ -7792,7 +7797,10 @@ def get_incidents_trend(filter_type, filters, start_date=None, end_date=None):
     incident_closure_trends = []
     skip_once_done = False
     for entry in incident_trend_qs:
-        if filter_type == FilterType.MONTH:
+        if filter_type == FilterType.TODAY:
+            # Hour format for TODAY filter
+            interval_str = entry["interval"].strftime("%Y-%m-%d %H:00")
+        elif filter_type == FilterType.MONTH:
             # Week format
             if len(incident_trend_qs) > 5 and not skip_once_done:
                 skip_once_done = True
@@ -8052,6 +8060,7 @@ class ConsolidatedReport(APIView):
 
     def get(self, request):
         from django.db.models.functions import TruncWeek
+        from pytz import timezone as pytz_timezone
 
         try:
             # Step 1: Get current tenant
@@ -8139,12 +8148,19 @@ class ConsolidatedReport(APIView):
             if filter_type == FilterType.TODAY:
                 start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
                 filters &= Q(created__date=start_date.date())
-                start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                # Use Dubai timezone for TODAY filter
+                dubai_tz = pytz_timezone("Asia/Dubai")
+                dubai_now = now.astimezone(dubai_tz)
+                dubai_midnight = dubai_now.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                # Convert back to UTC for filtering the UTC-based DB
+                start_time = dubai_midnight.astimezone(pytz_timezone("UTC"))
                 time_trunc = TruncHour("created_at")
             elif filter_type == FilterType.WEEK:
                 start_date = now - timedelta(days=7)
                 filters &= Q(created__date__gte=start_date.date())
-                start_time = now - timedelta(days=6)
+                start_time = now - timedelta(days=7)
                 time_trunc = TruncDay("created_at")
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
@@ -8170,10 +8186,6 @@ class ConsolidatedReport(APIView):
                                 },
                                 status=400,
                             )
-                        start_time = datetime.strptime(start_date_str, "%Y-%m-%d")
-                        end_time = datetime.strptime(
-                            end_date_str, "%Y-%m-%d"
-                        ) + timedelta(days=1)
                     except ValueError:
                         return Response(
                             {"error": "Invalid date format. Use YYYY-MM-DD."},
@@ -8333,15 +8345,46 @@ class ConsolidatedReport(APIView):
             "qradar_tenant__id", flat=True
         )
 
+        # Get contracted volume for comparison
+        mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
+        contracted_volume = mapping.contracted_volume if mapping else None
+        contracted_volume_type = mapping.contracted_volume_type if mapping else None
+        contracted_volume_type_display = (
+            mapping.get_contracted_volume_type_display() if mapping else None
+        )
+
+        # Filtering logic
         filter_kwargs = {"domain_id__in": qradar_tenant_ids}
         if filter_type == FilterType.CUSTOM_RANGE:
-            filter_kwargs["created_at__range"] = (start_time, end_time)
-        else:
+            # Use date filtering on qradar_end_time for custom range
+            filter_kwargs["qradar_end_time__date__gte"] = start_date
+            filter_kwargs["qradar_end_time__date__lte"] = end_date
+        elif filter_type == FilterType.TODAY:
+            # Use created_at for TODAY filter (hourly data)
             filter_kwargs["created_at__gte"] = start_time
+        else:
+            # Use qradar_end_time date filtering for WEEK and MONTH
+            if filter_type == FilterType.WEEK:
+                # Last 7 days based on qradar_end_time
+                filter_kwargs["qradar_end_time__date__gte"] = (
+                    now - timedelta(days=7)
+                ).date()
+                filter_kwargs["qradar_end_time__date__lte"] = now.date()
+            elif filter_type == FilterType.MONTH:
+                # Last 28 days based on qradar_end_time
+                filter_kwargs["qradar_end_time__date__gte"] = (
+                    now - timedelta(days=28)
+                ).date()
+                filter_kwargs["qradar_end_time__date__lte"] = now.date()
 
-        # Query EPS data
+        # Query EPS data - Use IBMQradarEPS for TODAY filter, IBMQradarDailyEPS for others
+        if filter_type == FilterType.TODAY:
+            eps_model = IBMQradarEPS
+        else:
+            eps_model = IBMQradarDailyEPS
+
         eps_data_raw = (
-            IBMQradarEPS.objects.filter(**filter_kwargs)
+            eps_model.objects.filter(**filter_kwargs)
             .annotate(interval=time_trunc)
             .values("interval", "domain__name")
             .annotate(average_eps=Avg("average_eps"), peak_eps=Max("peak_eps"))
@@ -8350,18 +8393,28 @@ class ConsolidatedReport(APIView):
         eps_data = []
         for entry in eps_data_raw:
             interval_value = entry["interval"]
+            # Use the appropriate model (eps_model) based on filter type
             peak_row = (
-                IBMQradarEPS.objects.filter(**filter_kwargs)
+                eps_model.objects.filter(**filter_kwargs)
                 .annotate(interval=time_trunc)
                 .filter(interval=interval_value, peak_eps=entry["peak_eps"])
-                .order_by("created_at")  # get earliest if multiple match
+                .order_by("qradar_end_time")  # get earliest if multiple match
                 .first()
             )
-            peak_eps_time = (
-                peak_row.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
-                if peak_row and peak_row.created_at
-                else None
-            )
+
+            # Use created_at for TODAY filter, qradar_end_time for others
+            peak_eps_time = None
+            if peak_row:
+                if filter_type == FilterType.TODAY:
+                    # Use created_at for TODAY filter and add 4 hours for display
+                    if peak_row.created_at:
+                        adjusted_time = peak_row.created_at + timedelta(hours=4)
+                        peak_eps_time = adjusted_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+                else:
+                    # Use qradar_end_time for other filters and add 4 hours for display
+                    if peak_row.qradar_end_time:
+                        adjusted_time = peak_row.qradar_end_time + timedelta(hours=4)
+                        peak_eps_time = adjusted_time.strftime("%Y-%m-%dT%H:%M:%SZ")
             if filter_type == FilterType.TODAY:
                 interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
             elif filter_type == FilterType.MONTH:
@@ -8400,6 +8453,9 @@ class ConsolidatedReport(APIView):
             "log_source_stats": log_source_stats_list,
             "sla_stats": priority_wise_counts,
             "top_use_cases": top_use_cases_data,
+            "contracted_volume": contracted_volume,
+            "contracted_volume_type": contracted_volume_type,
+            "contracted_volume_type_display": contracted_volume_type_display,
             "eps_data": eps_data,
             "incident_clousure_trend": incident_closure_trends
             # "sla_metrics":sla_f_metrics
