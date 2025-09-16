@@ -8500,6 +8500,14 @@ class DetailedEPSReportAPIView(APIView):
             "qradar_tenant__id", flat=True
         )
 
+        # Get contracted volume for comparison
+        mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
+        contracted_volume = mapping.contracted_volume if mapping else None
+        contracted_volume_type = mapping.contracted_volume_type if mapping else None
+        contracted_volume_type_display = (
+            mapping.get_contracted_volume_type_display() if mapping else None
+        )
+
         # Filtering logic
         filter_kwargs = {"domain_id__in": qradar_tenant_ids}
         if filter_enum == FilterType.CUSTOM_RANGE:
@@ -8604,6 +8612,9 @@ class DetailedEPSReportAPIView(APIView):
 
         return Response(
             {
+                "contracted_volume": contracted_volume,
+                "contracted_volume_type": contracted_volume_type,
+                "contracted_volume_type_display": contracted_volume_type_display,
                 "eps_data": eps_data,
             },
             status=status.HTTP_200_OK,
