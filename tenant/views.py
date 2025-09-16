@@ -8459,7 +8459,7 @@ class DetailedEPSReportAPIView(APIView):
             start_time = dubai_midnight.astimezone(pytz_timezone("UTC"))
             time_trunc = TruncHour("created_at")
         elif filter_enum == FilterType.WEEK:
-            start_time = now - timedelta(days=6)
+            start_time = now - timedelta(days=7)
             time_trunc = TruncDay("created_at")
         elif filter_enum == FilterType.MONTH:
             # Get start of current month and show 4 weeks (28 days back from now)
@@ -8474,9 +8474,9 @@ class DetailedEPSReportAPIView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             try:
-                start_time = datetime.strptime(start_str, "%Y-%m-%d")
-                end_time = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1)
-                if start_time > end_time:
+                start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
+                if start_date > end_date:
                     return Response(
                         {"error": "Start date must be before end date."},
                         status=status.HTTP_400_BAD_REQUEST,
@@ -8503,13 +8503,35 @@ class DetailedEPSReportAPIView(APIView):
         # Filtering logic
         filter_kwargs = {"domain_id__in": qradar_tenant_ids}
         if filter_enum == FilterType.CUSTOM_RANGE:
-            filter_kwargs["created_at__range"] = (start_time, end_time)
-        else:
+            # Use date filtering on qradar_end_time for custom range
+            filter_kwargs["qradar_end_time__date__gte"] = start_date
+            filter_kwargs["qradar_end_time__date__lte"] = end_date
+        elif filter_enum == FilterType.TODAY:
+            # Use created_at for TODAY filter (hourly data)
             filter_kwargs["created_at__gte"] = start_time
+        else:
+            # Use qradar_end_time date filtering for WEEK and MONTH
+            if filter_enum == FilterType.WEEK:
+                # Last 7 days based on qradar_end_time
+                filter_kwargs["qradar_end_time__date__gte"] = (
+                    now - timedelta(days=7)
+                ).date()
+                filter_kwargs["qradar_end_time__date__lte"] = now.date()
+            elif filter_enum == FilterType.MONTH:
+                # Last 28 days based on qradar_end_time
+                filter_kwargs["qradar_end_time__date__gte"] = (
+                    now - timedelta(days=28)
+                ).date()
+                filter_kwargs["qradar_end_time__date__lte"] = now.date()
 
-        # Query EPS data
+        # Query EPS data - Use IBMQradarEPS for TODAY filter, IBMQradarDailyEPS for others
+        if filter_enum == FilterType.TODAY:
+            eps_model = IBMQradarEPS
+        else:
+            eps_model = IBMQradarDailyEPS
+
         eps_data_raw = (
-            IBMQradarEPS.objects.filter(**filter_kwargs)
+            eps_model.objects.filter(**filter_kwargs)
             .annotate(interval=time_trunc)
             .values("interval", "domain__name")
             .annotate(average_eps=Avg("average_eps"), peak_eps=Max("peak_eps"))
@@ -8520,19 +8542,33 @@ class DetailedEPSReportAPIView(APIView):
         eps_data = []
         for entry in eps_data_raw:
             interval_value = entry["interval"]
+            # Use the appropriate model (eps_model) based on filter type
             peak_row = (
-                IBMQradarEPS.objects.filter(**filter_kwargs)
+                eps_model.objects.filter(**filter_kwargs)
                 .annotate(interval=time_trunc)
                 .filter(interval=interval_value, peak_eps=entry["peak_eps"])
-                .order_by("created_at")  # get earliest if multiple match
+                .order_by("qradar_end_time")  # get earliest if multiple match
                 .first()
             )
-            peak_eps_time = (
-                peak_row.created_at if peak_row and peak_row.created_at else None
-            )
 
-            # peak_dt = peak_eps_time + timedelta(hours=4)
-            peak_str = peak_eps_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            # Use created_at for TODAY filter, qradar_end_time for others
+            peak_eps_time = None
+            if peak_row:
+                if filter_enum == FilterType.TODAY:
+                    # Use created_at for TODAY filter
+                    peak_eps_time = peak_row.created_at if peak_row.created_at else None
+                else:
+                    # Use qradar_end_time for other filters
+                    peak_eps_time = (
+                        peak_row.qradar_end_time if peak_row.qradar_end_time else None
+                    )
+
+            # Add 4 hours for display if we have a timestamp
+            if peak_eps_time:
+                peak_dt = peak_eps_time + timedelta(hours=4)
+                peak_str = peak_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            else:
+                peak_str = None
 
             if filter_enum == FilterType.TODAY:
                 interval = entry["interval"]
