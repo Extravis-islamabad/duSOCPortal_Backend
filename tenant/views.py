@@ -3745,7 +3745,16 @@ class EPSGraphAPIView(APIView):
                     {"error": "Invalid custom date format. Use YYYY-MM-DD."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            time_trunc = TruncDate("created_at")
+
+            # Check if start_date and end_date are the same (single day)
+            is_single_day = start_date == end_date
+
+            if is_single_day:
+                # Use hourly truncation for single day, similar to TODAY filter
+                time_trunc = TruncHour("created_at")
+            else:
+                # Use daily truncation for date range
+                time_trunc = TruncDate("created_at")
         else:
             return Response(
                 {
@@ -3762,9 +3771,31 @@ class EPSGraphAPIView(APIView):
         # Filtering logic
         filter_kwargs = {"domain_id__in": qradar_tenant_ids}
         if filter_enum == FilterType.CUSTOM_RANGE:
-            # Use date filtering on qradar_end_time for custom range
-            filter_kwargs["qradar_end_time__date__gte"] = start_date
-            filter_kwargs["qradar_end_time__date__lte"] = end_date
+            if is_single_day:
+                # For single day, use created_at filtering with time boundaries
+                # Convert the date to datetime at midnight in Dubai timezone
+                from pytz import timezone as pytz_timezone
+
+                dubai_tz = pytz_timezone("Asia/Dubai")
+
+                # Create datetime objects for start and end of the day in Dubai time
+                start_datetime = datetime.combine(start_date, datetime.min.time())
+                end_datetime = datetime.combine(start_date, datetime.max.time())
+
+                # Make them timezone aware in Dubai timezone
+                start_datetime = dubai_tz.localize(start_datetime)
+                end_datetime = dubai_tz.localize(end_datetime)
+
+                # Convert to UTC for database filtering
+                start_time_utc = start_datetime.astimezone(pytz_timezone("UTC"))
+                end_time_utc = end_datetime.astimezone(pytz_timezone("UTC"))
+
+                filter_kwargs["created_at__gte"] = start_time_utc
+                filter_kwargs["created_at__lte"] = end_time_utc
+            else:
+                # Use date filtering on qradar_end_time for multi-day custom range
+                filter_kwargs["qradar_end_time__date__gte"] = start_date
+                filter_kwargs["qradar_end_time__date__lte"] = end_date
         elif filter_enum == FilterType.TODAY:
             # Use created_at for TODAY filter (hourly data)
             filter_kwargs["created_at__gte"] = start_time
@@ -3783,8 +3814,11 @@ class EPSGraphAPIView(APIView):
                 ).date()
                 filter_kwargs["qradar_end_time__date__lte"] = now.date()
 
-        # Query EPS data - Use IBMQradarEPS for TODAY filter, IBMQradarDailyEPS for others
+        # Query EPS data - Use IBMQradarEPS for TODAY filter and single-day custom range, IBMQradarDailyEPS for others
         if filter_enum == FilterType.TODAY:
+            eps_model = IBMQradarEPS
+        elif filter_enum == FilterType.CUSTOM_RANGE and is_single_day:
+            # Use hourly EPS model for single day custom range
             eps_model = IBMQradarEPS
         else:
             eps_model = IBMQradarDailyEPS
@@ -3822,11 +3856,13 @@ class EPSGraphAPIView(APIView):
                 .first()
             )
 
-            # Use created_at for TODAY filter, qradar_end_time for others
+            # Use created_at for TODAY filter and single-day custom range, qradar_end_time for others
             peak_eps_time = None
             if peak_row:
-                if filter_enum == FilterType.TODAY:
-                    # Use created_at for TODAY filter and add 4 hours for display
+                if filter_enum == FilterType.TODAY or (
+                    filter_enum == FilterType.CUSTOM_RANGE and is_single_day
+                ):
+                    # Use created_at for TODAY filter and single-day custom range, add 4 hours for display
                     if peak_row.created_at:
                         adjusted_time = peak_row.created_at + timedelta(hours=4)
                         peak_eps_time = adjusted_time.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -3837,6 +3873,9 @@ class EPSGraphAPIView(APIView):
                         peak_eps_time = adjusted_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
             if filter_enum == FilterType.TODAY:
+                interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            elif filter_enum == FilterType.CUSTOM_RANGE and is_single_day:
+                # Format hourly intervals for single-day custom range
                 interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
             elif filter_enum == FilterType.MONTH:
                 # Format as "Week 1", "Week 2", etc.
