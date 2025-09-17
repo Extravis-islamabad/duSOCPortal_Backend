@@ -158,6 +158,7 @@ def sync_requests_for_soar():
                         f"Ingesting the Incident for the CortexSOAR tenant : {cortex_tenant.name}"
                     )
                     soar._insert_incidents(records=records)
+                    purge_old_soar_incidents.delay()
 
 
 @shared_task
