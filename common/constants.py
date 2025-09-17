@@ -59,7 +59,7 @@ class AllowedOriginsConstants:
     ALLOWED_ORIGINS = [
         LOCAL_URL,
         DEV_URL,
-        "http://192.168.10.26",
+        "http://10.225.148.22:443",
         "http://localhost:3000",
     ]
 
