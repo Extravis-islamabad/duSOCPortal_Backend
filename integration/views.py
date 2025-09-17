@@ -9,6 +9,7 @@ from common.constants import EncryptedKeyConstants
 from common.modules.cortex_soar import CortexSOAR
 from common.modules.cyware import Cyware
 from common.modules.ibm_qradar import IBMQradar
+from common.modules.ibm_qradar_token import IBMQradarToken
 from common.modules.itsm import ITSM
 from integration.serializers import (
     GetIntegrationInstanceSerializer,
@@ -44,6 +45,16 @@ def test_integration_connection(
                 port=credentials.get("port"),
             ) as ibm_qradar:
                 if not ibm_qradar.test_integration(timeout=5):
+                    raise serializers.ValidationError(
+                        "QRadar integration is not accessible."
+                    )
+        elif credentials_type == CredentialTypes.API_KEY:
+            with IBMQradarToken(
+                ip_address=credentials.get("ip_address"),
+                port=credentials.get("port"),
+                api_key=credentials.get("api_key"),
+            ) as ibm_qradar_token:
+                if not ibm_qradar_token.test_integration(timeout=5):
                     raise serializers.ValidationError(
                         "QRadar integration is not accessible."
                     )
