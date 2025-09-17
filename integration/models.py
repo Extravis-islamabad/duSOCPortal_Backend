@@ -175,6 +175,15 @@ class IntegrationCredentials(models.Model):
                     }
                 )
 
+        elif self.credential_type == CredentialTypes.SECRET_KEY_ACCESS_KEY:
+            if not (self.secret_key and self.access_key):
+                raise ValidationError(
+                    {
+                        "secret_key": "Both secret key and access key are required for Secret Key and Access Key credential type.",
+                        "access_key": "Both secret key and access key are required for Secret Key and Access Key credential type.",
+                    }
+                )
+
     def save(self, *args, **kwargs):
         """Ensure clean is called and password is securely hashed before saving."""
         self.full_clean()
