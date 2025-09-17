@@ -1,5 +1,6 @@
 import re
 import time
+from datetime import date
 
 from celery import shared_task
 from django.db.models import Count
@@ -112,7 +113,7 @@ def sync_notes_child(token: str, ip_address: str, port: int, integration_id: int
 @shared_task
 def sync_requests_for_soar():
     # intervals = ["day", "week", "month", "year"]
-    intervals = ["year"]
+    intervals = ["month"]
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
         integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
@@ -249,3 +250,91 @@ def sync_soar_data():
 
     DateTimeStorage.store_current_time()
     logger.info("sync_soar_data() task completed and time updated")
+
+
+@shared_task
+def purge_old_soar_incidents(cutoff_year=2025, dry_run=False):
+    """
+    Bulk delete DUCortexSOARIncidentFinalModel records where occured (DATE) < Jan 1 of cutoff_year.
+
+    Args:
+        cutoff_year: Year threshold (default 2025). Records before Jan 1 of this year will be deleted.
+        dry_run: If True, only log what would be deleted without actually deleting.
+
+    Returns:
+        dict: Summary of the operation with counts and status.
+    """
+    start_time = time.time()
+
+    # Use DATE-only cutoff (January 1 of the cutoff year)
+    cutoff_date = date(cutoff_year, 1, 1)
+
+    logger.info(
+        f"[purge_old_soar_incidents] Starting with cutoff DATE: {cutoff_date} (bulk delete)"
+    )
+
+    # Query for old incidents based on 'occured' DATE (not datetime)
+    old_incidents = DUCortexSOARIncidentFinalModel.objects.filter(
+        occured__date__lt=cutoff_date
+    )
+
+    total_count = old_incidents.count()
+
+    if total_count == 0:
+        logger.info("[purge_old_soar_incidents] No incidents found to purge")
+        return {
+            "status": "success",
+            "message": "No incidents found to purge",
+            "total_deleted": 0,
+            "dry_run": dry_run,
+            "cutoff_date": cutoff_date.isoformat(),
+            "execution_time": time.time() - start_time,
+        }
+
+    if dry_run:
+        # In dry run mode, just log what would be deleted (limit sampling to avoid large logs)
+        sample_incidents = list(
+            old_incidents.values("id", "db_id", "name", "occured", "account")[:10]
+        )
+        logger.info(
+            f"[purge_old_soar_incidents] DRY RUN: Would delete {total_count} incidents before {cutoff_date}"
+        )
+        logger.info(
+            f"[purge_old_soar_incidents] Sample (first 10) to be deleted: {sample_incidents}"
+        )
+        return {
+            "status": "dry_run",
+            "message": f"Would delete {total_count} incidents",
+            "total_count": total_count,
+            "dry_run": True,
+            "cutoff_date": cutoff_date.isoformat(),
+            "execution_time": time.time() - start_time,
+        }
+
+    # Perform a single bulk delete relying on DB/Django cascade for related notes
+    try:
+        deleted_count, deleted_details = old_incidents.delete()
+        logger.success(
+            f"[purge_old_soar_incidents] Bulk deleted {deleted_count} incidents older than {cutoff_date}. "
+            f"Task took {time.time() - start_time:.2f} seconds"
+        )
+        return {
+            "status": "success",
+            "message": f"Successfully deleted {deleted_count} incidents",
+            "total_deleted": deleted_count,
+            "details": deleted_details,
+            "dry_run": False,
+            "cutoff_date": cutoff_date.isoformat(),
+            "execution_time": time.time() - start_time,
+        }
+    except Exception as e:
+        logger.error(
+            f"[purge_old_soar_incidents] Error during purge operation: {str(e)}"
+        )
+        return {
+            "status": "error",
+            "message": str(e),
+            "dry_run": False,
+            "cutoff_date": cutoff_date.isoformat(),
+            "execution_time": time.time() - start_time,
+        }
