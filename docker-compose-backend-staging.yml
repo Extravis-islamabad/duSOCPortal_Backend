@@ -10,6 +10,7 @@ services:
     command: ["sh", "./start_server.sh"]
     ports:
       - "8000:8000"
+    restart: always
     env_file:
       - .env
     depends_on:
@@ -51,6 +52,7 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    restart: always
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -63,6 +65,7 @@ services:
     ports:
       - "5672:5672"  # AMQP port
       - "15672:15672"  # Management UI
+    restart: always
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
@@ -90,6 +93,7 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_started
+    restart: always
     volumes:
       - .:/app  # Optional: for live sync with host
     environment:
@@ -104,6 +108,7 @@ services:
     command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "cyware", "--loglevel=info"]
     env_file:
       - .env
+    restart: always
     depends_on:
       redis:
         condition: service_started
@@ -123,6 +128,7 @@ services:
     command: ["celery", "-A", "sockportal__backend",  "beat", "--loglevel=info"]
     env_file:
       - .env
+    restart: always
     depends_on:
       # db:
       #   condition: service_healthy
