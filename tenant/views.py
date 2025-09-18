@@ -302,7 +302,15 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
+        # with IBMQradarToken(
+        #     ip_address="10.225.148.146",
+        #     port=443,
+        #     api_key="4b859859-e58a-4038-b70f-958041cdb239",
+        # ) as ibm:
+        #     data = ibm._get_tenants()
+        #     print(data)
         sync_ibm_tenant_daily_eps()
+        # sync_ibm_tenant_daily_eps()
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
@@ -3876,7 +3884,10 @@ class EPSGraphAPIView(APIView):
                 interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
             elif filter_enum == FilterType.CUSTOM_RANGE and is_single_day:
                 # Format hourly intervals for single-day custom range
-                interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
+
+                interval_str = (entry["interval"] + timedelta(hours=4)).strftime(
+                    "%Y-%m-%dT%H:%M:%SZ"
+                )
             elif filter_enum == FilterType.MONTH:
                 # Format as "Week 1", "Week 2", etc.
                 week_num = len(eps_data) + 1
