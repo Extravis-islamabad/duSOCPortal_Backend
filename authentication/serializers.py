@@ -30,6 +30,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
     profile_picture = serializers.SerializerMethodField()
     company_name = serializers.SerializerMethodField()
     created_by_id = serializers.SerializerMethodField()
+    integrated_tools = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -49,6 +50,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
             "company_name",
             "permissions",
             "created_by_id",
+            "integrated_tools",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 
@@ -104,6 +106,65 @@ class UserDetailSerializer(serializers.ModelSerializer):
             if tenant and tenant.created_by:
                 return tenant.created_by.id
         return None
+
+    def get_integrated_tools(self, obj):
+        """
+        Returns the list of integrated tools for tenants or an empty list/null for admins.
+        """
+        if obj.is_tenant:
+            try:
+                # Fetch the tenant profile associated with the user
+                tenant = Tenant.objects.get(tenant=obj)
+                # Get the company associated with the tenant
+                if tenant.company:
+                    # Get all integrations for the company
+                    integrations = tenant.company.integrations.filter(status=True)
+                    # Format the integration data
+                    integrated_tools = []
+                    for integration in integrations:
+                        tool_data = {
+                            "id": integration.id,
+                            "instance_name": integration.instance_name,
+                            "integration_type": integration.get_integration_type_display(),
+                            "status": integration.status,
+                        }
+
+                        # Add the specific subtype based on integration type
+                        if integration.integration_type == 1:  # SIEM
+                            tool_data["subtype"] = (
+                                integration.get_siem_subtype_display()
+                                if integration.siem_subtype
+                                else None
+                            )
+                        elif integration.integration_type == 2:  # SOAR
+                            tool_data["subtype"] = (
+                                integration.get_soar_subtype_display()
+                                if integration.soar_subtype
+                                else None
+                            )
+                        elif integration.integration_type == 3:  # ITSM
+                            tool_data["subtype"] = (
+                                integration.get_itsm_subtype_display()
+                                if integration.itsm_subtype
+                                else None
+                            )
+                        elif integration.integration_type == 4:  # Threat Intelligence
+                            tool_data["subtype"] = (
+                                integration.get_threat_intelligence_subtype_display()
+                                if integration.threat_intelligence_subtype
+                                else None
+                            )
+                        else:
+                            tool_data["subtype"] = None
+
+                        integrated_tools.append(tool_data)
+
+                    return integrated_tools
+            except Tenant.DoesNotExist:
+                # If no tenant profile exists, return an empty list
+                return []
+        # For admins (or non-tenants), return an empty list
+        return []
 
 
 class ProfilePictureUploadSerializer(serializers.ModelSerializer):
