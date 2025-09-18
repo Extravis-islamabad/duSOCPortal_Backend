@@ -366,10 +366,23 @@ class TenantManagementAPIView(APIView):
     Query Parameters:
     - is_deleted: If 'true', permanently deletes the tenant and user
     - is_active: If 'false', deactivates the tenant's user account
+
+    Permissions:
+    - DELETE: Only SuperAdminUsers can delete tenants
+    - PATCH: AdminUsers can update/deactivate tenants
     """
 
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+
+    def get_permissions(self):
+        """
+        Override to return different permission classes based on the request method.
+        """
+        if self.request.method == "DELETE":
+            return [IsSuperAdminUser()]
+        elif self.request.method == "PATCH":
+            return [IsAdminUser()]
+        return [IsAdminUser()]
 
     def delete(self, request, company_id, tenant_id):
         """
