@@ -21,6 +21,15 @@ class IsAdminUser(BasePermission):
         )
 
 
+class IsSuperAdminUser(BasePermission):
+    """
+    Allows access only to admin users.
+    """
+
+    def has_permission(self, request, view):
+        return bool(request.user.is_authenticated) and (request.user.is_super_admin)
+
+
 class IsReadonlyAdminUser(BasePermission):
     """
     Allows access only to admin users.

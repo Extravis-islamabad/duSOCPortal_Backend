@@ -12,7 +12,11 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from authentication.models import User
-from authentication.permissions import IsAdminUser, IsReadonlyAdminUser
+from authentication.permissions import (
+    IsAdminUser,
+    IsReadonlyAdminUser,
+    IsSuperAdminUser,
+)
 from common.constants import APIConstants, FilterType, PaginationConstants
 from tenant.cortex_soar_tasks import sync_soar_data
 from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
@@ -165,7 +169,7 @@ class TenantInactiveView(APIView):
 
 class DeleteTenantByCompanyView(APIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsSuperAdminUser]
 
     def delete(self, request, company_id):
         try:
