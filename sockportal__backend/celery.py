@@ -26,22 +26,26 @@ app.conf.beat_schedule = {
     "qradar-sync-tasks": {
         "task": "tenant.ibm_qradar_tasks.sync_ibm_qradar_data",
         "schedule": crontab(minute="*/5"),
+        "options": {"queue": "qradar"},
     },
     "qradar-admin-sync-tasks": {
         "task": "tenant.ibm_qradar_tasks.sync_ibm_admin_eps",
         "schedule": crontab(
             minute="0"
         ),  # Run at the whenever the minute will 0 of any hour means running it every hour
+        "options": {"queue": "qradar"},
     },
     "qradar-tenant-sync-tasks": {
         "task": "tenant.ibm_qradar_tasks.sync_ibm_tenant_eps",
         "schedule": crontab(
             minute="*/5"
         ),  # Run at the whenever the minute will 5 of any hour means running it every hour
+        "options": {"queue": "qradar"},
     },
     "qradar-daily-sync-tasks": {
         "task": "tenant.ibm_qradar_tasks.sync_ibm_tenant_daily_eps",
         "schedule": crontab(minute="30", hour="1"),  # Run at 1:30 AM every day
+        "options": {"queue": "qradar"},
     },
     # "qradar-tenant-daily-sync-tasks": {
     #     "task": "tenant.ibm_qradar_tasks.sync_ibm_qradar_daily_sync",
@@ -50,10 +54,12 @@ app.conf.beat_schedule = {
     "itsm-sync-tasks": {
         "task": "tenant.itsm_tasks.sync_itsm",
         "schedule": crontab(minute="*/5"),
+        "options": {"queue": "itsm"},
     },
     "cortex-sync-tasks": {
         "task": "tenant.cortex_soar_tasks.sync_soar_data",
         "schedule": crontab(minute="*/5"),
+        "options": {"queue": "soar"},
     },
     # "threat-intelligence-sync-tasks": {
     #     "task": "tenant.threat_intelligence_tasks.default_cyware",
