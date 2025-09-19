@@ -90,6 +90,54 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                     {"integration_ids": f"Invalid integration IDs: {missing}"}
                 )
 
+            # Check for specific integration types and their required tenant IDs
+            integrations = Integration.objects.filter(id__in=data["integration_ids"])
+
+            # Check for M.E ServiceDesk Plus MSP (ITSM) integration
+            has_manage_engine = integrations.filter(
+                integration_type=IntegrationTypes.ITSM_INTEGRATION,
+                itsm_subtype=ItsmSubTypes.MANAGE_ENGINE,
+            ).exists()
+
+            if has_manage_engine:
+                itsm_tenant_ids = data.get("itsm_tenant_ids")
+                if not itsm_tenant_ids:  # Check if None or empty list
+                    raise serializers.ValidationError(
+                        {
+                            "itsm_tenant_ids": "ITSM tenant IDs cannot be null when integrating with M.E ServiceDesk Plus MSP"
+                        }
+                    )
+
+            # Check for Cortex SOAR integration
+            has_cortex_soar = integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.CORTEX_SOAR,
+            ).exists()
+
+            if has_cortex_soar:
+                soar_tenant_ids = data.get("soar_tenant_ids")
+                if not soar_tenant_ids:  # Check if None or empty list
+                    raise serializers.ValidationError(
+                        {
+                            "soar_tenant_ids": "SOAR tenant IDs cannot be null when integrating with Cortex SOAR"
+                        }
+                    )
+
+            # Check for IBM QRadar integration
+            has_ibm_qradar = integrations.filter(
+                integration_type=IntegrationTypes.SIEM_INTEGRATION,
+                siem_subtype=SiemSubTypes.IBM_QRADAR,
+            ).exists()
+
+            if has_ibm_qradar:
+                qradar_tenants = data.get("qradar_tenants")
+                if not qradar_tenants:  # Check if None or empty list
+                    raise serializers.ValidationError(
+                        {
+                            "qradar_tenants": "QRadar tenant configuration cannot be null when integrating with IBM QRadar"
+                        }
+                    )
+
         if "itsm_tenant_ids" in data:
             existing = DuITSMTenants.objects.filter(
                 id__in=data["itsm_tenant_ids"]
