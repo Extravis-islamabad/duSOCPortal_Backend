@@ -17,6 +17,9 @@ app.autodiscover_tasks()
 
 app.conf.task_routes = {
     "tenant.threat_intelligence_tasks.*": {"queue": "cyware"},
+    "tenant.ibm_qradar_tasks.*": {"queue": "qradar"},
+    "tenant.itsm_tasks.*": {"queue": "itsm"},
+    "tenant.cortex_soar_tasks.*": {"queue": "soar"},
 }
 
 app.conf.beat_schedule = {
