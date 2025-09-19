@@ -119,6 +119,67 @@ services:
     environment:
       - C_FORCE_ROOT=true
 
+  celery-qradar:
+    image: backend-api
+    container_name: duSOC_Celery_Qradar
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "qradar", "--loglevel=info"]
+    env_file:
+      - .env
+    restart: always
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      - C_FORCE_ROOT=true
+
+  celery-itsm:
+    image: backend-api
+    container_name: duSOC_Celery_Itsm
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "itsm", "--loglevel=info"]
+    env_file:
+      - .env
+    restart: always
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      - C_FORCE_ROOT=true
+
+  celery-soar:
+    image: backend-api
+    container_name: duSOC_Celery_Soar
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "soar", "--loglevel=info"]
+    env_file:
+      - .env
+    restart: always
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      - C_FORCE_ROOT=true
+
+
   celery-beat:
     image: backend-api
     container_name: duSOC_Celery_Beat_Container
