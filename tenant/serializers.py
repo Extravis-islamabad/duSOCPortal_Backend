@@ -283,7 +283,7 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                     email = None if email == "N/A" else email
 
                     # Create or get the user
-                    user, created = User.objects.get_or_create(
+                    user, user_created = User.objects.get_or_create(
                         username=user_data["username"],
                         defaults={
                             "email": email,
@@ -293,28 +293,52 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                         },
                     )
 
-                    # Create tenant for this user under the company
+                    # Check if tenant already exists for this user and company
                     ldap_group = user_data["ldap_group"]
-                    tenant = Tenant.objects.create(
+                    tenant, tenant_created = Tenant.objects.get_or_create(
                         tenant=user,
                         company=company,
-                        created_by=created_by,
-                        ldap_group=ldap_group,
+                        defaults={
+                            "created_by": created_by,
+                            "ldap_group": ldap_group,
+                        },
                     )
 
-                    # Create default role for the new tenant
-                    role = TenantRole.objects.create(
-                        tenant=tenant,
-                        name=TenantRole.TenantRoleChoices.TENANT_USER.label,
-                        role_type=TenantRole.TenantRoleChoices.TENANT_USER,
-                    )
+                    # Update ldap_group if tenant already existed but ldap_group changed
+                    if not tenant_created and tenant.ldap_group != ldap_group:
+                        tenant.ldap_group = ldap_group
+                        tenant.save()
 
-                    # Add permissions if specified
-                    if permissions is not None:
-                        for perm in permissions:
-                            TenantRolePermissions.objects.create(
-                                role=role, permission=perm
-                            )
+                    # Only create role if tenant was newly created
+                    if tenant_created:
+                        # Create default role for the new tenant
+                        role = TenantRole.objects.create(
+                            tenant=tenant,
+                            name=TenantRole.TenantRoleChoices.TENANT_USER.label,
+                            role_type=TenantRole.TenantRoleChoices.TENANT_USER,
+                        )
+
+                        # Add permissions if specified
+                        if permissions is not None:
+                            for perm in permissions:
+                                TenantRolePermissions.objects.create(
+                                    role=role, permission=perm
+                                )
+                    else:
+                        # If tenant already exists, update permissions for existing role
+                        if permissions is not None:
+                            existing_role = TenantRole.objects.filter(
+                                tenant=tenant
+                            ).first()
+                            if existing_role:
+                                # Clear existing permissions and add new ones
+                                TenantRolePermissions.objects.filter(
+                                    role=existing_role
+                                ).delete()
+                                for perm in permissions:
+                                    TenantRolePermissions.objects.create(
+                                        role=existing_role, permission=perm
+                                    )
 
                     # Add to tenants list to be processed later
                     tenants = company.tenants.all()  # Refresh the queryset
