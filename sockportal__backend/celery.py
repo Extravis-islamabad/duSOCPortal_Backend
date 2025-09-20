@@ -15,6 +15,10 @@ app.conf.broker_transport_options = {
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
+# Enable task events for Flower monitoring
+app.conf.worker_send_task_events = True
+app.conf.task_send_sent_event = True
+
 app.conf.task_routes = {
     "tenant.threat_intelligence_tasks.*": {"queue": "cyware"},
     "tenant.ibm_qradar_tasks.*": {"queue": "qradar"},
@@ -40,8 +44,35 @@ app.conf.task_time_limit = 3700  # 1 hour + 100 seconds hard limit (task is kill
 
 # Track failed tasks
 app.conf.task_track_started = True
-app.conf.task_send_sent_event = True
 app.conf.result_expires = 3600  # Results expire after 1 hour
+
+# Task result backend configuration for monitoring
+app.conf.result_backend_transport_options = {
+    "master_name": "mymaster",
+    "visibility_timeout": 3600,
+    "fanout_prefix": True,
+    "fanout_patterns": True,
+}
+
+# Task execution options
+app.conf.task_acks_late = (
+    True  # Tasks will be acknowledged after they have been executed
+)
+app.conf.task_reject_on_worker_lost = True  # Reject tasks when worker shuts down
+app.conf.task_ignore_result = False  # Store task results for monitoring
+
+# Worker configuration
+app.conf.worker_prefetch_multiplier = 1  # Only fetch one task at a time per worker
+app.conf.worker_max_tasks_per_child = (
+    1000  # Restart worker after 1000 tasks to prevent memory leaks
+)
+app.conf.worker_disable_rate_limits = False  # Enable rate limiting
+
+# Monitoring and events
+app.conf.worker_send_task_events = True  # Send events for Flower
+app.conf.task_track_started = True  # Track when tasks start
+app.conf.task_send_sent_event = True  # Send event when task is sent
+app.conf.worker_enable_remote_control = True  # Enable remote control commands
 
 app.conf.beat_schedule = {
     "qradar-sync-tasks": {
