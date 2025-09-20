@@ -27,11 +27,11 @@ build-backend:
 
 # Deploy backend services
 deploy-backend: build-backend
-	$(COMPOSE) up -d backend celery celery-beat celery-intel celery-qradar celery-itsm celery-soar redis rabbitmq
+	$(COMPOSE) up -d backend celery-beat celery-intel celery-qradar celery-itsm celery-soar redis rabbitmq
 
 # Restart backend-related services only
 restart-backend-services:
-	$(COMPOSE) restart backend celery celery-beat celery-intel celery-qradar celery-itsm celery-soar
+	$(COMPOSE) restart backend celery-beat celery-intel celery-qradar celery-itsm celery-soar
 
 # Logs
 logs:
