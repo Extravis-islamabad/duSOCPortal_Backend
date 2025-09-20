@@ -210,32 +210,42 @@ services:
     environment:
       - C_FORCE_ROOT=true
 
-  # flower:
-  #   image: mher/flower
-  #   container_name: duSOC_Celery_Flower
-  #   command: >
-  #     flower
-  #     --broker=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
-  #     --address=0.0.0.0
-  #     --port=5566
-  #     --persistent=True
-  #     --db=/data/flower.db
-  #     --url_prefix=flower
-  #   env_file:
-  #     - .env
-  #   ports:
-  #     - 5566:5566
-  #   depends_on:
-  #     rabbitmq:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   volumes:
-  #     - flower_data:/data
+  flower:
+    image: mher/flower:latest
+    container_name: duSOC_Celery_Flower
+    command: >
+      celery
+      --broker=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
+      --result-backend=redis://redis:6379/0
+      flower
+      --address=0.0.0.0
+      --port=5555
+      --persistent=True
+      --db=/data/flower.db
+      --state_save_interval=5000
+      --purge_offline_workers=3600
+      --max_tasks=10000
+      --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+    env_file:
+      - .env
+    ports:
+      - "5555:5555"
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      redis:
+        condition: service_started
+    restart: always
+    volumes:
+      - flower_data:/data
+    environment:
+      - CELERY_BROKER_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - FLOWER_UNAUTHENTICATED_API=false
 
 
 volumes:
   # dusocportal_backend_dusocportal_backend_postgres_data:
   redis_data:
   rabbitmq_data:
-  # flower_data:
+  flower_data:
