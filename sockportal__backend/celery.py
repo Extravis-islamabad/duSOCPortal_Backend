@@ -22,6 +22,27 @@ app.conf.task_routes = {
     "tenant.cortex_soar_tasks.*": {"queue": "soar"},
 }
 
+# Task retry configuration
+app.conf.task_annotations = {
+    "*": {
+        "max_retries": 2,
+        "default_retry_delay": 60,  # 60 seconds between retries
+    }
+}
+
+# Optional: Set specific retry policies for different task types
+app.conf.task_default_max_retries = 2
+app.conf.task_default_retry_delay = 60
+
+# Task time limits
+app.conf.task_soft_time_limit = 3600  # 1 hour soft limit (raises SoftTimeLimitExceeded)
+app.conf.task_time_limit = 3700  # 1 hour + 100 seconds hard limit (task is killed)
+
+# Track failed tasks
+app.conf.task_track_started = True
+app.conf.task_send_sent_event = True
+app.conf.result_expires = 3600  # Results expire after 1 hour
+
 app.conf.beat_schedule = {
     "qradar-sync-tasks": {
         "task": "tenant.ibm_qradar_tasks.sync_ibm_qradar_data",
