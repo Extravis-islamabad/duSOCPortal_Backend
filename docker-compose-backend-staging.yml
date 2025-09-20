@@ -16,13 +16,21 @@ services:
     depends_on:
       # db:
       #   condition: service_healthy
-      celery:
-        condition: service_started
+      # celery:
+      #   condition: service_started
       redis:
         condition: service_started
       rabbitmq:
         condition: service_started
       celery-beat:
+        condition: service_started
+      celery-intel:
+        condition: service_started
+      celery-qradar:
+        condition: service_started
+      celery-itsm:
+        condition: service_started
+      celery-soar:
         condition: service_started
     volumes:
       - .:/app  # Optional: for live sync with host
@@ -77,27 +85,27 @@ services:
       timeout: 5s
       retries: 5
 
-  celery:
-    image: backend-api
-    container_name: duSOC_Celery_Container
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
-    command: ["celery", "-A", "sockportal__backend", "worker", "--loglevel=info"]
-    env_file:
-      - .env
-    depends_on:
-      # db:
-      #   condition: service_healthy
-      redis:
-        condition: service_started
-      rabbitmq:
-        condition: service_started
-    restart: always
-    volumes:
-      - .:/app  # Optional: for live sync with host
-    environment:
-      - C_FORCE_ROOT=true  # Allows Celery to run as root in the container (optional, use with caution)
+  # celery:
+  #   image: backend-api
+  #   container_name: duSOC_Celery_Container
+  #   # build:
+  #   #   context: .
+  #   #   dockerfile: Dockerfile
+  #   command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "celery", "--loglevel=info"]
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     # db:
+  #     #   condition: service_healthy
+  #     redis:
+  #       condition: service_started
+  #     rabbitmq:
+  #       condition: service_started
+  #   restart: always
+  #   volumes:
+  #     - .:/app  # Optional: for live sync with host
+  #   environment:
+  #     - C_FORCE_ROOT=true  # Allows Celery to run as root in the container (optional, use with caution)
 
   celery-intel:
     image: backend-api
