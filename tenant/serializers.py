@@ -877,7 +877,9 @@ class TenantDetailSerializer(serializers.ModelSerializer):
                 if obj.company.is_default_sla:
                     metrics = DefaultSoarSlaMetric.objects.all()
                 else:
-                    metrics = SoarTenantSlaMetric.objects.filter(soar_tenant=tenant)
+                    metrics = SoarTenantSlaMetric.objects.filter(
+                        company=obj.company, soar_tenant=tenant
+                    )
                 sla_overrides = [
                     {
                         "sla_level": m.sla_level,
