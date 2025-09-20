@@ -113,19 +113,19 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute="*/5"),
         "options": {"queue": "soar"},
     },
-    # "threat-intelligence-sync-tasks": {
-    #     "task": "tenant.threat_intelligence_tasks.default_cyware",
-    #     "schedule": crontab(minute="*/5"),
-    #     "options": {"queue": "cyware"},
-    # },
-    # "threat-intelligence-tenant-sync-tasks": {
-    #     "task": "tenant.threat_intelligence_tasks.custom_cyware",
-    #     "schedule": crontab(minute="*/5"),
-    #     "options": {"queue": "cyware"},
-    # },
-    # "threat-intelligence-all-sync-tasks": {
-    #     "task": "tenant.threat_intelligence_tasks.sync_threat_intel_all",
-    #     "schedule": crontab(minute="*/30"),
-    #     "options": {"queue": "cyware"},
-    # },
+    "threat-intelligence-sync-tasks": {
+        "task": "tenant.threat_intelligence_tasks.default_cyware",
+        "schedule": crontab(minute="*/5"),
+        "options": {"queue": "cyware"},
+    },
+    "threat-intelligence-tenant-sync-tasks": {
+        "task": "tenant.threat_intelligence_tasks.custom_cyware",
+        "schedule": crontab(minute="*/5"),
+        "options": {"queue": "cyware"},
+    },
+    "threat-intelligence-all-sync-tasks": {
+        "task": "tenant.threat_intelligence_tasks.sync_threat_intel_all",
+        "schedule": crontab(minute="*/30"),
+        "options": {"queue": "cyware"},
+    },
 }
