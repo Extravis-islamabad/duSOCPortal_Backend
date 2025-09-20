@@ -113,7 +113,7 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
-    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "cyware", "--loglevel=info"]
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "cyware", "--loglevel=info", "-E"]
     env_file:
       - .env
     restart: always
@@ -133,7 +133,7 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
-    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "qradar", "--loglevel=info"]
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "qradar", "--loglevel=info", "-E"]
     env_file:
       - .env
     restart: always
@@ -153,7 +153,7 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
-    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "itsm", "--loglevel=info"]
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "itsm", "--loglevel=info", "-E"]
     env_file:
       - .env
     restart: always
@@ -173,7 +173,7 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
-    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "soar", "--loglevel=info"]
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "soar", "--loglevel=info", "-E"]
     env_file:
       - .env
     restart: always
