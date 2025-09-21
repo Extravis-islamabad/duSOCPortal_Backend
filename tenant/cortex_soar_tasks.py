@@ -248,9 +248,7 @@ def sync_soar_data():
         )
     sync_requests_for_soar.delay()
     sync_notes.delay()
-    purge_old_soar_incidents()
-
-    DateTimeStorage.store_current_time()
+    purge_old_soar_incidents.delay()
     logger.info("sync_soar_data() task completed and time updated")
 
 
@@ -266,6 +264,7 @@ def purge_old_soar_incidents(cutoff_year=2025, dry_run=False):
     Returns:
         dict: Summary of the operation with counts and status.
     """
+    DateTimeStorage.store_current_time()
     start_time = time.time()
 
     # Use DATE-only cutoff (January 1 of the cutoff year)
