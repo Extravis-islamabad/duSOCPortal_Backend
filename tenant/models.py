@@ -1034,7 +1034,7 @@ class CywareAlertDetails(models.Model):
 
 class TenantPermissionChoices(models.IntegerChoices):
     DASHBOARD = 1, "Dashboard"
-    CHATBOT = 2, "Chatbot"
+    # CHATBOT = 2, "Chatbot"
     REPORTS = 3, "Reports"
     THREAT_INTELLIGENCE = 4, "Threat Intelligence"
     ASSETS = 5, "Assets"
