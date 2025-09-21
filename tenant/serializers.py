@@ -95,12 +95,6 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
         # SLA validation
         is_default_sla = data.get("is_default_sla")
 
-        # Check if is_default_sla is None (not provided)
-        if is_default_sla is None:
-            raise serializers.ValidationError(
-                {"is_default_sla": "is_default_sla is required."}
-            )
-
         # If is_default_sla is False, validate custom SLA fields
         if is_default_sla is False:
             soar_tenants_sla = data.get("soar_tenants_sla", [])
