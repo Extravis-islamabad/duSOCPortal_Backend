@@ -113,7 +113,7 @@ def sync_notes_child(token: str, ip_address: str, port: int, integration_id: int
 @shared_task
 def sync_requests_for_soar():
     # intervals = ["day", "week", "month", "year"]
-    intervals = ["month"]
+    intervals = ["year"]
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
         integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
