@@ -19,7 +19,7 @@ from authentication.permissions import (
 )
 from common.constants import APIConstants, FilterType, PaginationConstants
 from tenant.cortex_soar_tasks import sync_soar_data
-from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
+from tenant.ibm_qradar_tasks import sync_ibm_qradar_data, sync_ibm_qradar_data_token
 from tenant.itsm_tasks import sync_itsm
 from tenant.models import (
     Company,
@@ -606,6 +606,7 @@ class SyncIBMQradarDataAPIView(APIView):
 
     def get(self, request):
         sync_ibm_qradar_data.delay()
+        sync_ibm_qradar_data_token.delay()
         return Response({"message": "Sync process for IBM QRadar data started."})
 
 
