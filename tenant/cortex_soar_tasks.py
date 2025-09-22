@@ -158,7 +158,7 @@ def sync_requests_for_soar():
                         f"Ingesting the Incident for the CortexSOAR tenant : {cortex_tenant.name}"
                     )
                     soar._insert_incidents(records=records)
-                    purge_old_soar_incidents.delay()
+                    purge_old_soar_incidents()
 
 
 @shared_task
@@ -248,6 +248,7 @@ def sync_soar_data():
         )
     sync_requests_for_soar.delay()
     DateTimeStorage.store_current_time()
+    purge_old_soar_incidents.delay()
     logger.info("sync_soar_data() task completed and time updated")
 
 
