@@ -147,10 +147,14 @@ class ITSM:
                     )
             except Exception as e:
                 logger.error(f"ITSM._get_accounts() failed with exception: {str(e)}")
+                raise Exception(f"ITSM._get_accounts() failed with exception: {str(e)}")
                 break
 
             if response.status_code != 200:
                 logger.warning(
+                    f"ITSM._get_accounts() return the status code {response.status_code}"
+                )
+                raise Exception(
                     f"ITSM._get_accounts() return the status code {response.status_code}"
                 )
                 break
@@ -161,6 +165,9 @@ class ITSM:
                 or data["response_status"][0]["status"] != ITSMConstants.SUCCESS
             ):
                 logger.warning(
+                    f"ITSM._get_accounts() return the status code {data['response_status'][0]['status_code']} and status {data['response_status'][0]['status']}"
+                )
+                raise Exception(
                     f"ITSM._get_accounts() return the status code {data['response_status'][0]['status_code']} and status {data['response_status'][0]['status']}"
                 )
                 break
@@ -262,10 +269,14 @@ class ITSM:
                     )
             except Exception as e:
                 logger.error(f"ITSM._get_requests() failed with exception: {str(e)}")
+                raise Exception(f"ITSM._get_requests() failed with exception: {str(e)}")
                 return
 
             if response.status_code != 200:
                 logger.warning(
+                    f"ITSM._get_requests() return the status code {response.status_code}"
+                )
+                raise Exception(
                     f"ITSM._get_requests() return the status code {response.status_code}"
                 )
                 break
@@ -317,10 +328,14 @@ class ITSM:
                 )
             except Exception as e:
                 logger.error(f"ITSM._get_requests() failed with exception: {str(e)}")
+                raise Exception(f"ITSM._get_requests() failed with exception: {str(e)}")
                 return
 
             if response.status_code != 200:
                 logger.warning(
+                    f"ITSM._get_requests() return the status code {response.status_code}"
+                )
+                raise Exception(
                     f"ITSM._get_requests() return the status code {response.status_code}"
                 )
                 break
@@ -370,10 +385,14 @@ class ITSM:
             )
         except Exception as e:
             logger.error(f"ITSM.get_soar_id() failed with exception: {str(e)}")
+            raise Exception(f"ITSM.get_soar_id() failed with exception: {str(e)}")
             return
 
         if response.status_code != 200:
             logger.warning(
+                f"ITSM.get_soar_id() return the status code {response.status_code}"
+            )
+            raise Exception(
                 f"ITSM.get_soar_id() return the status code {response.status_code}"
             )
             return
