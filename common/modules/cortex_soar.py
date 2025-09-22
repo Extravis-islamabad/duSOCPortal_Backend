@@ -119,9 +119,15 @@ class CortexSOAR:
                 )
         except Exception as e:
             logger.error(f"CortexSOAR._get_accounts() failed with exception : {str(e)}")
+            raise Exception(
+                f"CortexSOAR._get_accounts() failed with exception : {str(e)}"
+            )
             return
         if response.status_code != 200:
             logger.warning(
+                f"CortexSOAR._get_accounts() return the status code {response.status_code}"
+            )
+            raise Exception(
                 f"CortexSOAR._get_accounts() return the status code {response.status_code}"
             )
             return
@@ -199,17 +205,6 @@ class CortexSOAR:
                 "period": {"by": day_week_month, "fromValue": None},
             },
         }
-        # body = {
-        #     "userFilter": False,
-        #     "filter": {
-        #         "page": 0,
-        #         "size": batch_size,
-        #         "query": "",
-        #         "sort": [{"field": "id", "asc": False}],
-        #         "accounts": {account_name: {}},
-        #         "period": {"by": day_week_month, "fromValue": None},
-        #     },
-        # }
         try:
             if EnvConstants.LOCAL:
                 proxies = {
@@ -236,9 +231,15 @@ class CortexSOAR:
             logger.error(
                 f"CortexSOAR._get_incidents() failed with exception : {str(e)}"
             )
+            raise Exception(
+                f"CortexSOAR._get_incidents() failed with exception : {str(e)}"
+            )
             return
         if response.status_code != 200:
             logger.warning(
+                f"CortexSOAR._get_incidents() return the status code {response.status_code}"
+            )
+            raise Exception(
                 f"CortexSOAR._get_incidents() return the status code {response.status_code}"
             )
             return
@@ -409,25 +410,6 @@ class CortexSOAR:
             )
             transaction.rollback()
 
-    # def fetch_investigation_details():
-    #     endpoint = "https://10.225.148.130/acc_CDC-Mey-Tabreed/investigation/8208"
-    #     headers = {
-    #         "Accept": "application/json",
-    #         "Authorization": "177EED5CCA3878582CEFCA88F7DC9759",
-    #         "Content-Type": "application/json"
-    #     }
-    #     payload = {
-    #         "userFilter": False
-    #     }
-
-    #     try:
-    #         response = requests.post(endpoint, headers=headers, json=payload, verify=False)
-    #         response.raise_for_status()
-    #         return response.json()
-    #     except requests.exceptions.RequestException as e:
-    #         print("Error during request:", str(e))
-    #         return None
-
     def _get_notes(self, account_name, incident_id, timeout=SSLConstants.TIMEOUT):
         """
         Fetches the list of notes from the CortexSOAR instance for a given incident.
@@ -467,9 +449,13 @@ class CortexSOAR:
 
         except Exception as e:
             logger.error(f"CortexSOAR._get_notes() failed with exception : {str(e)}")
+            raise Exception(f"CortexSOAR._get_notes() failed with exception : {str(e)}")
             return
         if response.status_code != 200:
             logger.warning(
+                f"CortexSOAR._get_notes() return the status code {response.status_code}"
+            )
+            raise Exception(
                 f"CortexSOAR._get_notes() return the status code {response.status_code}"
             )
             return
