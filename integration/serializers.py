@@ -357,6 +357,16 @@ class IntegrationCredentialUpdateSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError(
                             "QRadar integration is not accessible."
                         )
+            elif credentials_type == CredentialTypes.API_KEY:
+                with IBMQradarToken(
+                    ip_address=credentials.get("ip_address"),
+                    port=credentials.get("port"),
+                    api_key=credentials.get("api_key"),
+                ) as ibm_qradar_token:
+                    if not ibm_qradar_token.test_integration(timeout=5):
+                        raise serializers.ValidationError(
+                            "QRadar Token based integration is not accessible."
+                        )
             else:
                 raise serializers.ValidationError(
                     "Unsupported credential type for IBM Qradar for Now..."
