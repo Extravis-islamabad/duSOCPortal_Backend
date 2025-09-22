@@ -18,7 +18,6 @@ from integration.models import (
 from .models import (  # SoarTenantSlaMetric,
     Alert,
     Company,
-    CustomerEPS,
     CywareAlertDetails,
     CywareCategories,
     CywareCustomField,
@@ -1329,29 +1328,29 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         return company
 
 
-class CustomerEPSSerializer(serializers.ModelSerializer):
-    qradar_tenant_name = serializers.CharField(
-        source="qradar_tenant.name", read_only=True
-    )
-    qradar_tenant_id = serializers.IntegerField(
-        source="qradar_tenant.id", read_only=True
-    )
-    qradar_tenant_db_id = serializers.IntegerField(
-        source="qradar_tenant.db_id", read_only=True
-    )
-    eps = serializers.SerializerMethodField()
+# class CustomerEPSSerializer(serializers.ModelSerializer):
+#     qradar_tenant_name = serializers.CharField(
+#         source="qradar_tenant.name", read_only=True
+#     )
+#     qradar_tenant_id = serializers.IntegerField(
+#         source="qradar_tenant.id", read_only=True
+#     )
+#     qradar_tenant_db_id = serializers.IntegerField(
+#         source="qradar_tenant.db_id", read_only=True
+#     )
+#     eps = serializers.SerializerMethodField()
 
-    class Meta:
-        model = CustomerEPS
-        fields = [
-            "eps",
-            "qradar_tenant_id",
-            "qradar_tenant_db_id",
-            "qradar_tenant_name",
-        ]
+#     class Meta:
+#         model = CustomerEPS
+#         fields = [
+#             "eps",
+#             "qradar_tenant_id",
+#             "qradar_tenant_db_id",
+#             "qradar_tenant_name",
+#         ]
 
-    def get_eps(self, obj):
-        return round(obj.eps, 2) if obj.eps is not None else None
+#     def get_eps(self, obj):
+#         return round(obj.eps, 2) if obj.eps is not None else None
 
 
 class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
