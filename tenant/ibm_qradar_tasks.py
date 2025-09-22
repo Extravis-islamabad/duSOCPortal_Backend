@@ -15,7 +15,6 @@ from integration.models import (
 )
 from tenant.models import (
     CorrelatedEventLog,
-    CustomerEPS,
     DuIbmQradarTenants,
     WeeklyCorrelatedEventLog,
 )
@@ -1161,22 +1160,22 @@ def sync_ibm():
         )
 
 
-@shared_task
-def sync_ibm_admin_eps():
-    results = IntegrationCredentials.objects.filter(
-        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
-        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
-        credential_type=CredentialTypes.USERNAME_PASSWORD,
-    )
-    CustomerEPS.objects.all().delete()
-    for result in results:
-        sync_eps_for_domain_for_admin(
-            username=result.username,
-            password=result.password,
-            ip_address=result.ip_address,
-            port=result.port,
-            integration_id=result.integration.id,
-        )
+# @shared_task
+# def sync_ibm_admin_eps():
+#     results = IntegrationCredentials.objects.filter(
+#         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+#         integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+#         credential_type=CredentialTypes.USERNAME_PASSWORD,
+#     )
+#     CustomerEPS.objects.all().delete()
+#     for result in results:
+#         sync_eps_for_domain_for_admin(
+#             username=result.username,
+#             password=result.password,
+#             ip_address=result.ip_address,
+#             port=result.port,
+#             integration_id=result.integration.id,
+#         )
 
 
 # @shared_task

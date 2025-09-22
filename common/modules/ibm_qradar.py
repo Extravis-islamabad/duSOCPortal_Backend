@@ -14,7 +14,6 @@ from common.constants import EnvConstants, IBMQradarConstants, SSLConstants
 from common.utils import DBMappings
 from tenant.models import (
     CorrelatedEventLog,
-    CustomerEPS,
     DailyClosureReasonLog,
     DailyEventCountLog,
     DailyEventLog,
@@ -2058,30 +2057,30 @@ class IBMQradar:
 
         return transformed
 
-    def _insert_customer_eps(self, data):
-        """
-        Inserts or updates CustomerEPS records in bulk.
+    # def _insert_customer_eps(self, data):
+    #     """
+    #     Inserts or updates CustomerEPS records in bulk.
 
-        :param data: A list of dictionaries (transformed EPS data)
-        """
-        start = time.time()
-        logger.info(f"IBMQRadar._insert_customer_eps() started : {start}")
+    #     :param data: A list of dictionaries (transformed EPS data)
+    #     """
+    #     start = time.time()
+    #     logger.info(f"IBMQRadar._insert_customer_eps() started : {start}")
 
-        records = [CustomerEPS(**item) for item in data]
-        logger.info(f"Inserting CustomerEPS records: {len(records)}")
+    #     records = [CustomerEPS(**item) for item in data]
+    #     logger.info(f"Inserting CustomerEPS records: {len(records)}")
 
-        try:
-            with transaction.atomic():
-                CustomerEPS.objects.bulk_create(
-                    records,
-                )
-                logger.success(f"Inserted CustomerEPS records: {len(records)}")
-                logger.success(
-                    f"IBMQRadar._insert_customer_eps() took: {time.time() - start:.2f} seconds"
-                )
-        except Exception as e:
-            logger.error(f"Error in IBMQRadar._insert_customer_eps(): {str(e)}")
-            transaction.rollback()
+    #     try:
+    #         with transaction.atomic():
+    #             CustomerEPS.objects.bulk_create(
+    #                 records,
+    #             )
+    #             logger.success(f"Inserted CustomerEPS records: {len(records)}")
+    #             logger.success(
+    #                 f"IBMQRadar._insert_customer_eps() took: {time.time() - start:.2f} seconds"
+    #             )
+    #     except Exception as e:
+    #         logger.error(f"Error in IBMQRadar._insert_customer_eps(): {str(e)}")
+    #         transaction.rollback()
 
     def _transform_total_events_data(self, data, integration, domain_id):
         """
