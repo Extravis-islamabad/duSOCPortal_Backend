@@ -80,11 +80,9 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute="*/5"),
         "options": {"queue": "qradar"},
     },
-    "qradar-admin-sync-tasks": {
-        "task": "tenant.ibm_qradar_tasks.sync_ibm_admin_eps",
-        "schedule": crontab(
-            minute="0"
-        ),  # Run at the whenever the minute will 0 of any hour means running it every hour
+    "qradar-sync-tasks-token": {
+        "task": "tenant.ibm_qradar_tasks.sync_ibm_qradar_data_token",
+        "schedule": crontab(minute="*/5"),
         "options": {"queue": "qradar"},
     },
     "qradar-tenant-sync-tasks": {
