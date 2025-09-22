@@ -98,12 +98,25 @@ class CortexSOAR:
         logger.info(f"CortexSOAR._get_accounts() started : {start}")
         endpoint = f"{self.base_url}/{CortexSOARConstants.TENANT_ENDPOINT}"
         try:
-            response = requests.get(
-                endpoint,
-                headers=self.headers,
-                verify=SSLConstants.VERIFY,
-                timeout=timeout,
-            )
+            if EnvConstants.LOCAL:
+                proxies = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
+                response = requests.get(
+                    endpoint,
+                    headers=self.headers,
+                    verify=SSLConstants.VERIFY,
+                    proxies=proxies,
+                    timeout=timeout,
+                )
+            else:
+                response = requests.get(
+                    endpoint,
+                    headers=self.headers,
+                    verify=SSLConstants.VERIFY,
+                    timeout=timeout,
+                )
         except Exception as e:
             logger.error(f"CortexSOAR._get_accounts() failed with exception : {str(e)}")
             return
