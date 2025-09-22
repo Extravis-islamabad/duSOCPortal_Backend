@@ -317,7 +317,7 @@ class IntegrationCredentialUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = IntegrationCredentials
         exclude = []  # Include fields you want to allow updates on
-        read_only_fields = ["credential_type"]
+        # read_only_fields = ["credential_type"]
 
     def validate(self, data):
         instance = self.instance
