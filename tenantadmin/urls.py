@@ -6,7 +6,6 @@ from tenantadmin.views import (
     CheckCompanyNameExistView,
     CompanyTenantSettingsUpdateAPIView,
     CompanyToolsAPIView,
-    CustomerEPSAPIView,
     DeleteTenantByCompanyView,
     DistinctCompaniesAPIView,
     EPSUtilizationAPIView,
@@ -77,7 +76,7 @@ urlpatterns = [
     path("sync_itsm/", SyncITSMDataAPIView.as_view(), name="sync-itsm"),
     path("volume-types/", VolumeTypeChoicesAPIView.as_view(), name="volume-types"),
     path("sla_levels/", SlaLevelsAPIView.as_view(), name="sla_levels"),
-    path("customer_eps/", CustomerEPSAPIView.as_view(), name="customer-eps"),
+    # path("customer_eps/", CustomerEPSAPIView.as_view(), name="customer-eps"),
     path("check_company/", CheckCompanyNameExistView.as_view(), name="check-company"),
     path("assets_summary/", AssetsSummaryAPIView.as_view(), name="assets-summary"),
     path(

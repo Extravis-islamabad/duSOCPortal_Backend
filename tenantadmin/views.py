@@ -23,7 +23,6 @@ from tenant.ibm_qradar_tasks import sync_ibm_qradar_data, sync_ibm_qradar_data_t
 from tenant.itsm_tasks import sync_itsm
 from tenant.models import (
     Company,
-    CustomerEPS,
     DefaultSoarSlaMetric,
     DUCortexSOARIncidentFinalModel,
     IBMQradarAssests,
@@ -37,7 +36,6 @@ from tenant.models import (
 from tenant.serializers import (  # TenantUpdateSerializer,
     AllTenantDetailSerializer,
     CompanyTenantUpdateSerializer,
-    CustomerEPSSerializer,
     DistinctCompanySerializer,
     NonActiveCompanySerializer,
     TenantCreateSerializer,
@@ -649,18 +647,18 @@ class SlaLevelsAPIView(APIView):
         )
 
 
-class CustomerEPSAPIView(APIView):
-    """
-    APIView to return EPS data with customer name and QRadar tenant name.
-    """
+# class CustomerEPSAPIView(APIView):
+#     """
+#     APIView to return EPS data with customer name and QRadar tenant name.
+#     """
 
-    permission_classes = [JWTAuthentication]
-    permission_classes = [IsAdminUser]
+#     permission_classes = [JWTAuthentication]
+#     permission_classes = [IsAdminUser]
 
-    def get(self, request):
-        queryset = CustomerEPS.objects.select_related("qradar_tenant").all()
-        serializer = CustomerEPSSerializer(queryset, many=True)
-        return Response(serializer.data)
+#     def get(self, request):
+#         queryset = CustomerEPS.objects.select_related("qradar_tenant").all()
+#         serializer = CustomerEPSSerializer(queryset, many=True)
+#         return Response(serializer.data)
 
 
 class CheckCompanyNameExistView(APIView):
