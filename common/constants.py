@@ -52,14 +52,16 @@ class SSLConstants:
 class AllowedOriginsConstants:
     LOCAL_URL = os.getenv("LOCAL_URL", None)
     DEV_URL = os.getenv("DEV_URL", None)
-
-    if LOCAL_URL is None or DEV_URL is None:
+    ADMIN_URL = os.getenv("ADMIN_URL", None)
+    TENANT_URL = os.getenv("TENANT_URL", None)
+    if LOCAL_URL is None or DEV_URL is None or ADMIN_URL is None or TENANT_URL is None:
         logger.warning("Allowed origins are not set...")
         raise ValueError("Allowed origins are not set...")
     ALLOWED_ORIGINS = [
         LOCAL_URL,
         DEV_URL,
-        "http://10.225.148.22:443",
+        TENANT_URL,
+        ADMIN_URL,
         "http://localhost:3000",
     ]
 
