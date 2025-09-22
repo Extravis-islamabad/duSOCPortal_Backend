@@ -7,6 +7,7 @@ from loguru import logger
 from common.constants import IBMQradarConstants
 from common.modules.ibm_qradar import IBMQradar
 from common.modules.ibm_qradar_token import IBMQradarToken
+from common.utils import DateTimeStorage
 from integration.models import (
     CredentialTypes,
     IntegrationCredentials,
@@ -1293,6 +1294,7 @@ def sync_ibm_qradar_data_token():
         )
         sync_event_log_sources_types.delay()
         sync_offenses_token.delay()
+        DateTimeStorage.store_current_time()
 
 
 @shared_task
