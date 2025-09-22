@@ -249,7 +249,6 @@ def sync_soar_data():
     sync_requests_for_soar.delay()
     DateTimeStorage.store_current_time()
     sync_notes.delay()
-
     logger.info("sync_soar_data() task completed and time updated")
 
 
