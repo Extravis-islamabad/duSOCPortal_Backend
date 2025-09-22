@@ -48,8 +48,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.ibm_qradar_tasks import sync_ibm_tenant_daily_eps
+from tenant.cortex_soar_tasks import sync_notes_for_incident, sync_soar_data
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -305,11 +304,12 @@ class TestView(APIView):
         # with IBMQradarToken(
         #     ip_address="10.225.148.146",
         #     port=443,
-        #     api_key="4b859859-e58a-4038-b70f-958041cdb239",
+        #     api_key="4d4b7dab-755f-43c9-a43d-fe7c31168362",
         # ) as ibm:
-        #     data = ibm._get_tenants()
+        #     # data = ibm.test_integration()
+        #     data = ibm._get_offenses()
         #     print(data)
-        sync_ibm_tenant_daily_eps()
+        sync_soar_data()
         # sync_ibm_tenant_daily_eps()
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
@@ -9203,13 +9203,16 @@ class AssetCountsView(APIView):
 
         try:
             # Get SOAR tenants for this tenant
-            soar_tenants = tenant.company.soar_tenants.all()
-            if not soar_tenants:
+            siem_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SIEM_INTEGRATION,
+                siem_subtype=SiemSubTypes.IBM_QRADAR,
+                status=True,
+            )
+            if not siem_integrations.exists():
                 return Response(
-                    {"error": "No SOAR tenants found."},
-                    status=status.HTTP_404_NOT_FOUND,
+                    {"error": "No active SIEM integration configured for tenant."},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-            [t.id for t in soar_tenants]
 
             # Get mapped collector IDs for this tenant
             collector_ids = (
