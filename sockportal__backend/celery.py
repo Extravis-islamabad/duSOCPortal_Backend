@@ -123,6 +123,11 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute="*/5"),
         "options": {"queue": "soar"},
     },
+    "cortex-sync-notes-tasks": {
+        "task": "tenant.cortex_soar_tasks.sync_notes",
+        "schedule": crontab(minute="30", hour="2"),
+        "options": {"queue": "soar"},
+    },
     "threat-intelligence-sync-tasks": {
         "task": "tenant.threat_intelligence_tasks.default_cyware",
         "schedule": crontab(minute="*/5"),
