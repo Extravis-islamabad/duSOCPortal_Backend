@@ -846,9 +846,74 @@ def sync_eps_for_domain(
 
 
 @shared_task
+def sync_eps_for_domain_token(
+    api_key: str, ip_address: str, port: int, integration_id: int
+):
+    """
+    Sync EPS data for a domain from IBM QRadar using the provided API token.
+
+    Parameters
+    ----------
+    api_key : str
+        The API token to use for authentication with IBM QRadar.
+    ip_address : str
+        The IP address of the IBM QRadar instance.
+    port : int
+        The port number of the IBM QRadar instance.
+    integration_id : int
+        The ID of the integration to sync data for.
+
+    Returns
+    -------
+    None
+    """
+    with IBMQradarToken(
+        api_key=api_key, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_eps_for_domain() task")
+        search_id = ibm_qradar._get_do_aql_query(
+            query=IBMQradarConstants.AQL_EPS_UPDATED_QUERY
+        )
+        flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
+        if not flag:
+            logger.warning(
+                f"IBM QRadar EPS sync failed for integration {integration_id}"
+            )
+            return
+        data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+        transformed_data = ibm_qradar._transform_eps_data_from_named_fields(
+            data_list=data, integration=integration_id
+        )
+        if transformed_data:
+            ibm_qradar._insert_eps(transformed_data)
+
+            logger.info("Completed QRadarTasks.sync_eps_for_domain() task")
+
+
+@shared_task
 def sync_eps_for_domain_daily(
     username: str, password: str, ip_address: str, port: int, integration_id: int
 ):
+    """
+    Syncs daily EPS data for a domain from IBM QRadar.
+
+    Parameters
+    ----------
+    username : str
+        The username to use for authentication with IBM QRadar.
+    password : str
+        The password to use for authentication with IBM QRadar.
+    ip_address : str
+        The IP address of the IBM QRadar instance.
+    port : int
+        The port number of the IBM QRadar instance.
+    integration_id : int
+        The ID of the integration to sync data for.
+
+    Returns
+    -------
+    None
+    """
     from datetime import datetime, timedelta
 
     # End date = today at 00:00
@@ -863,6 +928,61 @@ def sync_eps_for_domain_daily(
 
     with IBMQradar(
         username=username, password=password, ip_address=ip_address, port=port
+    ) as ibm_qradar:
+        logger.info("Running QRadarTasks.sync_eps_for_domain_daily() task ")
+        logger.info(f"Date range: {start_date_str} to {end_date_str}")
+
+        # Format the query with date parameters
+        formatted_query = IBMQradarConstants.AQL_EPS_DAILY_UPDATED_QUERY.format(
+            start_date=start_date_str, end_date=end_date_str
+        )
+
+        search_id = ibm_qradar._get_do_aql_query(query=formatted_query)
+        flag = ibm_qradar._check_eps_results_by_search_id(search_id=search_id)
+        if not flag:
+            logger.warning(
+                f"IBM QRadar Daily EPS sync failed for integration {integration_id}"
+            )
+            return
+        data = ibm_qradar._get_eps_results_by_search_id(search_id=search_id)
+        transformed_data = ibm_qradar._transform_eps_data_from_named_fields_daily(
+            data_list=data, integration=integration_id, start_date=start_date
+        )
+        if transformed_data:
+            ibm_qradar._insert_daily_eps(transformed_data)
+            logger.info(f"Inserted {len(transformed_data)} daily EPS records")
+            logger.info("Completed QRadarTasks.sync_eps_for_domain_daily() task")
+
+
+@shared_task
+def sync_eps_for_domain_daily_token(
+    api_key: str, ip_address: str, port: int, integration_id: int
+):
+    """
+    Syncs the daily EPS records for a given domain using an API key.
+
+    This task fetches the daily EPS records from the IBM QRadar instance using an API key and
+    inserts them into the database.
+
+    :param api_key: The API key to use when connecting to the IBM QRadar instance.
+    :param ip_address: The IP address of the IBM QRadar instance.
+    :param port: The port to use when connecting to the IBM QRadar instance.
+    :param integration_id: The ID of the integration for which to sync the daily EPS records.
+    """
+    from datetime import datetime, timedelta
+
+    # End date = today at 00:00
+    end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    start_date = end_date - timedelta(days=1)
+
+    start_date_str = start_date.strftime("%Y-%m-%d %H:%M")
+    end_date_str = end_date.strftime("%Y-%m-%d %H:%M")
+
+    # Move window one day back
+    end_date = start_date
+
+    with IBMQradarToken(
+        api_key=api_key, ip_address=ip_address, port=port
     ) as ibm_qradar:
         logger.info("Running QRadarTasks.sync_eps_for_domain_daily() task ")
         logger.info(f"Date range: {start_date_str} to {end_date_str}")
@@ -936,6 +1056,22 @@ def sync_ibm_tenant_eps():
 
 
 @shared_task
+def sync_ibm_tenant_eps_token():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.API_KEY,
+    )
+    for result in results:
+        sync_eps_for_domain_token.delay(
+            api_key=result.api_key,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+
+@shared_task
 def sync_ibm_tenant_daily_eps():
     results = IntegrationCredentials.objects.filter(
         integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
@@ -946,6 +1082,22 @@ def sync_ibm_tenant_daily_eps():
         sync_eps_for_domain_daily.delay(
             username=result.username,
             password=result.password,
+            ip_address=result.ip_address,
+            port=result.port,
+            integration_id=result.integration.id,
+        )
+
+
+@shared_task
+def sync_ibm_tenant_daily_eps_token():
+    results = IntegrationCredentials.objects.filter(
+        integration__integration_type=IntegrationTypes.SIEM_INTEGRATION,
+        integration__siem_subtype=SiemSubTypes.IBM_QRADAR,
+        credential_type=CredentialTypes.API_KEY,
+    )
+    for result in results:
+        sync_eps_for_domain_daily_token.delay(
+            api_key=result.api_key,
             ip_address=result.ip_address,
             port=result.port,
             integration_id=result.integration.id,
