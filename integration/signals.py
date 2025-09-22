@@ -59,9 +59,9 @@ def trigger_integration_tasks(
                         "integration_id": instance.integration.id,
                     }
                     sync_qradar_tenants.delay(**kwargs)
-                    sync_event_collectors_token.delay(**kwargs)
-                    sync_event_log_assets_token.delay(**kwargs)
-                    sync_ibm_qradar_data_token.delay()
+                    sync_event_collectors.delay(**kwargs)
+                    sync_event_log_assets.delay(**kwargs)
+                    sync_ibm_qradar_data.delay()
                 elif instance.credential_type == CredentialTypes.API_KEY:
                     api_key = instance.api_key
                     ip_address = instance.ip_address
@@ -73,9 +73,9 @@ def trigger_integration_tasks(
                         "integration_id": instance.integration.id,
                     }
                     sync_qradar_token_tenants.delay(**kwargs)
-                    sync_event_collectors.delay(**kwargs)
-                    sync_event_log_assets.delay(**kwargs)
-                    sync_ibm_qradar_data.delay()
+                    sync_event_collectors_token.delay(**kwargs)
+                    sync_event_log_assets_token.delay(**kwargs)
+                    sync_ibm_qradar_data_token.delay()
 
         elif instance.integration.integration_type == IntegrationTypes.ITSM_INTEGRATION:
             if instance.integration.itsm_subtype == ItsmSubTypes.MANAGE_ENGINE:
