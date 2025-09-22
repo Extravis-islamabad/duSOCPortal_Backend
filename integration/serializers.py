@@ -330,6 +330,18 @@ class IntegrationCredentialUpdateSerializer(serializers.ModelSerializer):
         threat_intelligence_subtype = integration.threat_intelligence_subtype
 
         credentials_type = data.get("credential_type", instance.credential_type)
+
+        # Clear fields based on credential type
+        if credentials_type == CredentialTypes.API_KEY:
+            data["username"] = None
+            data["password"] = None
+        elif credentials_type == CredentialTypes.USERNAME_PASSWORD:
+            data["api_key"] = None
+        elif credentials_type == CredentialTypes.SECRET_KEY_ACCESS_KEY:
+            data["username"] = None
+            data["password"] = None
+            data["api_key"] = None
+
         credentials = {
             "username": data.get("username", instance.username),
             "password": data.get("password", instance.password),
