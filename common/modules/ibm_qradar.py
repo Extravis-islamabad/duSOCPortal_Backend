@@ -149,6 +149,9 @@ class IBMQradar:
                 logger.warning(
                     f"IBMQRadar.test_integration() return the status code {response.status_code}"
                 )
+                raise Exception(
+                    f"IBMQRadar.test_integration() return the status code {response.status_code}"
+                )
                 return
             data = response.json()
             logger.success(
@@ -158,6 +161,7 @@ class IBMQradar:
 
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._get_tenants(): {str(e)}")
+            raise Exception(f"An error occurred in IBMQradar._get_tenants(): {str(e)}")
             return
 
     def _get_tenants(self):
@@ -189,6 +193,9 @@ class IBMQradar:
                 logger.warning(
                     f"IBMQRadar._get_tenants() return the status code {response.status_code}"
                 )
+                raise Exception(
+                    f"IBMQRadar._get_tenants() return the status code {response.status_code}"
+                )
                 return
 
             tenants = response.json()
@@ -199,6 +206,7 @@ class IBMQradar:
 
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._get_tenants(): {str(e)}")
+            raise Exception(f"An error occurred in IBMQradar._get_tenants(): {str(e)}")
 
     def _get_domains(self):
         """
@@ -245,6 +253,9 @@ class IBMQradar:
                 logger.warning(
                     f"IBMQRadar._get_domains() return the status code {response.status_code}"
                 )
+                raise Exception(
+                    f"IBMQRadar._get_domains() return the status code {response.status_code}"
+                )
                 return
 
             domains = response.json()
@@ -255,6 +266,7 @@ class IBMQradar:
 
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._get_domains(): {str(e)}")
+            raise Exception(f"An error occurred in IBMQradar._get_domains(): {str(e)}")
 
     def _get_event_collectors(self):
         """
@@ -301,6 +313,9 @@ class IBMQradar:
                 logger.warning(
                     f"IBMQRadar._get_event_collectors() return the status code {response.status_code}"
                 )
+                raise Exception(
+                    f"IBMQRadar._get_event_collectors() return the status code {response.status_code}"
+                )
                 return
 
             event_collectors = response.json()
@@ -311,6 +326,9 @@ class IBMQradar:
 
         except Exception as e:
             logger.error(
+                f"An error occurred in IBMQradar._get_event_collectors(): {str(e)}"
+            )
+            raise Exception(
                 f"An error occurred in IBMQradar._get_event_collectors(): {str(e)}"
             )
 
@@ -361,6 +379,9 @@ class IBMQradar:
                 logger.warning(
                     f"IBMQRadar._get_log_sources_types() return the status code {response.status_code}"
                 )
+                raise Exception(
+                    f"IBMQRadar._get_log_sources_types() return the status code {response.status_code}"
+                )
                 return
 
             log_sources_types = response.json()
@@ -371,6 +392,9 @@ class IBMQradar:
 
         except Exception as e:
             logger.error(
+                f"An error occurred in IBMQradar._get_log_sources_types(): {str(e)}"
+            )
+            raise Exception(
                 f"An error occurred in IBMQradar._get_log_sources_types(): {str(e)}"
             )
 
@@ -422,6 +446,9 @@ class IBMQradar:
                 logger.warning(
                     f"IBMQRadar._get_log_sources_groups() return the status code {response.status_code}"
                 )
+                raise Exception(
+                    f"IBMQRadar._get_log_sources_groups() return the status code {response.status_code}"
+                )
                 return
 
             log_sources_types = response.json()
@@ -432,6 +459,9 @@ class IBMQradar:
 
         except Exception as e:
             logger.error(
+                f"An error occurred in IBMQradar._get_log_sources_groups(): {str(e)}"
+            )
+            raise Exception(
                 f"An error occurred in IBMQradar._get_log_sources_groups(): {str(e)}"
             )
 
@@ -531,6 +561,9 @@ class IBMQradar:
                 logger.warning(
                     f"IBMQRadar._get_event_logs() return the status code {response.status_code}"
                 )
+                raise Exception(
+                    f"IBMQRadar._get_event_logs() return the status code {response.status_code}"
+                )
                 return
             logs = response.json()
             logger.success(
@@ -540,6 +573,9 @@ class IBMQradar:
 
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar.__get_event_logs(): {str(e)}")
+            raise Exception(
+                f"An error occurred in IBMQradar.__get_event_logs(): {str(e)}"
+            )
 
     def _transform_log_sources_types(self, log_sources_types, integration_id: int):
         """
@@ -879,6 +915,9 @@ class IBMQradar:
                 logger.warning(
                     f"IBMQRadar._get_offenses() return the status code {response.status_code}"
                 )
+                raise Exception(
+                    f"IBMQRadar._get_offenses() return the status code {response.status_code}"
+                )
                 return
             response = response.json()
             logger.success(
@@ -887,6 +926,7 @@ class IBMQradar:
             return response
         except Exception as e:
             logger.error(f"An error occurred in IBMQradar._get_offenses(): {str(e)}")
+            raise Exception(f"An error occurred in IBMQradar._get_offenses(): {str(e)}")
 
     def _transform_offenses(self, data, integration_id):
         """
@@ -1226,10 +1266,16 @@ class IBMQradar:
                 )
         except Exception as e:
             logger.error(f"An error occurred in IBMQRadar._get_eps_domain(): {str(e)}")
+            raise Exception(
+                f"An error occurred in IBMQRadar._get_eps_domain(): {str(e)}"
+            )
             return
 
         if response.status_code not in [200, 201]:
             logger.warning(
+                f"IBMQRadar._get_eps_domain() return the status code {response.status_code}"
+            )
+            raise Exception(
                 f"IBMQRadar._get_eps_domain() return the status code {response.status_code}"
             )
             return
@@ -1273,11 +1319,17 @@ class IBMQradar:
                 logger.error(
                     f"An error occurred in IBMQRadar._check_eps_results_by_search_id(): {str(e)}"
                 )
+                raise Exception(
+                    f"An error occurred in IBMQRadar._check_eps_results_by_search_id(): {str(e)}"
+                )
                 return None  # <-- Ensure function exits if request fails
 
             # response will always be defined here if no exception was raised
             if response.status_code != 200:
                 logger.warning(
+                    f"IBMQRadar._check_eps_results_by_search_id() returned status code {response.status_code}"
+                )
+                raise Exception(
                     f"IBMQRadar._check_eps_results_by_search_id() returned status code {response.status_code}"
                 )
                 return None
@@ -1336,9 +1388,15 @@ class IBMQradar:
             logger.error(
                 f"An error occurred in IBMQRadar._get_eps_results_by_search_id(): {str(e)}"
             )
+            raise Exception(
+                f"An error occurred in IBMQRadar._get_eps_results_by_search_id(): {str(e)}"
+            )
             return
         if response.status_code != 200:
             logger.warning(
+                f"IBMQRadar._get_eps_results_by_search_id() return the status code {response.status_code}"
+            )
+            raise Exception(
                 f"IBMQRadar._get_eps_results_by_search_id() return the status code {response.status_code}"
             )
             return
@@ -1999,23 +2057,6 @@ class IBMQradar:
             )
             transaction.rollback()
 
-    # def _insert_eps(self, data):
-    #     """
-    #     Inserts or updates EPS records in the IBMQradarEPS table.
-
-    #     :param data: A list of IBMQradarEPS objects.
-    #     """
-    #     start = time.time()
-    #     logger.info(f"IBMQRadar._insert_eps() started : {start}")
-    #     try:
-    #         with transaction.atomic():
-    #             IBMQradarEPS.objects.bulk_create(
-    #                 data,
-    #             )
-    #     except Exception as e:
-    #         logger.error(f"An error occurred in IBMQradar._insert_eps(): {str(e)}")
-    #         transaction.rollback()
-
     def _transform_customer_eps_data(self, data_list, integration):
         """
         Transforms raw EPS data into CustomerEPS model-ready dicts.
@@ -2056,31 +2097,6 @@ class IBMQradar:
             )
 
         return transformed
-
-    # def _insert_customer_eps(self, data):
-    #     """
-    #     Inserts or updates CustomerEPS records in bulk.
-
-    #     :param data: A list of dictionaries (transformed EPS data)
-    #     """
-    #     start = time.time()
-    #     logger.info(f"IBMQRadar._insert_customer_eps() started : {start}")
-
-    #     records = [CustomerEPS(**item) for item in data]
-    #     logger.info(f"Inserting CustomerEPS records: {len(records)}")
-
-    #     try:
-    #         with transaction.atomic():
-    #             CustomerEPS.objects.bulk_create(
-    #                 records,
-    #             )
-    #             logger.success(f"Inserted CustomerEPS records: {len(records)}")
-    #             logger.success(
-    #                 f"IBMQRadar._insert_customer_eps() took: {time.time() - start:.2f} seconds"
-    #             )
-    #     except Exception as e:
-    #         logger.error(f"Error in IBMQRadar._insert_customer_eps(): {str(e)}")
-    #         transaction.rollback()
 
     def _transform_total_events_data(self, data, integration, domain_id):
         """
@@ -2143,33 +2159,6 @@ class IBMQradar:
             logger.error(f"Error in IBMQRadar._insert_total_events(): {str(e)}")
             transaction.rollback()
 
-    # def _transform_event_count_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-    #     transformed = []
-
-    #     for entry in data_list:
-    #         event_name = entry.get("event_name")
-    #         event_count = entry.get("event_count")
-
-    #         if not event_name or event_count is None:
-    #             logger.warning(f"Skipping invalid event data: {entry}")
-    #             continue
-
-    #         if not tenant_id:
-    #             logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #             continue
-
-    #         transformed.append(
-    #             {
-    #                 "event_name": event_name.strip(),
-    #                 "event_count": event_count,
-    #                 "qradar_tenant_id": tenant_id,
-    #                 "integration_id": integration_id,
-    #             }
-    #         )
-
-    #     return transformed
     def _transform_event_count_data(
         self, data_list, integration_id, domain_id, date=None
     ):
@@ -2223,29 +2212,6 @@ class IBMQradar:
             logger.error(f"Error inserting EventCountLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_recon_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     for entry in data_list:
-    #         count = entry.get("total_recon_events")
-    #         if count is None:
-    #             logger.warning(f"Skipping invalid recon data: {entry}")
-    #             continue
-
-    #         return [
-    #             {
-    #                 "total_recon_events": count,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         ]
-
-    #     return []
     def _transform_recon_data(self, data_list, integration_id, domain_id, date=None):
         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
         tenant_id = name_to_id_map.get(domain_id)
@@ -2441,92 +2407,6 @@ class IBMQradar:
             )
             return False
 
-    # def _transform_weekly_correlated_data(self, data_list, integration_id, domain_id):
-    #     """Transform weekly correlated events data for database insertion"""
-    #     try:
-    #         logger.info(f"Starting weekly transformation for domain {domain_id}")
-    #         logger.info(f"Input weekly data: {data_list}")
-    #         logger.info(f"Integration ID: {integration_id}")
-
-    #         # Get tenant mapping
-    #         name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #         logger.info(f"Available tenant mappings: {name_to_id_map}")
-
-    #         tenant_id = name_to_id_map.get(domain_id)
-    #         logger.info(f"Tenant ID for domain {domain_id}: {tenant_id}")
-
-    #         if not tenant_id:
-    #             logger.error(f"No QRadar tenant found for domain_id: {domain_id}")
-    #             logger.error(f"Available domain_ids: {list(name_to_id_map.keys())}")
-    #             return []
-
-    #         if not data_list:
-    #             logger.warning("No weekly data received from QRadar")
-    #             return []
-
-    #         # Process each entry in the data list
-    #         transformed_data = []
-    #         for i, entry in enumerate(data_list):
-    #             logger.info(f"Processing weekly entry {i+1}/{len(data_list)}: {entry}")
-
-    #             if not isinstance(entry, dict):
-    #                 logger.warning(f"Expected dict but got {type(entry)}: {entry}")
-    #                 continue
-
-    #             # Extract week and count
-    #             week = entry.get("week")
-    #             weekly_count = entry.get("weekly_count")
-
-    #             # Validate week format
-    #             if not week:
-    #                 logger.warning(f"Missing week in entry: {entry}")
-    #                 continue
-
-    #             # Validate week format (should be yyyy-ww)
-    #             if not isinstance(week, str) or len(week) != 7 or "-" not in week:
-    #                 logger.warning(f"Invalid week format: {week}")
-    #                 continue
-
-    #             # Validate and convert count
-    #             if weekly_count is None:
-    #                 logger.warning(f"Missing weekly_count in entry: {entry}")
-    #                 continue
-
-    #             try:
-    #                 weekly_count = float(weekly_count)
-    #                 if weekly_count < 0:
-    #                     logger.warning(
-    #                         f"Negative weekly count: {weekly_count}, setting to 0"
-    #                     )
-    #                     weekly_count = 0
-    #             except (ValueError, TypeError):
-    #                 logger.warning(
-    #                     f"Invalid weekly_count value: {weekly_count}, skipping entry"
-    #                 )
-    #                 continue
-
-    #             transformed_entry = {
-    #                 "week": week,
-    #                 "weekly_count": weekly_count,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-
-    #             transformed_data.append(transformed_entry)
-    #             logger.info(
-    #                 f"Successfully transformed weekly entry: {transformed_entry}"
-    #             )
-
-    #         logger.info(
-    #             f"Weekly transformation complete: {len(transformed_data)} records created"
-    #         )
-    #         return transformed_data
-
-    #     except Exception as e:
-    #         logger.error(
-    #             f"Error in _transform_weekly_correlated_data: {str(e)}", exc_info=True
-    #         )
-    #         return []
     def _transform_weekly_correlated_data(
         self, data_list, integration_id, domain_id, date=None
     ):
@@ -3294,36 +3174,6 @@ class IBMQradar:
             logger.error(f"Error inserting DestinationAddressLog records: {str(e)}")
             transaction.rollback()
 
-    # def _transform_top_destination_connection_data(
-    #     self, data_list, integration_id, domain_id
-    # ):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     transformed = []
-    #     for entry in data_list:
-    #         destination_address = entry.get("destinationaddress")
-    #         connection_count = entry.get("connection_count")
-    #         if destination_address is None or connection_count is None:
-    #             logger.warning(
-    #                 f"Skipping invalid top destination connection data: {entry}"
-    #             )
-    #             continue
-
-    #         transformed.append(
-    #             {
-    #                 "destination_address": destination_address,
-    #                 "connection_count": connection_count,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         )
-
-    #     return transformed
     def _transform_top_destination_connection_data(
         self, data_list, integration_id, domain_id, date=None
     ):
@@ -3382,32 +3232,6 @@ class IBMQradar:
             )
             transaction.rollback()
 
-    # def _transform_daily_event_count_data(self, data_list, integration_id, domain_id):
-    #     name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
-    #     tenant_id = name_to_id_map.get(domain_id)
-
-    #     if not tenant_id:
-    #         logger.warning(f"No QRadar tenant found for domain_id: {domain_id}")
-    #         return []
-
-    #     transformed = []
-    #     for entry in data_list:
-    #         full_date = entry.get("full_date")
-    #         daily_count = entry.get("daily_count")
-    #         if full_date is None or daily_count is None:
-    #             logger.warning(f"Skipping invalid daily event count data: {entry}")
-    #             continue
-
-    #         transformed.append(
-    #             {
-    #                 "full_date": full_date,
-    #                 "daily_count": daily_count,
-    #                 "integration_id": integration_id,
-    #                 "qradar_tenant_id": tenant_id,
-    #             }
-    #         )
-
-    #     return transformed
     def _transform_daily_event_count_data(
         self, data_list, integration_id, domain_id, date=None
     ):
@@ -3594,19 +3418,6 @@ class IBMQradar:
             )
 
         return transformed
-
-    # def insert_geo_events(self, transformed_data: list):
-    #     """
-    #     Inserts cleaned geo event data using dict unpacking (**).
-    #     """
-
-    #     try:
-    #         objects = [SourceIPGeoLocation(**item) for item in transformed_data]
-    #         logger.info(f"Inserting {len(objects)} geo events")
-    #         SourceIPGeoLocation.objects.bulk_create(objects, ignore_conflicts=True)
-    #     except Exception as e:
-    #         logger.error(f"Error inserting geo events: {str(e)}")
-    #         transaction.rollback()
 
     def update_asset_active_status(self, integration_id):
         """
