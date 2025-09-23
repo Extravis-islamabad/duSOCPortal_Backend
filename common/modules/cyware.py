@@ -128,6 +128,12 @@ class Cyware:
             list_resp = self.get_alert_list(page=page, page_size=page_size)
             logger.info(f"\n🌐 Page {page} - Status: {list_resp.status_code}")
 
+            if list_resp.status_code != 200:
+                logger.error(
+                    f"Failed to fetch alerts due to status code: {list_resp.status_code} due to {list_resp.text}"
+                )
+                break
+
             try:
                 list_json = list_resp.json()
             except Exception as e:
