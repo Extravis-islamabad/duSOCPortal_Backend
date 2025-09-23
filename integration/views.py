@@ -112,6 +112,7 @@ def test_integration_connection(
                 secret_key=credentials.get("secret_key"),
                 access_key=credentials.get("access_key"),
             ) as cyware:
+                logger.info(f"base_url: {cyware.base_url}, secret_key: {cyware.secret_key}, access_key: {cyware.access_key}")
                 response = cyware.get_alert_list(timeout=10)
                 if response.status_code != 200:
                     logger.error(
