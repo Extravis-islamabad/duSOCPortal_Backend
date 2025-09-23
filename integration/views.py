@@ -112,7 +112,9 @@ def test_integration_connection(
                 secret_key=credentials.get("secret_key"),
                 access_key=credentials.get("access_key"),
             ) as cyware:
-                logger.info(f"base_url: {cyware.base_url}, secret_key: {cyware.secret_key}, access_key: {cyware.access_key}")
+                logger.info(
+                    f"base_url: {cyware.base_url}, secret_key: {cyware.secret_key}, access_key: {cyware.access_key}"
+                )
                 response = cyware.get_alert_list(timeout=10)
                 if response.status_code != 200:
                     logger.error(
@@ -296,9 +298,7 @@ class TestIntegrationAPIView(APIView):
             )
 
         except serializers.ValidationError as e:
-            return Response(
-                {"error": str(e.default_detail)}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
