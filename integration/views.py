@@ -115,7 +115,7 @@ def test_integration_connection(
                 response = cyware.get_alert_list(timeout=10)
                 if response.status_code != 200:
                     logger.error(
-                        f"Cyware.get_alert_list() Failed: credentials {credentials}"
+                        f"Cyware.get_alert_list() Failed: {response.status_code}"
                     )
                     logger.error(f"Cyware.get_alert_list() Failed: {response.text}")
                     raise serializers.ValidationError(
