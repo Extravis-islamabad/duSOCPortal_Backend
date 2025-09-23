@@ -2634,7 +2634,9 @@ class IBMQradar:
     def _transform_suspicious_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -2681,7 +2683,9 @@ class IBMQradar:
 
     # TODO: Consider this example for DoS
     def _transform_dos_data(self, data_list, integration_id, domain_id, date=None):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -2727,7 +2731,9 @@ class IBMQradar:
             transaction.rollback()
 
     def _transform_top_dos_data(self, data_list, integration_id, domain_id, date=None):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -2779,7 +2785,9 @@ class IBMQradar:
     def _transform_daily_event_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -2831,7 +2839,9 @@ class IBMQradar:
     def _transform_top_alert_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -2883,7 +2893,9 @@ class IBMQradar:
     def _transform_daily_closure_reason_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -2940,7 +2952,9 @@ class IBMQradar:
     def _transform_monthly_avg_eps_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -2988,7 +3002,9 @@ class IBMQradar:
     def _transform_last_month_avg_eps_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -3036,7 +3052,9 @@ class IBMQradar:
     def _transform_weekly_avg_eps_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -3091,7 +3109,9 @@ class IBMQradar:
     def _transform_total_traffic_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -3139,7 +3159,9 @@ class IBMQradar:
     def _transform_destination_address_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -3193,7 +3215,9 @@ class IBMQradar:
     def _transform_top_destination_connection_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -3251,7 +3275,9 @@ class IBMQradar:
     def _transform_daily_event_count_data(
         self, data_list, integration_id, domain_id, date=None
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -3304,7 +3330,9 @@ class IBMQradar:
     def _transform_successful_logon_data(
         self, data_list, integration_id, domain_id, full_date
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:
@@ -3348,7 +3376,9 @@ class IBMQradar:
     def _transform_remote_users_data(
         self, data_list, integration_id, domain_id, full_date
     ):
-        name_to_id_map = DBMappings.get_db_id_to_id_mapping(DuIbmQradarTenants)
+        name_to_id_map = DBMappings.get_db_id_to_id_mapping(
+            DuIbmQradarTenants, integration_id=integration_id
+        )
         tenant_id = name_to_id_map.get(domain_id)
 
         if not tenant_id:

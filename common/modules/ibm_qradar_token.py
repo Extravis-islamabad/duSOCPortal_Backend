@@ -165,10 +165,6 @@ class IBMQradarToken:
                 f"An error occurred in IBMQradarToken.test_integration(): {str(e)}"
             )
             return
-            raise Exception(
-                f"An error occurred in IBMQradarToken.test_integration(): {str(e)}"
-            )
-            return
 
     def _get_tenants(self):
         """
