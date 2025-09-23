@@ -1247,6 +1247,7 @@ def sync_ibm_qradar_data():
             port=result.port,
             integration_id=result.integration.id,
         )
+        sync_event_log_sources_types.delay()
         sync_event_log_assets.delay(
             username=result.username,
             password=result.password,
@@ -1254,7 +1255,6 @@ def sync_ibm_qradar_data():
             port=result.port,
             integration_id=result.integration.id,
         )
-        sync_event_log_sources_types_token.delay()
         sync_offenses.delay()
 
 
@@ -1285,13 +1285,13 @@ def sync_ibm_qradar_data_token():
             port=result.port,
             integration_id=result.integration.id,
         )
+        sync_event_log_sources_types_token.delay()
         sync_event_log_assets_token.delay(
             api_key=result.api_key,
             ip_address=result.ip_address,
             port=result.port,
             integration_id=result.integration.id,
         )
-        sync_event_log_sources_types.delay()
         sync_offenses_token.delay()
 
 
