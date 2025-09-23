@@ -1,4 +1,5 @@
 from cryptography.fernet import Fernet
+from loguru import logger
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -113,6 +114,7 @@ def test_integration_connection(
             ) as cyware:
                 response = cyware.get_alert_list(timeout=10)
                 if response.status_code != 200:
+                    logger.error(f"Cyware.get_alert_list() Failed: {response.text}")
                     raise serializers.ValidationError(
                         "Cyware integration is not accessible."
                     )
