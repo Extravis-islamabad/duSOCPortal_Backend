@@ -11,7 +11,9 @@ from integration.models import Integration, ThreatIntelligenceSubTypes
 
 class DuIbmQradarTenants(models.Model):
     id = models.AutoField(primary_key=True)
-    db_id = models.IntegerField(unique=True)
+    db_id = (
+        models.IntegerField()
+    )  # Removed unique=True to allow same db_id with different integration_id
     name = models.CharField(max_length=255, blank=True, default=None)
     integration = models.ForeignKey(
         Integration,
@@ -206,7 +208,9 @@ class IBMQraderAllowedInbounds(models.Model):
 
 class IBMQradarEventCollector(models.Model):
     id = models.AutoField(primary_key=True)
-    db_id = models.IntegerField(unique=True)
+    db_id = (
+        models.IntegerField()
+    )  # Removed unique=True to allow same db_id with different integration_id
     name = models.CharField(max_length=255, blank=True, default=None)
     host_id = models.IntegerField()
     component_name = models.CharField(max_length=255, blank=True, default=None)
@@ -228,7 +232,9 @@ class IBMQradarEventCollector(models.Model):
 
 class IBMQradarLogSourceTypes(models.Model):
     id = models.AutoField(primary_key=True)
-    db_id = models.IntegerField(unique=True)
+    db_id = (
+        models.IntegerField()
+    )  # Removed unique=True to allow same db_id with different integration_id
     name = models.CharField(max_length=255)
     version = models.CharField(max_length=50, blank=True, default=None, null=True)
     integration = models.ForeignKey(
@@ -248,7 +254,9 @@ class IBMQradarLogSourceTypes(models.Model):
 
 
 class IBMQradarAssetsGroup(models.Model):
-    db_id = models.IntegerField(unique=True)
+    db_id = (
+        models.IntegerField()
+    )  # Removed unique=True to allow same db_id with different integration_id
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     owner = models.CharField(max_length=100)
@@ -287,7 +295,9 @@ class IBMQradarAssetsGroup(models.Model):
 
 class IBMQradarAssests(models.Model):
     id = models.AutoField(primary_key=True)
-    db_id = models.IntegerField(unique=True)
+    db_id = (
+        models.IntegerField()
+    )  # Removed unique=True to allow same db_id with different integration_id
     name = models.CharField(max_length=255, blank=True, default=None)
     description = models.CharField(max_length=255, blank=True, default=None)
     integration = models.ForeignKey(
