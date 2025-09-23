@@ -54,15 +54,19 @@ class PasswordCreation:
 
 class DBMappings:
     @staticmethod
-    def get_db_id_to_id_mapping(model_class):
+    def get_db_id_to_id_mapping(model_class, integration_id=None):
         """
         Returns a dictionary mapping db_id to id for the given model class.
         The model must have 'db_id' and 'id' fields.
 
         :param model_class: A Django model class
+        :param integration_id: Optional integration ID to filter by
         :return: Dictionary {db_id: id}
         """
-        return dict(model_class.objects.values_list("db_id", "id"))
+        queryset = model_class.objects.all()
+        if integration_id is not None and hasattr(model_class, "integration"):
+            queryset = queryset.filter(integration_id=integration_id)
+        return dict(queryset.values_list("db_id", "id"))
 
     @staticmethod
     def get_name_to_id_mapping(model_class):
