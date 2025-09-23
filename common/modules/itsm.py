@@ -158,8 +158,12 @@ class ITSM:
                     f"ITSM._get_accounts() return the status code {response.status_code}"
                 )
                 break
-
-            data = response.json()
+            try:
+                data = response.json()
+            except Exception as e:
+                logger.error(f"ITSM._get_accounts() failed with exception: {str(e)}")
+                raise Exception("ITSM._get_accounts() not accessible")
+                break
             if (
                 data["response_status"][0]["status_code"] != ITSMConstants.STATUS_CODE
                 or data["response_status"][0]["status"] != ITSMConstants.SUCCESS
