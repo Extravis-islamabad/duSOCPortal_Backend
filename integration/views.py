@@ -111,7 +111,7 @@ def test_integration_connection(
                 secret_key=credentials.get("secret_key"),
                 access_key=credentials.get("access_key"),
             ) as cyware:
-                response = cyware.get_alert_list(timeout=5)
+                response = cyware.get_alert_list(timeout=10)
                 if response.status_code != 200:
                     raise serializers.ValidationError(
                         "Cyware integration is not accessible."

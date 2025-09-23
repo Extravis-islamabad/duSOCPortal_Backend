@@ -551,7 +551,7 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                     secret_key=validated_data["secret_key"],
                     access_key=validated_data["access_key"],
                 ) as cyware:
-                    response = cyware.get_alert_list(timeout=5)
+                    response = cyware.get_alert_list(timeout=10)
                     if response.status_code != 200:
                         raise serializers.ValidationError(
                             "Cyware integration is not accessible."
@@ -1304,7 +1304,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                         secret_key=secret_key,
                         access_key=access_key,
                     ) as cyware:
-                        response = cyware.get_alert_list()
+                        response = cyware.get_alert_list(timeout=10)
                         if response.status_code != 200:
                             raise serializers.ValidationError(
                                 "Cyware integration is not accessible."
