@@ -6135,9 +6135,6 @@ class SLABreachedIncidentsView(APIView):
                 & Q(incident_ttdn__isnull=False)
             )
 
-            # Exclude incidents in the Resolved phase (case-insensitive)
-            filters &= ~Q(incident_phase__iexact="Resolved")
-
             # Step 6: Apply non-date filters (same as original)
             if id_filter:
                 filters &= Q(id=id_filter)
