@@ -49,6 +49,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 from tenant.cortex_soar_tasks import sync_notes_for_incident
+from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -107,7 +108,6 @@ from tenant.serializers import (
     RecentIncidentsSerializer,
     TenantRoleSerializer,
 )
-from tenant.threat_intelligence_tasks import sync_threat_intel
 
 
 class PermissionChoicesAPIView(APIView):
@@ -310,7 +310,7 @@ class TestView(APIView):
         #     # data = ibm.test_integration()
         #     data = ibm._get_offenses()
         #     print(data)
-        sync_threat_intel()
+        sync_ibm_qradar_data()
         # sync_ibm_tenant_daily_eps()
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
@@ -6134,6 +6134,9 @@ class SLABreachedIncidentsView(APIView):
                 & Q(incident_ttn__isnull=False)
                 & Q(incident_ttdn__isnull=False)
             )
+
+            # Exclude incidents in the Resolved phase (case-insensitive)
+            filters &= ~Q(incident_phase__iexact="Resolved")
 
             # Step 6: Apply non-date filters (same as original)
             if id_filter:
