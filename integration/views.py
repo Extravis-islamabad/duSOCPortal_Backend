@@ -116,6 +116,7 @@ def test_integration_connection(
                     f"base_url: {cyware.base_url}, secret_key: {cyware.secret_key}, access_key: {cyware.access_key}"
                 )
                 response = cyware.get_alert_list(timeout=10)
+                logger.info(f"response: {response.json()}")
                 if response.status_code != 200:
                     logger.error(
                         f"Cyware.get_alert_list() Failed: {response.status_code}"
