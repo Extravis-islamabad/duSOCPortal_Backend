@@ -9,6 +9,7 @@ from integration.views import (
     IntegrationTypesView,
     TestIntegrationAPIView,
     TestIntegrationConnectionAPIView,
+    TestIntegrationForCywareConnectionAPIView,
     UpdateCredentialView,
 )
 
@@ -48,6 +49,11 @@ urlpatterns = [
         "test_connection/<int:integration_id>/",
         TestIntegrationConnectionAPIView.as_view(),
         name="test-integration-connection",
+    ),
+    path(
+        "test_cyware/<int:integration_id>/",
+        TestIntegrationForCywareConnectionAPIView.as_view(),
+        name="test-cyware-connection",
     ),
     path("get_integration_instances/", GetIntegrationInstanceListView.as_view()),
 ]

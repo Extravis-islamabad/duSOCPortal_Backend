@@ -9,6 +9,7 @@ from authentication.permissions import IsAdminUser, IsReadonlyAdminUser
 from common.constants import EncryptedKeyConstants
 from common.modules.cortex_soar import CortexSOAR
 from common.modules.cyware import Cyware
+from common.modules.cyware_test import CywareTest
 from common.modules.ibm_qradar import IBMQradar
 from common.modules.ibm_qradar_token import IBMQradarToken
 from common.modules.itsm import ITSM
@@ -348,6 +349,49 @@ class TestIntegrationConnectionAPIView(APIView):
                 credentials_type=credentials.credential_type,
                 credentials=credentials_data,
             )
+            return Response(
+                {"message": "Integration connection successful."}, status=200
+            )
+
+        except serializers.ValidationError as ve:
+            return Response({"error": str(ve.detail)}, status=400)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+class TestIntegrationForCywareConnectionAPIView(APIView):
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsReadonlyAdminUser]
+
+    def get(self, request, integration_id):
+        try:
+            integration = Integration.objects.get(id=integration_id)
+        except Integration.DoesNotExist:
+            return Response({"error": "Integration not found."}, status=404)
+
+        credentials = integration.credentials.first()
+        if not credentials:
+            return Response(
+                {"error": "No credentials found for this integration."}, status=400
+            )
+
+        credentials_data = {
+            "username": credentials.username,
+            "password": credentials.password,
+            "api_key": credentials.api_key,
+            "access_key": credentials.access_key,
+            "secret_key": credentials.secret_key,
+            "ip_address": credentials.ip_address,
+            "port": credentials.port,
+            "base_url": credentials.base_url,
+        }
+
+        try:
+            a = CywareTest.test_connectivity()
+            b = CywareTest.get_list_alert()
+            logger.info(a)
+            logger.info(b)
             return Response(
                 {"message": "Integration connection successful."}, status=200
             )
