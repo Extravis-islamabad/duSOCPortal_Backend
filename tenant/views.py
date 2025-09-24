@@ -5659,9 +5659,21 @@ class SLASeverityIncidentsView(APIView):
                 & ~Q(incident_priority__exact="")
             )
 
-            false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & Q(
-                itsm_sync_status__iexact="Done"
+            false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Done")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
             )
+
+            # false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & Q(
+            #     itsm_sync_status__iexact="Done"
+            # )
 
             base_filters = true_positive_filters | false_positive_filters
 
