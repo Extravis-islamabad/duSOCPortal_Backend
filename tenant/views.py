@@ -2253,12 +2253,25 @@ class IncidentsView(APIView):
 
         # Step 5: Initialize filters using same logic as DashboardView
         # Base filters for True Positives (Ready incidents with all required fields)
+        base_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(status__in=["1", "2"])
+            & Q(itsm_sync_status__isnull=False)
+            & Q(incident_priority__isnull=False)
+            & ~Q(incident_priority__exact="")
+        )
+
         true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
             ~Q(owner__isnull=True)
             & ~Q(owner__exact="")
             & Q(incident_tta__isnull=False)
             & Q(incident_ttn__isnull=False)
             & Q(incident_ttdn__isnull=False)
+            & Q(status__in=["1", "2"])
             & Q(itsm_sync_status__isnull=False)
             & Q(itsm_sync_status__iexact="Ready")
             & Q(incident_priority__isnull=False)
@@ -2266,14 +2279,11 @@ class IncidentsView(APIView):
         )
 
         # Base filters for False Positives (Done incidents)
-        false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
-            itsm_sync_status__iexact="Done"
-        )
+        false_positive_filters = Q(itsm_sync_status__iexact="Done")
 
         # Handle false positives parameter
         if false_positives:
-            # For false positives only, use false_positive_filters
-            filters = false_positive_filters
+            filters = base_filters & false_positive_filters
         else:
             # Include both true positives AND false positives (same as DashboardView)
             filters = true_positive_filters | false_positive_filters
