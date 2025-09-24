@@ -7,14 +7,13 @@ from .views import (
     LDAPGroupListView,
     LDAPGroupUsersView,
     LDAPUsersAPIView,
-    UserCreateAPIView,
     UserDetailsAPIView,
     UserLoginAPIView,
     UserLogoutAPIView,
 )
 
 urlpatterns = [
-    path("create_user/", UserCreateAPIView.as_view(), name="user-create"),
+    # path("create_user/", UserCreateAPIView.as_view(), name="user-create"),
     path("login/", UserLoginAPIView.as_view(), name="user-login"),
     path("admin/login/", AdminLoginAPIView.as_view(), name="admin-login"),
     path("logout/", UserLogoutAPIView.as_view(), name="user-logout"),
