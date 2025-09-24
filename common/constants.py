@@ -427,7 +427,7 @@ class RBACConstants:
 
 
 class CywareConstants:
-    EXPIRATION_MARGIN_TIME = 300
+    EXPIRATION_MARGIN_TIME = 20
     LIST_ALERT_ENDPOINT = "csap/v1/list_alert/"
     TAGS_ENDPOINT = "api/csap/v1/tag/"
     GROUPS_ENDPOINT = "api/csap/v1/list_recipient_group/"

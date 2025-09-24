@@ -86,6 +86,7 @@ class Cyware:
         """
         return int(time.time() + CywareConstants.EXPIRATION_MARGIN_TIME)
 
+
     def signature(self) -> str:
         """
         Generate the signature required for authentication to Cyware.
@@ -101,6 +102,15 @@ class Cyware:
         hashed = hmac.new(self.secret_key.encode(), to_sign.encode(), hashlib.sha1)
         return base64.b64encode(hashed.digest()).decode()
 
+    # def signature(self) -> str:
+    #     """
+    #     Computes and returns the API request signature.
+    #     """
+    #     to_sign = f"{self.access_key}\n{self.expiry}"
+    #     hashed = hmac.new(
+    #         self.secret_key.encode("utf-8"), to_sign.encode("utf-8"), hashlib.sha1
+    #     )
+    #     return base64.b64encode(hashed.digest()).decode("utf-8")
     def get_alert_list(
         self, page: int = 1, page_size: int = 20, timeout=SSLConstants.TIMEOUT
     ):

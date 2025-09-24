@@ -8,8 +8,8 @@ import urllib.parse
 import requests
 
 base_url = "https://du.cyware.com/api/"  # nosec
-access_id = "a78b2121-087c-497e-92d0-ba26896b8622" # nosec
-secret_key = "c2400e30-6380-4f1d-948f-322e3f59c9e3"# nosec
+access_id = "a78b2121-087c-497e-92d0-ba26896b8622"  # nosec
+secret_key = "c2400e30-6380-4f1d-948f-322e3f59c9e3"  # nosec
 
 expiration_margin_time = 20  # seconds
 
