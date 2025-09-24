@@ -564,20 +564,23 @@ class NonActiveTenantsAPIView(APIView):
                     distinct=True,
                 ),
             )
-            # Only include companies where:
-            # 1. They have at least one tenant (total_tenant_count > 0)
+            # Include companies where:
+            # 1. They have NO tenants/users (total_tenant_count = 0), OR
             # 2. ALL tenants are inactive (active_tenant_count = 0 and inactive_tenant_count > 0)
             .filter(
-                total_tenant_count__gt=0,
-                active_tenant_count=0,
-                inactive_tenant_count__gt=0,
+                Q(total_tenant_count=0)
+                | Q(  # Companies with no users
+                    active_tenant_count=0, inactive_tenant_count__gt=0
+                )  # Companies where all users are inactive
             )
             .order_by("id")
         )
 
         if not companies.exists():
             return Response(
-                {"message": "No companies found where all users are inactive."},
+                {
+                    "message": "No companies found with no users or where all users are inactive."
+                },
                 status=200,
             )
 
@@ -592,7 +595,7 @@ class NonActiveTenantsAPIView(APIView):
         )
 
         logger.success(
-            f"Found {companies.count()} companies where all users are inactive."
+            f"Found {companies.count()} companies with no users or where all users are inactive."
         )
 
         return paginator.get_paginated_response(serializer.data)

@@ -49,7 +49,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.ibm_qradar_tasks import sync_ibm_qradar_data
+from tenant.ibm_qradar_tasks import sync_ibm_tenant_daily_eps_token
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -310,7 +310,7 @@ class TestView(APIView):
         #     # data = ibm.test_integration()
         #     data = ibm._get_offenses()
         #     print(data)
-        sync_ibm_qradar_data()
+        sync_ibm_tenant_daily_eps_token()
         # sync_ibm_tenant_daily_eps()
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
