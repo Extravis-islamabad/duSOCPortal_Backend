@@ -5671,10 +5671,6 @@ class SLASeverityIncidentsView(APIView):
                 & ~Q(incident_priority__exact="")
             )
 
-            # false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & Q(
-            #     itsm_sync_status__iexact="Done"
-            # )
-
             base_filters = true_positive_filters | false_positive_filters
 
             filters = base_filters
