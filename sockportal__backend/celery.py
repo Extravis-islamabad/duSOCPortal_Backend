@@ -109,10 +109,6 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute="30", hour="1"),  # Run at 1:30 AM every day
         "options": {"queue": "qradar"},
     },
-    # "qradar-tenant-daily-sync-tasks": {
-    #     "task": "tenant.ibm_qradar_tasks.sync_ibm_qradar_daily_sync",
-    #     "schedule": crontab(minute="55", hour="23"),  # Run at 11:55 PM every day
-    # },
     "itsm-sync-tasks": {
         "task": "tenant.itsm_tasks.sync_itsm",
         "schedule": crontab(minute="*/5"),
