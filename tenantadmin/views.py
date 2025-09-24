@@ -1495,10 +1495,21 @@ class TenantSLAMatrixAPIView(APIView):
             & Q(incident_ttdn__isnull=False)
             & Q(itsm_sync_status__isnull=False)
             & Q(itsm_sync_status__iexact="Ready")
+            & Q(incident_priority__isnull=False)
+            & ~Q(incident_priority__exact="")
         )
 
-        # False Positive Logic: Done incidents
-        false_positive_filters = base_filters & Q(itsm_sync_status__iexact="Done")
+        false_positive_filters = base_filters & (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(itsm_sync_status__iexact="Done")
+            & Q(incident_priority__isnull=False)
+            & ~Q(incident_priority__exact="")
+        )
 
         # Combine true positive OR false positive
         return true_positive_filters | false_positive_filters
