@@ -2321,7 +2321,12 @@ class CompanyToolsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request = None
+
     def get(self, request):
+        self.request = request
         company_id = request.query_params.get("company_id")
         logger.info(
             f"Company tools requested by user: {request.user.username}, "
@@ -2357,9 +2362,29 @@ class CompanyToolsAPIView(APIView):
                 company_tools_data = self._get_company_tools(company)
                 companies_tools_data.append(company_tools_data)
 
+            paginator = PageNumberPagination()
+            paginator.page_size = PaginationConstants.PAGE_SIZE
+            paginated_data = paginator.paginate_queryset(
+                companies_tools_data, self.request
+            )
+
+            if paginated_data is None:
+                return Response(
+                    {"error": "Invalid page number requested."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             response_data = {
                 "companies_count": len(companies),
-                "companies": companies_tools_data,
+                "companies": paginated_data,
+                "meta": {
+                    "total_pages": paginator.page.paginator.num_pages,
+                    "current_page": paginator.page.number,
+                    "next": paginator.get_next_link(),
+                    "previous": paginator.get_previous_link(),
+                    "total_items": len(companies_tools_data),
+                    "items_per_page": paginator.page_size,
+                },
             }
 
             logger.success(
@@ -2371,8 +2396,8 @@ class CompanyToolsAPIView(APIView):
         except Exception as e:
             logger.error(f"Error retrieving company tools: {str(e)}")
             return Response(
-                {"error": "Internal server error while retrieving company tools."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"error": f"{str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
     def _get_company_tools(self, company):
