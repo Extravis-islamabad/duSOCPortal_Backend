@@ -698,7 +698,12 @@ class AssetsSummaryAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request = None
+
     def get(self, request):
+        self.request = request
         company_id = request.query_params.get("company_id")
         logger.info(
             f"Assets summary requested by user: {request.user.username}, company_id: {company_id}"
@@ -739,8 +744,8 @@ class AssetsSummaryAPIView(APIView):
         except Exception as e:
             logger.error(f"Error calculating assets summary: {str(e)}")
             return Response(
-                {"error": "Internal server error while calculating assets summary."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"error": f"{str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
     def _get_empty_summary(self):
@@ -807,9 +812,28 @@ class AssetsSummaryAPIView(APIView):
                 }
             )
 
+        # Apply pagination
+        paginator = PageNumberPagination()
+        paginator.page_size = PaginationConstants.PAGE_SIZE
+        paginated_data = paginator.paginate_queryset(companies_summary, self.request)
+
+        if paginated_data is None:
+            return Response(
+                {"error": "Invalid page number requested."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         return {
             "companies_count": len(companies),
-            "companies_summary": companies_summary,
+            "companies_summary": paginated_data,
+            "meta": {
+                "total_pages": paginator.page.paginator.num_pages,
+                "current_page": paginator.page.number,
+                "next": paginator.get_next_link(),
+                "previous": paginator.get_previous_link(),
+                "total_items": len(companies_summary),
+                "items_per_page": paginator.page_size,
+            },
         }
 
 
@@ -1250,7 +1274,12 @@ class TenantSLAMatrixAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request = None
+
     def get(self, request):
+        self.request = request
         company_id = request.query_params.get("company_id")
 
         logger.info(
@@ -1287,9 +1316,30 @@ class TenantSLAMatrixAPIView(APIView):
                 company_sla_data = self._calculate_company_sla_matrix(company, request)
                 companies_sla_data.append(company_sla_data)
 
+            # Apply pagination
+            paginator = PageNumberPagination()
+            paginator.page_size = PaginationConstants.PAGE_SIZE
+            paginated_data = paginator.paginate_queryset(
+                companies_sla_data, self.request
+            )
+
+            if paginated_data is None:
+                return Response(
+                    {"error": "Invalid page number requested."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             response_data = {
                 "companies_count": len(companies),
-                "companies": companies_sla_data,
+                "companies": paginated_data,
+                "meta": {
+                    "total_pages": paginator.page.paginator.num_pages,
+                    "current_page": paginator.page.number,
+                    "next": paginator.get_next_link(),
+                    "previous": paginator.get_previous_link(),
+                    "total_items": len(companies_sla_data),
+                    "items_per_page": paginator.page_size,
+                },
             }
 
             logger.success(
@@ -1301,8 +1351,8 @@ class TenantSLAMatrixAPIView(APIView):
         except Exception as e:
             logger.error(f"Error calculating Tenant SLA Matrix: {str(e)}")
             return Response(
-                {"error": "Internal server error while calculating Tenant SLA Matrix."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"error": f"{str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
     def _calculate_company_sla_matrix(self, company, request):
