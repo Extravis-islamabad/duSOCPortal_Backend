@@ -240,16 +240,18 @@ class TenantDetailAPIView(APIView):
             # Get the primary tenant associated with this company
             tenant = Tenant.objects.filter(company=company).first()
 
-            serializer = TenantDetailSerializer(tenant, context={"request": request})
-            if tenant:
-                logger.success(
-                    f"Tenant details retrieved for company: {company.company_name} (Tenant ID: {tenant.id})"
-                )
-            else:
+            # Create empty tenant instance with company info for empty response
+            if not tenant:
+                tenant = Tenant(company=company)
                 logger.info(
                     f"No tenant found for company: {company.company_name}. Returning empty data."
                 )
+            else:
+                logger.success(
+                    f"Tenant details retrieved for company: {company.company_name} (Tenant ID: {tenant.id})"
+                )
 
+            serializer = TenantDetailSerializer(tenant, context={"request": request})
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Company.DoesNotExist:
