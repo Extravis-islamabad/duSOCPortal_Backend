@@ -239,11 +239,19 @@ class TenantDetailAPIView(APIView):
             company = Company.objects.get(id=company_id)
             # Get the primary tenant associated with this company
             tenant = Tenant.objects.filter(company=company).first()
-            if not tenant:
-                return Response(
-                    {"error": "No tenant associated with this company."},
-                    status=status.HTTP_404_NOT_FOUND,
+
+            serializer = TenantDetailSerializer(tenant, context={"request": request})
+            if tenant:
+                logger.success(
+                    f"Tenant details retrieved for company: {company.company_name} (Tenant ID: {tenant.id})"
                 )
+            else:
+                logger.info(
+                    f"No tenant found for company: {company.company_name}. Returning empty data."
+                )
+
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
         except Company.DoesNotExist:
             logger.warning(
                 f"Company with id {company_id} not found by {request.user.username}"
@@ -252,12 +260,6 @@ class TenantDetailAPIView(APIView):
                 {"error": "Company not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
-        serializer = TenantDetailSerializer(tenant, context={"request": request})
-        logger.success(
-            f"Tenant details retrieved for company: {company.company_name} (Tenant ID: {tenant.id})"
-        )
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class TenantsByCompanyAPIView(APIView):
