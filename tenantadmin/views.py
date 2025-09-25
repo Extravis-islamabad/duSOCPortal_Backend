@@ -822,7 +822,12 @@ class IncidentPrioritySummaryAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request = None
+
     def get(self, request):
+        self.request = request
         company_id = request.query_params.get("company_id")
         priority = request.query_params.get("priority")  # 1, 2, 3, 4
 
@@ -867,9 +872,9 @@ class IncidentPrioritySummaryAPIView(APIView):
             logger.error(f"Error calculating incident priority summary: {str(e)}")
             return Response(
                 {
-                    "error": "Internal server error while calculating incident priority summary."
+                    "error": f"{str(e)}",
                 },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
     def _get_empty_incident_summary(self):
@@ -882,6 +887,8 @@ class IncidentPrioritySummaryAPIView(APIView):
     def _calculate_incident_priority_summary(self, companies, priority_filter):
         """Calculate incident priority summary per company"""
         companies_summary = []
+        paginator = PageNumberPagination()
+        paginator.page_size = PaginationConstants.PAGE_SIZE
 
         for company in companies:
             # Get all SOAR tenant IDs for this company
@@ -915,19 +922,42 @@ class IncidentPrioritySummaryAPIView(APIView):
 
             # Get priority breakdown for this company
             priority_summary = self._get_priority_breakdown(base_filters)
+            # total_incidents = sum(item['total_count'] for item in priority_summary)
 
             companies_summary.append(
                 {
                     "company_id": company.id,
                     "company_name": company.company_name,
                     "priority_summary": priority_summary,
+                    # "total_incidents": total_incidents,
                 }
             )
 
-        return {
+        # Sort companies by total incidents in descending order
+        # companies_summary.sort(key=lambda x: x["total_incidents"], reverse=True)
+
+        # Apply pagination to companies_summary
+        paginated_companies = paginator.paginate_queryset(
+            companies_summary, self.request
+        )
+
+        # Maintain original response structure
+        summary_response = {
             "companies_count": len(companies),
-            "companies_summary": companies_summary,
+            "companies_summary": paginated_companies,
         }
+
+        # Add pagination metadata without modifying the original structure
+        summary_response["meta"] = {
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "total_items": len(companies_summary),
+            "items_per_page": paginator.page_size,
+        }
+
+        return summary_response
 
     def _get_priority_breakdown(self, base_filters):
         """Get total incident counts by priority (only true positive OR false positive)"""
@@ -1050,10 +1080,8 @@ class IncidentStatusSummaryAPIView(APIView):
         except Exception as e:
             logger.error(f"Error calculating incident status summary: {str(e)}")
             return Response(
-                {
-                    "error": "Internal server error while calculating incident status summary."
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"error": f"{str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
     def _get_empty_status_summary(self):
