@@ -1106,6 +1106,8 @@ class IncidentStatusSummaryAPIView(APIView):
     def _calculate_incident_status_summary(self, companies, request):
         """Calculate incident status summary per company with date filtering"""
         companies_summary = []
+        paginator = PageNumberPagination()
+        paginator.page_size = PaginationConstants.PAGE_SIZE
 
         for company in companies:
             # Get all SOAR tenant IDs for this company
@@ -1154,10 +1156,29 @@ class IncidentStatusSummaryAPIView(APIView):
                 }
             )
 
-        return {
+        # Sort companies by total_incidents in descending order
+        # companies_summary.sort(key=lambda x: x["total_incidents"], reverse=True)
+
+        # Apply pagination to companies_summary
+        paginated_companies = paginator.paginate_queryset(companies_summary, request)
+
+        # Maintain original response structure
+        summary_response = {
             "companies_count": len(companies),
-            "companies_summary": companies_summary,
+            "companies_summary": paginated_companies,
         }
+
+        # Add pagination metadata without modifying the original structure
+        summary_response["meta"] = {
+            "total_pages": paginator.page.paginator.num_pages,
+            "current_page": paginator.page.number,
+            "next": paginator.get_next_link(),
+            "previous": paginator.get_previous_link(),
+            "total_items": len(companies_summary),
+            "items_per_page": paginator.page_size,
+        }
+
+        return summary_response
 
     def _get_valid_incidents_filter(self, soar_ids):
         """Get filter for incidents that match true positive OR false positive logic"""
