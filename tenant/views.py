@@ -2553,6 +2553,353 @@ class IncidentsView(APIView):
             )
 
 
+# class IncidentDetailView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request, incident_db_id):
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response({"error": "Tenant not found."}, status=404)
+
+#         soar_integrations = tenant.company.integrations.filter(
+#             integration_type=IntegrationTypes.SOAR_INTEGRATION,
+#             soar_subtype=SoarSubTypes.CORTEX_SOAR,
+#             status=True,
+#         ).first()
+#         if not soar_integrations:
+#             return Response(
+#                 {"error": "No active SOAR integration configured for tenant."},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         soar_tenants = tenant.company.soar_tenants.all()
+#         if not soar_tenants:
+#             return Response({"error": "No SOAR tenants found."}, status=404)
+
+#         soar_ids = [t.id for t in soar_tenants]
+
+#         if not soar_ids:
+#             return Response({"error": "No SOAR tenants found."}, status=404)
+
+#         try:
+#             # Fetch incident using numeric incident_id
+#             incident = (
+#                 DUCortexSOARIncidentFinalModel.objects.filter(
+#                     db_id=incident_db_id, cortex_soar_tenant__in=soar_ids
+#                 )
+#                 .values(
+#                     "id",
+#                     "db_id",
+#                     "account",
+#                     "name",
+#                     "status",
+#                     # "severity",
+#                     "incident_priority",
+#                     "created",
+#                     "modified",
+#                     "owner",
+#                     "playbook_id",
+#                     "occured",
+#                     "sla",
+#                     "closed",
+#                     "closing_user_id",
+#                     "reason",
+#                     "incident_phase",
+#                     "qradar_category",
+#                     "qradar_sub_category",
+#                     "incident_tta",
+#                     "tta_calculation",
+#                     "incident_tta",
+#                     "incident_ttn",
+#                     "incident_ttdn",
+#                     "source_ips",
+#                     "log_source_type",
+#                     "list_of_rules_offense",
+#                     "mitre_tactic",
+#                     "mitre_technique",
+#                     "configuration_item",
+#                 )
+#                 .first()
+#             )
+
+#             if not incident:
+#                 return Response(
+#                     {"error": "Incident not found"}, status=status.HTTP_404_NOT_FOUND
+#                 )
+
+#             # Calculate SLA breach information
+#             sla_breach_info = {
+#                 "tta": {"is_breached": False, "breach_minutes": 0, "sla_minutes": 0},
+#                 "ttn": {"is_breached": False, "breach_minutes": 0, "sla_minutes": 0},
+#                 "ttdn": {"is_breached": False, "breach_minutes": 0, "sla_minutes": 0},
+#             }
+
+#             # Get SLA metrics for the incident's priority level
+#             if (
+#                 incident["incident_priority"]
+#                 and incident["occured"]
+#                 and incident["incident_tta"]
+#                 and incident["incident_ttn"]
+#                 and incident["incident_ttdn"]
+#             ):
+#                 # Get SLA configuration
+#                 if tenant.company.is_default_sla:
+#                     sla_metrics = DefaultSoarSlaMetric.objects.all()
+#                 else:
+#                     sla_metrics = SoarTenantSlaMetric.objects.filter(
+#                         soar_tenant__in=soar_tenants, company=tenant.company
+#                     )
+
+#                 # Find matching SLA level for the incident's priority
+#                 sla_metric = None
+#                 for metric in sla_metrics:
+#                     sla_level_label = SlaLevelChoices(metric.sla_level).label
+#                     if incident["incident_priority"] == sla_level_label:
+#                         sla_metric = metric
+#                         break
+
+#                 if sla_metric:
+#                     occured = incident["occured"]
+
+#                     # Calculate TTA breach
+#                     if incident["incident_tta"]:
+#                         tta_delta_minutes = (
+#                             incident["incident_tta"] - occured
+#                         ).total_seconds() / 60
+#                         sla_breach_info["tta"]["sla_minutes"] = sla_metric.tta_minutes
+#                         sla_breach_info["tta"]["actual_minutes"] = round(
+#                             tta_delta_minutes
+#                         )
+#                         if tta_delta_minutes > sla_metric.tta_minutes:
+#                             sla_breach_info["tta"]["is_breached"] = True
+#                             sla_breach_info["tta"]["breach_minutes"] = round(
+#                                 tta_delta_minutes - sla_metric.tta_minutes, 2
+#                             )
+
+#                     # Calculate TTN breach
+#                     if incident["incident_ttn"]:
+#                         ttn_delta_minutes = (
+#                             incident["incident_ttn"] - occured
+#                         ).total_seconds() / 60
+#                         sla_breach_info["ttn"]["sla_minutes"] = sla_metric.ttn_minutes
+#                         sla_breach_info["ttn"]["actual_minutes"] = round(
+#                             ttn_delta_minutes
+#                         )
+#                         if ttn_delta_minutes > sla_metric.ttn_minutes:
+#                             sla_breach_info["ttn"]["is_breached"] = True
+#                             sla_breach_info["ttn"]["breach_minutes"] = round(
+#                                 ttn_delta_minutes - sla_metric.ttn_minutes, 2
+#                             )
+
+#                     # Calculate TTDN breach
+#                     if incident["incident_ttdn"]:
+#                         ttdn_delta_minutes = (
+#                             incident["incident_ttdn"] - occured
+#                         ).total_seconds() / 60
+#                         sla_breach_info["ttdn"]["sla_minutes"] = sla_metric.ttdn_minutes
+#                         sla_breach_info["ttdn"]["actual_minutes"] = round(
+#                             ttdn_delta_minutes
+#                         )
+#                         if ttdn_delta_minutes > sla_metric.ttdn_minutes:
+#                             sla_breach_info["ttdn"]["is_breached"] = True
+#                             sla_breach_info["ttdn"]["breach_minutes"] = round(
+#                                 ttdn_delta_minutes - sla_metric.ttdn_minutes, 2
+#                             )
+
+#             # Build timeline
+#             timeline = []
+#             if incident["created"]:
+#                 timeline.append(
+#                     {
+#                         "icon": "add_alert",
+#                         "title": "Incident created",
+#                         "time": incident["created"],
+#                         "description": "System created the incident",
+#                         "detail": f"Source: {incident['qradar_category'] or 'SIEM Alert'}",
+#                     }
+#                 )
+
+#             if incident["owner"]:
+#                 timeline.append(
+#                     {
+#                         "icon": "person",
+#                         "title": "Assigned",
+#                         "time": incident["modified"],
+#                         "description": f"Incident assigned to {incident['owner']}",
+#                         "detail": "Action: Changed assignee from Unassigned",
+#                     }
+#                 )
+
+#             if incident["status"] == "Closed" and incident["closed"]:
+#                 timeline.append(
+#                     {
+#                         "icon": "task_alt",
+#                         "title": "Incident closed",
+#                         "time": incident["closed"],
+#                         "description": f"Closed by {incident['closing_user_id'] or 'System'}",
+#                         "detail": f"Reason: {incident['reason'] or 'Not specified'}",
+#                     }
+#                 )
+
+#             if incident["incident_tta"]:
+#                 timeline.append(
+#                     {
+#                         "icon": "schedule",
+#                         "title": "Incident acknowledged",
+#                         "time": incident["incident_tta"],
+#                         "description": "Time to acknowledge recorded",
+#                         "detail": f"TTA: {incident['tta_calculation'] or 'Standard calculation'}",
+#                     }
+#                 )
+
+#             # Sort timeline by time (reverse chronological)
+#             timeline.sort(key=lambda x: x["time"], reverse=True)
+
+#             # Process JSON fields
+#             source_ips = []
+#             if incident["source_ips"]:
+#                 try:
+#                     source_ips = (
+#                         json.loads(incident["source_ips"])
+#                         if isinstance(incident["source_ips"], str)
+#                         else incident["source_ips"]
+#                     )
+#                 except (json.JSONDecodeError, TypeError):
+#                     source_ips = []
+
+#             # Create related items
+#             related_items = {"alerts": [], "users": [], "assets": []}
+
+#             ticket_id = None
+#             ticket_db_id = None
+#             ticket = DuITSMFinalTickets.objects.filter(
+#                 soar_id=incident["db_id"], account_name=incident["account"]
+#             ).first()
+#             if ticket is None:
+#                 ticket_db_id = None
+#             else:
+#                 ticket_id = ticket.id
+#                 ticket_db_id = ticket.db_id
+#             # Format source IPs and log source types
+#             offense_db_id = None
+#             offense_id = None
+#             offense_db_id = incident["name"].split()[0]
+#             offenses = IBMQradarOffense.objects.filter(db_id=offense_db_id).first()
+#             if offenses is None:
+#                 offense_db_id = None
+#             else:
+#                 offense_id = offenses.id
+#             source_ips_str = ", ".join(source_ips) if source_ips else "Unknown"
+#             account_name = f"acc_{incident['account']}"
+#             notes = DUSoarNotes.objects.filter(
+#                 incident_id=incident["id"],
+#                 integration_id=soar_integrations.id,
+#                 account__iexact=account_name,
+#             ).order_by("-created")
+#             if not notes.exists():
+#                 result = IntegrationCredentials.objects.filter(
+#                     integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
+#                     integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
+#                     credential_type=CredentialTypes.API_KEY,
+#                     integration__id=soar_integrations.id,
+#                 ).first()
+#                 sync_notes_for_incident(
+#                     token=result.api_key,
+#                     ip_address=result.ip_address,
+#                     port=result.port,
+#                     integration_id=result.id,
+#                     incident_id=incident["id"],
+#                 )
+#                 notes = DUSoarNotes.objects.filter(
+#                     incident_id=incident["id"],
+#                     integration_id=soar_integrations.id,
+#                     account__iexact=account_name,
+#                 ).order_by("-created")
+
+#             notes_by_user_dict = defaultdict(list)
+#             for note in notes:
+#                 user = note.user or "DBot"
+#                 notes_by_user_dict[user].append(
+#                     {
+#                         "id": note.id,
+#                         "db_id": note.db_id,
+#                         "category": note.category or "",
+#                         "content": note.content or "",
+#                         "created": note.created.strftime("%Y-%m-%d %I:%M %p")
+#                         if note.created
+#                         else "",
+#                     }
+#                 )
+
+#             # Convert to list of dicts
+#             notes_by_user = [
+#                 {"user": user, "notes": notes_list}
+#                 for user, notes_list in notes_by_user_dict.items()
+#             ]
+
+#             # Format response
+#             response = {
+#                 "incident": {
+#                     "id": incident["db_id"],
+#                     "db_id": incident["db_id"],
+#                     "account": incident["account"],
+#                     "name": incident["name"],
+#                     "status": incident["status"],
+#                     # "created": (
+#                     #     incident["created"].strftime("%Y-%m-%d %I:%M %p")
+#                     #     if incident["created"]
+#                     #     else "Unknown"
+#                     # ),
+#                     "modified": (
+#                         incident["modified"] if incident["modified"] else "Unknown"
+#                     ),
+#                     "assignee": (
+#                         "N/A" if incident["owner"] == " " else incident["owner"]
+#                     ),
+#                     "description": incident["name"].strip().split(" ", 1)[1],
+#                     "customFields": {
+#                         "phase": incident["incident_phase"] or "Detection",
+#                         "priority": incident["incident_priority"] or None,
+#                         # "severity": incident["severity"],
+#                         "sourceIPs": source_ips_str,
+#                         "logSourceType": incident["log_source_type"],
+#                         "category": incident["qradar_category"] or None,
+#                         "sub_category": incident["qradar_sub_category"] or None,
+#                         "mitre_tactic": incident["mitre_tactic"],
+#                         "mitre_technique": incident["mitre_technique"],
+#                         "configuration_item": incident["configuration_item"],
+#                     },
+#                     "timeline": timeline,
+#                     "relatedItems": related_items,
+#                     "sla": incident["sla"],
+#                     "playbook": incident["playbook_id"],
+#                     "occurred": (
+#                         incident["occured"] if incident["occured"] else "Unknown"
+#                     ),
+#                     "offense_id": offense_id,
+#                     "offense_db_id": offense_db_id,
+#                     "ticket_id": ticket_id,
+#                     "ticket_db_id": ticket_db_id,
+#                     "tta": incident["incident_tta"],
+#                     "ttn": incident["incident_ttn"],
+#                     "ttdn": incident["incident_ttdn"],
+#                     "sla_breach_info": sla_breach_info,
+#                     "notes": notes_by_user,
+#                     "list_of_rules_offense": incident["list_of_rules_offense"],
+#                     "closing_reason": incident["reason"],
+#                 }
+#             }
+
+#             return Response(response, status=status.HTTP_200_OK)
+
+#         except Exception as e:
+#             logger.error(f"Error in IncidentDetailView: {str(e)}")
+#             return Response(
+#                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+#             )
+
 class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -2595,7 +2942,6 @@ class IncidentDetailView(APIView):
                     "account",
                     "name",
                     "status",
-                    # "severity",
                     "incident_priority",
                     "created",
                     "modified",
@@ -2631,9 +2977,27 @@ class IncidentDetailView(APIView):
 
             # Calculate SLA breach information
             sla_breach_info = {
-                "tta": {"is_breached": False, "breach_minutes": 0, "sla_minutes": 0},
-                "ttn": {"is_breached": False, "breach_minutes": 0, "sla_minutes": 0},
-                "ttdn": {"is_breached": False, "breach_minutes": 0, "sla_minutes": 0},
+                "tta": {
+                    "is_breached": False,
+                    "breach_minutes": 0,
+                    "sla_minutes": 0,
+                    "actual_minutes": 0,
+                    "actual_time": None,
+                },
+                "ttn": {
+                    "is_breached": False,
+                    "breach_minutes": 0,
+                    "sla_minutes": 0,
+                    "actual_minutes": 0,
+                    "actual_time": None,
+                },
+                "ttdn": {
+                    "is_breached": False,
+                    "breach_minutes": 0,
+                    "sla_minutes": 0,
+                    "actual_minutes": 0,
+                    "actual_time": None,
+                },
             }
 
             # Get SLA metrics for the incident's priority level
@@ -2672,6 +3036,7 @@ class IncidentDetailView(APIView):
                         sla_breach_info["tta"]["actual_minutes"] = round(
                             tta_delta_minutes
                         )
+                        sla_breach_info["tta"]["actual_time"] = incident["incident_tta"]
                         if tta_delta_minutes > sla_metric.tta_minutes:
                             sla_breach_info["tta"]["is_breached"] = True
                             sla_breach_info["tta"]["breach_minutes"] = round(
@@ -2687,6 +3052,7 @@ class IncidentDetailView(APIView):
                         sla_breach_info["ttn"]["actual_minutes"] = round(
                             ttn_delta_minutes
                         )
+                        sla_breach_info["ttn"]["actual_time"] = incident["incident_ttn"]
                         if ttn_delta_minutes > sla_metric.ttn_minutes:
                             sla_breach_info["ttn"]["is_breached"] = True
                             sla_breach_info["ttn"]["breach_minutes"] = round(
@@ -2702,6 +3068,7 @@ class IncidentDetailView(APIView):
                         sla_breach_info["ttdn"]["actual_minutes"] = round(
                             ttdn_delta_minutes
                         )
+                        sla_breach_info["ttdn"]["actual_time"] = incident["incident_ttdn"]
                         if ttdn_delta_minutes > sla_metric.ttdn_minutes:
                             sla_breach_info["ttdn"]["is_breached"] = True
                             sla_breach_info["ttdn"]["breach_minutes"] = round(
@@ -2847,11 +3214,6 @@ class IncidentDetailView(APIView):
                     "account": incident["account"],
                     "name": incident["name"],
                     "status": incident["status"],
-                    # "created": (
-                    #     incident["created"].strftime("%Y-%m-%d %I:%M %p")
-                    #     if incident["created"]
-                    #     else "Unknown"
-                    # ),
                     "modified": (
                         incident["modified"] if incident["modified"] else "Unknown"
                     ),
@@ -2862,7 +3224,6 @@ class IncidentDetailView(APIView):
                     "customFields": {
                         "phase": incident["incident_phase"] or "Detection",
                         "priority": incident["incident_priority"] or None,
-                        # "severity": incident["severity"],
                         "sourceIPs": source_ips_str,
                         "logSourceType": incident["log_source_type"],
                         "category": incident["qradar_category"] or None,
@@ -2899,8 +3260,6 @@ class IncidentDetailView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
 class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
