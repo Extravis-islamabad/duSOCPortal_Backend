@@ -1440,9 +1440,8 @@ class TypeDistributionView(APIView):
                 .values("qradar_category")
                 .annotate(count=Count("id"))
                 .order_by("-count")
-                .exclude(
-                    qradar_category__isnull=True
-                )  # Exclude NULL qradarcategory values
+                .exclude(qradar_category__isnull=True)
+                .exclude(qradar_category__exact="")
             )
 
             # Transform data to match Flask output
@@ -2632,25 +2631,25 @@ class IncidentDetailView(APIView):
             # Calculate SLA breach information
             sla_breach_info = {
                 "tta": {
-                    "is_breached": False, 
-                    "breach_minutes": 0, 
+                    "is_breached": False,
+                    "breach_minutes": 0,
                     "sla_minutes": 0,
                     "actual_minutes": 0,
-                    "actual_datetime": None
+                    "actual_datetime": None,
                 },
                 "ttn": {
-                    "is_breached": False, 
-                    "breach_minutes": 0, 
+                    "is_breached": False,
+                    "breach_minutes": 0,
                     "sla_minutes": 0,
                     "actual_minutes": 0,
-                    "actual_datetime": None
+                    "actual_datetime": None,
                 },
                 "ttdn": {
-                    "is_breached": False, 
-                    "breach_minutes": 0, 
+                    "is_breached": False,
+                    "breach_minutes": 0,
                     "sla_minutes": 0,
                     "actual_minutes": 0,
-                    "actual_datetime": None
+                    "actual_datetime": None,
                 },
             }
 
@@ -2686,15 +2685,17 @@ class IncidentDetailView(APIView):
                         tta_delta_minutes = (
                             incident["incident_tta"] - occured
                         ).total_seconds() / 60
-                        
+
                         # Calculate actual datetime using your logic: B = occured + a
                         a = incident["incident_tta"] - occured
                         B_tta = occured + a  # This gives us the actual datetime
-                        
+
                         sla_breach_info["tta"]["sla_minutes"] = sla_metric.tta_minutes
-                        sla_breach_info["tta"]["actual_minutes"] = round(tta_delta_minutes)
+                        sla_breach_info["tta"]["actual_minutes"] = round(
+                            tta_delta_minutes
+                        )
                         sla_breach_info["tta"]["actual_datetime"] = B_tta
-                        
+
                         if tta_delta_minutes > sla_metric.tta_minutes:
                             sla_breach_info["tta"]["is_breached"] = True
                             sla_breach_info["tta"]["breach_minutes"] = round(
@@ -2706,15 +2707,17 @@ class IncidentDetailView(APIView):
                         ttn_delta_minutes = (
                             incident["incident_ttn"] - occured
                         ).total_seconds() / 60
-                        
+
                         # Calculate actual datetime using your logic: B = occured + a
                         a = incident["incident_ttn"] - occured
                         B_ttn = occured + a  # This gives us the actual datetime
-                        
+
                         sla_breach_info["ttn"]["sla_minutes"] = sla_metric.ttn_minutes
-                        sla_breach_info["ttn"]["actual_minutes"] = round(ttn_delta_minutes)
+                        sla_breach_info["ttn"]["actual_minutes"] = round(
+                            ttn_delta_minutes
+                        )
                         sla_breach_info["ttn"]["actual_datetime"] = B_ttn
-                        
+
                         if ttn_delta_minutes > sla_metric.ttn_minutes:
                             sla_breach_info["ttn"]["is_breached"] = True
                             sla_breach_info["ttn"]["breach_minutes"] = round(
@@ -2726,15 +2729,17 @@ class IncidentDetailView(APIView):
                         ttdn_delta_minutes = (
                             incident["incident_ttdn"] - occured
                         ).total_seconds() / 60
-                        
+
                         # Calculate actual datetime using your logic: B = occured + a
                         a = incident["incident_ttdn"] - occured
                         B_ttdn = occured + a  # This gives us the actual datetime
-                        
+
                         sla_breach_info["ttdn"]["sla_minutes"] = sla_metric.ttdn_minutes
-                        sla_breach_info["ttdn"]["actual_minutes"] = round(ttdn_delta_minutes)
+                        sla_breach_info["ttdn"]["actual_minutes"] = round(
+                            ttdn_delta_minutes
+                        )
                         sla_breach_info["ttdn"]["actual_datetime"] = B_ttdn
-                        
+
                         if ttdn_delta_minutes > sla_metric.ttdn_minutes:
                             sla_breach_info["ttdn"]["is_breached"] = True
                             sla_breach_info["ttdn"]["breach_minutes"] = round(
@@ -2932,6 +2937,7 @@ class IncidentDetailView(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
