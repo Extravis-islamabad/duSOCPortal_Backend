@@ -8896,6 +8896,257 @@ class ConsolidatedReport(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
+# class DetailedEPSReportAPIView(APIView):
+#     authentication_classes = [JWTAuthentication]
+#     permission_classes = [IsTenant]
+
+#     def get(self, request):
+#         from django.db.models.functions import TruncWeek
+#         from pytz import timezone as pytz_timezone
+
+#         try:
+#             filter_value = int(
+#                 request.query_params.get("filter_type", FilterType.WEEK.value)
+#             )
+#             # Validate that only supported filter types are used
+#             if filter_value not in [
+#                 FilterType.TODAY.value,
+#                 FilterType.WEEK.value,
+#                 FilterType.MONTH.value,
+#                 FilterType.CUSTOM_RANGE.value,
+#             ]:
+#                 return Response(
+#                     {
+#                         "error": "Unsupported filter_type. Use 1 (Today), 2 (Week), 3 (Month), or 9 (Custom Range)."
+#                     },
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+#             filter_enum = FilterType(filter_value)
+#         except (ValueError, KeyError):
+#             return Response(
+#                 {"error": "Invalid filter value."}, status=status.HTTP_400_BAD_REQUEST
+#             )
+
+#         try:
+#             tenant = Tenant.objects.get(tenant=request.user)
+#         except Tenant.DoesNotExist:
+#             return Response(
+#                 {"error": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
+#             )
+
+#         now = timezone.now()
+
+#         # Time range & truncation logic (limited to supported filter types)
+#         if filter_enum == FilterType.TODAY:
+#             dubai_tz = pytz_timezone("Asia/Dubai")
+#             dubai_now = now.astimezone(dubai_tz)
+#             dubai_midnight = dubai_now.replace(
+#                 hour=0, minute=0, second=0, microsecond=0
+#             )
+#             # Convert back to UTC for filtering the UTC-based DB
+#             start_time = dubai_midnight.astimezone(pytz_timezone("UTC"))
+#             time_trunc = TruncHour("created_at")
+#         elif filter_enum == FilterType.WEEK:
+#             start_time = now - timedelta(days=7)
+#             time_trunc = TruncDay("created_at")
+#         elif filter_enum == FilterType.MONTH:
+#             # Get start of current month and show 4 weeks (28 days back from now)
+#             start_time = now - timedelta(days=28)
+#             time_trunc = TruncWeek("created_at")  # Group by week to get 4 data points
+#         elif filter_enum == FilterType.CUSTOM_RANGE:
+#             start_str = request.query_params.get("start_date")
+#             end_str = request.query_params.get("end_date")
+#             if not start_str or not end_str:
+#                 return Response(
+#                     {"error": "Custom range requires both start_date and end_date."},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+#             try:
+#                 start_date = datetime.strptime(start_str, "%Y-%m-%d").date()
+#                 end_date = datetime.strptime(end_str, "%Y-%m-%d").date()
+#                 if start_date > end_date:
+#                     return Response(
+#                         {"error": "Start date must be before end date."},
+#                         status=status.HTTP_400_BAD_REQUEST,
+#                     )
+#             except (ValueError, TypeError):
+#                 return Response(
+#                     {"error": "Invalid custom date format. Use YYYY-MM-DD."},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             # Check if it's a single-day range
+#             is_single_day = start_date == end_date
+#             if is_single_day:
+#                 # For single-day custom range, use hourly truncation like TODAY filter
+#                 time_trunc = TruncHour("created_at")
+#             else:
+#                 # For multi-day range, use daily truncation
+#                 time_trunc = TruncDate("created_at")
+#         else:
+#             return Response(
+#                 {
+#                     "error": "Unsupported filter_type. Use 1 (Today), 2 (Week), 3 (Month), or 9 (Custom Range)."
+#                 },
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         # Domain mapping
+#         qradar_tenant_ids = tenant.company.qradar_mappings.values_list(
+#             "qradar_tenant__id", flat=True
+#         )
+
+#         # Get contracted volume for comparison
+#         mapping = TenantQradarMapping.objects.filter(company=tenant.company).first()
+#         contracted_volume = mapping.contracted_volume if mapping else None
+#         contracted_volume_type = mapping.contracted_volume_type if mapping else None
+#         contracted_volume_type_display = (
+#             mapping.get_contracted_volume_type_display() if mapping else None
+#         )
+
+#         # Filtering logic
+#         filter_kwargs = {"domain_id__in": qradar_tenant_ids}
+#         if filter_enum == FilterType.CUSTOM_RANGE:
+#             if is_single_day:
+#                 # For single day, use created_at filtering with time boundaries
+#                 # Convert the date to datetime at midnight in Dubai timezone
+#                 from pytz import timezone as pytz_timezone
+
+#                 dubai_tz = pytz_timezone("Asia/Dubai")
+
+#                 # Create datetime objects for start and end of the day in Dubai time
+#                 start_datetime = datetime.combine(start_date, datetime.min.time())
+#                 end_datetime = datetime.combine(start_date, datetime.max.time())
+
+#                 # Make them timezone aware in Dubai timezone
+#                 start_datetime = dubai_tz.localize(start_datetime)
+#                 end_datetime = dubai_tz.localize(end_datetime)
+
+#                 # Convert to UTC for database filtering
+#                 start_time_utc = start_datetime.astimezone(pytz_timezone("UTC"))
+#                 end_time_utc = end_datetime.astimezone(pytz_timezone("UTC"))
+
+#                 filter_kwargs["created_at__gte"] = start_time_utc
+#                 filter_kwargs["created_at__lte"] = end_time_utc
+#             else:
+#                 # Use date filtering on qradar_end_time for multi-day custom range
+#                 filter_kwargs["qradar_end_time__date__gte"] = start_date
+#                 filter_kwargs["qradar_end_time__date__lte"] = end_date
+#         elif filter_enum == FilterType.TODAY:
+#             # Use created_at for TODAY filter (hourly data)
+#             filter_kwargs["created_at__gte"] = start_time
+#         else:
+#             # Use qradar_end_time date filtering for WEEK and MONTH
+#             if filter_enum == FilterType.WEEK:
+#                 # Last 7 days based on qradar_end_time
+#                 filter_kwargs["qradar_end_time__date__gte"] = (
+#                     now - timedelta(days=7)
+#                 ).date()
+#                 filter_kwargs["qradar_end_time__date__lte"] = now.date()
+#             elif filter_enum == FilterType.MONTH:
+#                 # Last 28 days based on qradar_end_time
+#                 filter_kwargs["qradar_end_time__date__gte"] = (
+#                     now - timedelta(days=28)
+#                 ).date()
+#                 filter_kwargs["qradar_end_time__date__lte"] = now.date()
+
+#         # Query EPS data - Use IBMQradarEPS for TODAY filter and single-day custom range, IBMQradarDailyEPS for others
+#         if filter_enum == FilterType.TODAY:
+#             eps_model = IBMQradarEPS
+#         elif filter_enum == FilterType.CUSTOM_RANGE and is_single_day:
+#             # Use hourly EPS model for single day custom range
+#             eps_model = IBMQradarEPS
+#         else:
+#             eps_model = IBMQradarDailyEPS
+
+#         eps_data_raw = (
+#             eps_model.objects.filter(**filter_kwargs)
+#             .annotate(interval=time_trunc)
+#             .values("interval", "domain__name")
+#             .annotate(average_eps=Avg("average_eps"), peak_eps=Max("peak_eps"))
+#             .order_by("interval")
+#         )
+
+#         # Format EPS data with improved interval formatting
+#         eps_data = []
+#         for entry in eps_data_raw:
+#             interval_value = entry["interval"]
+#             # Use the appropriate model (eps_model) based on filter type
+#             peak_row = (
+#                 eps_model.objects.filter(**filter_kwargs)
+#                 .annotate(interval=time_trunc)
+#                 .filter(interval=interval_value, peak_eps=entry["peak_eps"])
+#                 .order_by("qradar_end_time")  # get earliest if multiple match
+#                 .first()
+#             )
+
+#             # Use created_at for TODAY filter and single-day custom range, qradar_end_time for others
+#             peak_eps_time = None
+#             if peak_row:
+#                 if filter_enum == FilterType.TODAY or (
+#                     filter_enum == FilterType.CUSTOM_RANGE and is_single_day
+#                 ):
+#                     # Use created_at for TODAY filter and single-day custom range
+#                     peak_eps_time = peak_row.created_at if peak_row.created_at else None
+#                 else:
+#                     # Use qradar_end_time for other filters
+#                     peak_eps_time = (
+#                         peak_row.qradar_end_time if peak_row.qradar_end_time else None
+#                     )
+
+#             # Add 4 hours for display if we have a timestamp
+#             if peak_eps_time:
+#                 peak_dt = peak_eps_time + timedelta(hours=4)
+#                 peak_str = peak_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+#             else:
+#                 peak_str = None
+
+#             if filter_enum == FilterType.TODAY:
+#                 interval = entry["interval"]
+#                 new_dt = interval + timedelta(hours=4)
+#                 interval_str = new_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+#                 # interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
+#             elif filter_enum == FilterType.CUSTOM_RANGE and is_single_day:
+#                 # Format hourly intervals for single-day custom range
+#                 interval = entry["interval"]
+#                 new_dt = interval + timedelta(hours=4)
+#                 interval_str = new_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+#             elif filter_enum == FilterType.MONTH:
+#                 # Format as "Week 1", "Week 2", etc.
+#                 week_num = len(eps_data) + 1
+#                 interval_str = f"Week {week_num}"
+#                 date_of_week = entry["interval"].strftime("%Y-%m-%d")
+#                 interval_str += f" ({date_of_week})"
+#             else:
+#                 interval_str = entry["interval"].strftime("%Y-%m-%d")
+
+#             eps_data.append(
+#                 {
+#                     "interval": interval_str,
+#                     "average_eps": float(
+#                         Decimal(entry["average_eps"]).quantize(
+#                             Decimal("0.01"), rounding=ROUND_HALF_UP
+#                         )
+#                     ),
+#                     "domain": entry["domain__name"],
+#                     "peak_eps": float(
+#                         Decimal(entry["peak_eps"]).quantize(
+#                             Decimal("0.01"), rounding=ROUND_HALF_UP
+#                         )
+#                     ),
+#                     "peak_eps_time": peak_str,
+#                 }
+#             )
+
+#         return Response(
+#             {
+#                 "contracted_volume": contracted_volume,
+#                 "contracted_volume_type": contracted_volume_type,
+#                 "contracted_volume_type_display": contracted_volume_type_display,
+#                 "eps_data": eps_data,
+#             },
+#             status=status.HTTP_200_OK,
+#         )
 class DetailedEPSReportAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -9069,6 +9320,8 @@ class DetailedEPSReportAPIView(APIView):
 
         # Format EPS data with improved interval formatting
         eps_data = []
+        total_peak_eps_count = 0  # Total counter for all records exceeding contracted volume
+
         for entry in eps_data_raw:
             interval_value = entry["interval"]
             # Use the appropriate model (eps_model) based on filter type
@@ -9105,7 +9358,6 @@ class DetailedEPSReportAPIView(APIView):
                 interval = entry["interval"]
                 new_dt = interval + timedelta(hours=4)
                 interval_str = new_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-                # interval_str = entry["interval"].strftime("%Y-%m-%dT%H:%M:%SZ")
             elif filter_enum == FilterType.CUSTOM_RANGE and is_single_day:
                 # Format hourly intervals for single-day custom range
                 interval = entry["interval"]
@@ -9119,6 +9371,22 @@ class DetailedEPSReportAPIView(APIView):
                 interval_str += f" ({date_of_week})"
             else:
                 interval_str = entry["interval"].strftime("%Y-%m-%d")
+
+            # Count how many records in this interval have peak_eps exceeding contracted volume
+            interval_peak_count = 0
+            if contracted_volume:
+                # Query to count all records in this interval where peak_eps > contracted_volume
+                interval_peak_count = (
+                    eps_model.objects.filter(**filter_kwargs)
+                    .annotate(interval=time_trunc)
+                    .filter(
+                        interval=interval_value,
+                        domain__name=entry["domain__name"],
+                        peak_eps__gt=contracted_volume,  # Count where peak_eps exceeds contracted volume
+                    )
+                    .count()
+                )
+                total_peak_eps_count += interval_peak_count
 
             eps_data.append(
                 {
@@ -9135,6 +9403,7 @@ class DetailedEPSReportAPIView(APIView):
                         )
                     ),
                     "peak_eps_time": peak_str,
+                    "peak_eps_count": interval_peak_count,  
                 }
             )
 
@@ -9144,10 +9413,10 @@ class DetailedEPSReportAPIView(APIView):
                 "contracted_volume_type": contracted_volume_type,
                 "contracted_volume_type_display": contracted_volume_type_display,
                 "eps_data": eps_data,
+                "total_peak_eps_count": total_peak_eps_count,  
             },
             status=status.HTTP_200_OK,
         )
-
 
 class AssetReportView(APIView):
     authentication_classes = [JWTAuthentication]
