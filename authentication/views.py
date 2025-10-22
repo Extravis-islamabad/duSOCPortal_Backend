@@ -251,7 +251,7 @@ class CompanyProfilePictureUpdateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
     parser_classes = (MultiPartParser, FormParser)
-    
+
     def patch(self, request, company_id):
         try:
             company = Company.objects.get(id=company_id)
@@ -260,12 +260,14 @@ class CompanyProfilePictureUpdateAPIView(APIView):
                 {"error": "Company not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        
+
         company_name = request.data.get("company_name")
         profile_picture = request.FILES.get("profile_picture")
-        
-        has_profile_picture_null = 'profile_picture' in request.data and request.data['profile_picture'] in [None, '', 'null']
-        
+
+        has_profile_picture_null = "profile_picture" in request.data and request.data[
+            "profile_picture"
+        ] in [None, "", "null"]
+
         if not company_name and not profile_picture and not has_profile_picture_null:
             return Response(
                 {
@@ -273,24 +275,29 @@ class CompanyProfilePictureUpdateAPIView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         if company_name:
             company.company_name = company_name
-        
+
         if profile_picture:
             company.profile_picture = profile_picture
         elif has_profile_picture_null:
             company.profile_picture = None
-        
+
         company.save()
-        
+
         return Response(
             {
                 "message": f"Company '{company.company_name}' updated successfully.",
-                "profile_picture": request.build_absolute_uri(company.profile_picture.url) if company.profile_picture else None,
+                "profile_picture": request.build_absolute_uri(
+                    company.profile_picture.url
+                )
+                if company.profile_picture
+                else None,
             },
             status=status.HTTP_200_OK,
         )
+
 
 class LDAPUsersAPIView(APIView):
     authentication_classes = [JWTAuthentication]

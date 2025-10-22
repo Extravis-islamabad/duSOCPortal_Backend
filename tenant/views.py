@@ -8896,7 +8896,6 @@ class ConsolidatedReport(APIView):
         return Response(data, status=status.HTTP_200_OK)
 
 
-
 class DetailedEPSReportAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
@@ -9070,7 +9069,9 @@ class DetailedEPSReportAPIView(APIView):
 
         # Format EPS data with improved interval formatting
         eps_data = []
-        total_peak_eps_count = 0  # Total counter for all records exceeding contracted volume
+        total_peak_eps_count = (
+            0  # Total counter for all records exceeding contracted volume
+        )
 
         for entry in eps_data_raw:
             interval_value = entry["interval"]
@@ -9153,7 +9154,7 @@ class DetailedEPSReportAPIView(APIView):
                         )
                     ),
                     "peak_eps_time": peak_str,
-                    "peak_eps_count": interval_peak_count,  
+                    "peak_eps_count": interval_peak_count,
                 }
             )
 
@@ -9163,10 +9164,11 @@ class DetailedEPSReportAPIView(APIView):
                 "contracted_volume_type": contracted_volume_type,
                 "contracted_volume_type_display": contracted_volume_type_display,
                 "eps_data": eps_data,
-                "total_peak_eps_count": total_peak_eps_count,  
+                "total_peak_eps_count": total_peak_eps_count,
             },
             status=status.HTTP_200_OK,
         )
+
 
 class AssetReportView(APIView):
     authentication_classes = [JWTAuthentication]
