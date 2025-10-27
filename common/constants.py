@@ -381,7 +381,9 @@ class LDAPConstants:
     LDAP_BIND_USER = os.getenv("LDAP_BIND_USER", None)
     LDAP_BIND_PASSWORD = os.getenv("LDAP_BIND_PASSWORD", None)
 
-    CUSTOMER_BASE_DN = "OU=CloudU_Customers,OU=Azure-Cloud-Sync,OU=ICT_Cloud_Operations_Teams,DC=cloudu,DC=local"
+    CUSTOMER_BASE_DN = (
+        "OU=CloudU_Customers,OU=ICT_Cloud_Operations_Teams,DC=cloudu,DC=local"
+    )
     CUSTOMER_BIND_DOMAIN = os.getenv("CUSTOMER_BIND_DOMAIN", None)
     CUSTOMER_LDAP_SERVERS = os.getenv("CUSTOMER_LDAP_SERVERS", None)
 
