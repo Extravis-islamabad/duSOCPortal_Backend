@@ -48,7 +48,7 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_notes_for_incident
+from tenant.cortex_soar_tasks import sync_notes_for_incident, sync_requests_for_soar
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -107,7 +107,6 @@ from tenant.serializers import (
     RecentIncidentsSerializer,
     TenantRoleSerializer,
 )
-from tenant.threat_intelligence_tasks import sync_threat_alert_details
 
 
 class PermissionChoicesAPIView(APIView):
@@ -310,12 +309,12 @@ class TestView(APIView):
         #     # data = ibm.test_integration()
         #     data = ibm._get_offenses()
         #     print(data)
-        sync_threat_alert_details()
+        # sync_threat_alert_details()
         # sync_ibm_tenant_daily_eps()
         # sync_ibm_admin_eps.delay()
         # sync_successful_logons.delay()
         # sync_dos_event_counts()
-        # sync_requests_for_soar()
+        sync_requests_for_soar()
         # sync_correlated_events_data(
         #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
         # )
@@ -2923,6 +2922,7 @@ class IncidentDetailView(APIView):
                     "tta": incident["incident_tta"],
                     "ttn": incident["incident_ttn"],
                     "ttdn": incident["incident_ttdn"],
+                    "closure_time": incident["closed"],
                     "sla_breach_info": sla_breach_info,
                     "notes": notes_by_user,
                     "list_of_rules_offense": incident["list_of_rules_offense"],
