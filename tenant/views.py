@@ -2769,17 +2769,6 @@ class IncidentDetailView(APIView):
                     }
                 )
 
-            if incident["status"] == "Closed" and incident["closed"]:
-                timeline.append(
-                    {
-                        "icon": "task_alt",
-                        "title": "Incident closed",
-                        "time": incident["closed"],
-                        "description": f"Closed by {incident['closing_user_id'] or 'System'}",
-                        "detail": f"Reason: {incident['reason'] or 'Not specified'}",
-                    }
-                )
-
             if incident["incident_tta"]:
                 timeline.append(
                     {
@@ -2892,6 +2881,11 @@ class IncidentDetailView(APIView):
                     "modified": (
                         incident["modified"] if incident["modified"] else "Unknown"
                     ),
+                    "closure_time": (
+                        incident["closed"]
+                        if incident["status"] == "2" and incident["closed"]
+                        else None
+                    ),
                     "assignee": (
                         "N/A" if incident["owner"] == " " else incident["owner"]
                     ),
@@ -2922,7 +2916,6 @@ class IncidentDetailView(APIView):
                     "tta": incident["incident_tta"],
                     "ttn": incident["incident_ttn"],
                     "ttdn": incident["incident_ttdn"],
-                    "closure_time": incident["closed"],
                     "sla_breach_info": sla_breach_info,
                     "notes": notes_by_user,
                     "list_of_rules_offense": incident["list_of_rules_offense"],
