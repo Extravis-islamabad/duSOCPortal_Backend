@@ -651,6 +651,7 @@ class DUCortexSOARIncidentFinalModel(models.Model):
     mitre_tactic = models.CharField(max_length=100, blank=True, null=True)
     mitre_technique = models.CharField(max_length=100, blank=True, null=True)
     configuration_item = models.CharField(max_length=100, blank=True, null=True)
+    close_notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
