@@ -344,6 +344,7 @@ class CortexSOAR:
                 mitre_tactic=custom.get("mitretactics"),
                 mitre_technique=custom.get("mitretechnique"),
                 configuration_item=custom.get("configurationitem"),
+                close_notes=entry.get("closeNotes"),
             )
             records.append(record)
         return records
@@ -397,6 +398,7 @@ class CortexSOAR:
                         "mitre_tactic",
                         "mitre_technique",
                         "configuration_item",
+                        "close_notes",
                     ],
                     unique_fields=["account", "db_id"],
                 )
