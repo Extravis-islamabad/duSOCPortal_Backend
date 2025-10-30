@@ -2593,7 +2593,6 @@ class IncidentDetailView(APIView):
                     "account",
                     "name",
                     "status",
-                    # "severity",
                     "incident_priority",
                     "created",
                     "modified",
@@ -2618,6 +2617,7 @@ class IncidentDetailView(APIView):
                     "mitre_tactic",
                     "mitre_technique",
                     "configuration_item",
+                    "close_notes",
                 )
                 .first()
             )
@@ -2920,6 +2920,7 @@ class IncidentDetailView(APIView):
                     "notes": notes_by_user,
                     "list_of_rules_offense": incident["list_of_rules_offense"],
                     "closing_reason": incident["reason"],
+                    "resolution_notes": incident["close_notes"],
                 }
             }
 
