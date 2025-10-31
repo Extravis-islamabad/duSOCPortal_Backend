@@ -87,7 +87,22 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 ]
 
 SWAGGER_SETTINGS = {
-    "DEFAULT_INFO": "import.path.to.urls.api_info",
+    "USE_SESSION_AUTH": False,  # Disable session authentication to remove Django Login link
+    "SECURITY_DEFINITIONS": {
+        "Bearer": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "description": "JWT Authorization header using the Bearer scheme. **IMPORTANT**: Enter 'Bearer ' followed by your token (with space after Bearer). Example: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        }
+    },
+    "LOGIN_URL": None,  # Remove login URL
+    "LOGOUT_URL": None,  # Remove logout URL
+    "PERSIST_AUTH": True,  # Keep authorization between page refreshes
+    "REFETCH_SCHEMA_WITH_AUTH": True,  # Refetch schema with auth credentials
+    "REFETCH_SCHEMA_ON_LOGOUT": True,  # Refetch schema on logout
+    "DEFAULT_MODEL_RENDERING": "model",  # Default model rendering
+    "DOC_EXPANSION": "none",  # API documentation expansion - 'none', 'list', or 'full'
 }
 
 ROOT_URLCONF = "sockportal__backend.urls"

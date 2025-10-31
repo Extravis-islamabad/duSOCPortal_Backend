@@ -39,22 +39,39 @@ class UserCreateAPIView(APIView):
         responses={
             201: openapi.Response(
                 description="User created successfully",
-                examples={
-                    "application/json": {
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "user_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "username": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={
                         "message": "User created successfully",
                         "user_id": 1,
                         "username": "john.doe",
-                    }
-                },
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Bad request - validation errors",
-                examples={
-                    "application/json": {
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "username": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(type=openapi.TYPE_STRING),
+                        ),
+                        "password": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(type=openapi.TYPE_STRING),
+                        ),
+                    },
+                    example={
                         "username": ["This field is required."],
                         "password": ["This field is required."],
-                    }
-                },
+                    },
+                ),
             ),
         },
         tags=["Authentication"],
@@ -90,43 +107,55 @@ class UserLoginAPIView(APIView):
                 "username": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Username or email address",
-                    example="john.doe",
+                    default="john.doe",
                 ),
                 "password": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="User password",
-                    example="SecurePassword123",
+                    default="password123",
                 ),
             },
             required=["username", "password"],
+            example={"username": "john.doe", "password": "password123"},
         ),
         responses={
             200: openapi.Response(
                 description="Authentication successful",
-                examples={
-                    "application/json": {
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "refresh": openapi.Schema(type=openapi.TYPE_STRING),
+                        "access": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={
                         "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
                         "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
-                    }
-                },
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Bad request - missing credentials or invalid credentials",
-                examples={
-                    "application/json": {
-                        "error": "Please provide both username and password"
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "Please provide both username and password"},
+                ),
             ),
             404: openapi.Response(
                 description="User not found",
-                examples={"application/json": {"error": "User does not exist"}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "User does not exist"},
+                ),
             ),
             503: openapi.Response(
                 description="Service unavailable",
-                examples={
-                    "application/json": {"error": "An error occurred: <error_details>"}
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "An error occurred: <error_details>"},
+                ),
             ),
         },
         tags=["Authentication"],
@@ -210,41 +239,26 @@ class UserDetailsAPIView(APIView):
             200: openapi.Response(
                 description="User details retrieved successfully",
                 schema=UserDetailSerializer,
-                examples={
-                    "application/json": {
-                        "user": {
-                            "id": 1,
-                            "username": "john.doe",
-                            "email": "john.doe@example.com",
-                            "name": "John Doe",
-                            "profile_picture": "http://example.com/media/profiles/pic.jpg",
-                            "is_tenant": False,
-                            "is_super_admin": True,
-                            "is_admin": False,
-                            "is_read_only": False,
-                            "company_name": "ACME Corp",
-                            "created_at": "2024-01-15T10:30:00Z",
-                            "updated_at": "2024-01-20T14:45:00Z",
-                            "permissions": [],
-                            "created_by_id": None,
-                            "integrated_tools": [],
-                        }
-                    }
-                },
             ),
             401: openapi.Response(
                 description="Authentication credentials were not provided or invalid",
-                examples={
-                    "application/json": {
-                        "detail": "Authentication credentials were not provided."
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "detail": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={"detail": "Authentication credentials were not provided."},
+                ),
             ),
             503: openapi.Response(
                 description="Service unavailable",
-                examples={
-                    "application/json": {"error": "An error occurred: <error_details>"}
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={"error": "An error occurred: <error_details>"},
+                ),
             ),
         },
         tags=["Authentication"],
@@ -298,13 +312,23 @@ class UserLogoutAPIView(APIView):
         responses={
             200: openapi.Response(
                 description="Successfully logged out",
-                examples={"application/json": {"message": "Successfully logged out"}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={"message": "Successfully logged out"},
+                ),
             ),
             400: openapi.Response(
                 description="Missing refresh token",
-                examples={
-                    "application/json": {"error": "Please provide a refresh token"}
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={"error": "Please provide a refresh token"},
+                ),
             ),
         },
         tags=["Authentication"],
@@ -377,20 +401,31 @@ class CompanyProfilePictureUpdateAPIView(APIView):
         responses={
             200: openapi.Response(
                 description="Company updated successfully",
-                examples={
-                    "application/json": {
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "profile_picture": openapi.Schema(
+                            type=openapi.TYPE_STRING, nullable=True
+                        ),
+                    },
+                    example={
                         "message": "Company 'ACME Corp' updated successfully.",
                         "profile_picture": "http://example.com/media/companies/profile.jpg",
-                    }
-                },
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Bad request - missing required fields",
-                examples={
-                    "application/json": {
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={
                         "error": "At least one of 'company_name' or 'profile_picture' must be provided."
-                    }
-                },
+                    },
+                ),
             ),
             401: openapi.Response(
                 description="Authentication credentials were not provided",
@@ -400,7 +435,13 @@ class CompanyProfilePictureUpdateAPIView(APIView):
             ),
             404: openapi.Response(
                 description="Company not found",
-                examples={"application/json": {"error": "Company not found."}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={"error": "Company not found."},
+                ),
             ),
         },
         tags=["Company Management"],
@@ -475,8 +516,27 @@ class LDAPUsersAPIView(APIView):
         responses={
             200: openapi.Response(
                 description="LDAP users retrieved successfully",
-                examples={
-                    "application/json": {
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "data": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    "username": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                    "name": openapi.Schema(type=openapi.TYPE_STRING),
+                                    "email": openapi.Schema(type=openapi.TYPE_STRING),
+                                    "department": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                },
+                            ),
+                        ),
+                    },
+                    example={
                         "data": [
                             {
                                 "username": "john.doe",
@@ -491,12 +551,16 @@ class LDAPUsersAPIView(APIView):
                                 "department": "Operations",
                             },
                         ]
-                    }
-                },
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Invalid ad_flag value",
-                examples={"application/json": {"error": "Invalid ad_flag value."}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "Invalid ad_flag value."},
+                ),
             ),
             401: openapi.Response(
                 description="Authentication credentials were not provided",
@@ -506,7 +570,11 @@ class LDAPUsersAPIView(APIView):
             ),
             404: openapi.Response(
                 description="No users found",
-                examples={"application/json": {"message": "No users found"}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"message": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"message": "No users found"},
+                ),
             ),
         },
         tags=["LDAP Management"],
@@ -581,8 +649,15 @@ class LDAPGroupListView(APIView):
         responses={
             200: openapi.Response(
                 description="LDAP groups retrieved successfully",
-                examples={
-                    "application/json": {
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "groups": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(type=openapi.TYPE_STRING),
+                        ),
+                    },
+                    example={
                         "groups": [
                             "CSOC_SOAR_ADMIN",
                             "CSOC_SOAR_SR_SECURITY_ANALYST",
@@ -590,12 +665,16 @@ class LDAPGroupListView(APIView):
                             "Security_Team",
                             "Operations_Team",
                         ]
-                    }
-                },
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Invalid or missing ad_flag parameter",
-                examples={"application/json": {"error": "Invalid ad_flag value."}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "Invalid ad_flag value."},
+                ),
             ),
             401: openapi.Response(
                 description="Authentication credentials were not provided",
@@ -605,7 +684,11 @@ class LDAPGroupListView(APIView):
             ),
             500: openapi.Response(
                 description="Internal server error",
-                examples={"application/json": {"error": "<error_details>"}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "<error_details>"},
+                ),
             ),
         },
         tags=["LDAP Management"],
@@ -688,8 +771,28 @@ class LDAPGroupUsersView(APIView):
         responses={
             200: openapi.Response(
                 description="Group users retrieved successfully",
-                examples={
-                    "application/json": {
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "group": openapi.Schema(type=openapi.TYPE_STRING),
+                        "users": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    "username": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                    "name": openapi.Schema(type=openapi.TYPE_STRING),
+                                    "email": openapi.Schema(type=openapi.TYPE_STRING),
+                                    "department": openapi.Schema(
+                                        type=openapi.TYPE_STRING
+                                    ),
+                                },
+                            ),
+                        ),
+                    },
+                    example={
                         "group": "Security_Team",
                         "users": [
                             {
@@ -699,16 +802,18 @@ class LDAPGroupUsersView(APIView):
                                 "department": "IT Security",
                             }
                         ],
-                    }
-                },
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Invalid ad_flag or all users already assigned",
-                examples={
-                    "application/json": {
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={
                         "error": "All users of this group are already assigned to some tenants."
-                    }
-                },
+                    },
+                ),
             ),
             401: openapi.Response(
                 description="Authentication credentials were not provided",
@@ -718,7 +823,11 @@ class LDAPGroupUsersView(APIView):
             ),
             500: openapi.Response(
                 description="Internal server error",
-                examples={"application/json": {"error": "<error_details>"}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "<error_details>"},
+                ),
             ),
         },
         tags=["LDAP Management"],
@@ -815,51 +924,67 @@ class AdminLoginAPIView(APIView):
                 "username": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Admin username from ADMIN_AD",
-                    example="admin.user",
+                    default="admin.user",
                 ),
                 "password": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Admin password",
-                    example="AdminPassword123",
+                    default="AdminPassword123",
                 ),
             },
             required=["username", "password"],
+            example={"username": "admin.user", "password": "AdminPassword123"},
         ),
         responses={
             200: openapi.Response(
                 description="Admin authentication successful",
-                examples={
-                    "application/json": {
-                        "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
-                        "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "refresh": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="JWT Refresh Token"
+                        ),
+                        "access": openapi.Schema(
+                            type=openapi.TYPE_STRING, description="JWT Access Token"
+                        ),
+                    },
+                    example={
+                        "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc2MjA2NzYyNywiaWF0IjoxNzYxOTgxMjI3LCJqdGkiOiJhZjA5MTA1OTY1YmM0ZmUzYWIwZDUyNDU4YmY4MzVhNiIsInVzZXJfaWQiOjY5OX0.abc123...",
+                        "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzYxOTgxMjI3LCJpYXQiOjE3NjE4OTQ4MjcsImp0aSI6ImFmMDkxMDU5NjViYzRmZTNhYjBkNTI0NThiZjgzNWE2IiwidXNlcl9pZCI6Njk5fQ.def456...",
+                    },
+                ),
             ),
             400: openapi.Response(
                 description="Missing credentials",
-                examples={
-                    "application/json": {
-                        "error": "Please provide both username and password"
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "Please provide both username and password"},
+                ),
             ),
             401: openapi.Response(
                 description="Invalid LDAP credentials",
-                examples={"application/json": {"error": "Invalid LDAP credentials"}},
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "Invalid LDAP credentials"},
+                ),
             ),
             403: openapi.Response(
                 description="User not in valid admin groups",
-                examples={
-                    "application/json": {
-                        "error": "User is not a member of any valid admin groups"
-                    }
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "User is not a member of any valid admin groups"},
+                ),
             ),
             500: openapi.Response(
                 description="Internal server error",
-                examples={
-                    "application/json": {"error": "An error occurred: <error_details>"}
-                },
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={"error": openapi.Schema(type=openapi.TYPE_STRING)},
+                    example={"error": "An error occurred: <error_details>"},
+                ),
             ),
         },
         tags=["Authentication"],
