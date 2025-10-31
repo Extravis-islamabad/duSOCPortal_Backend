@@ -30,28 +30,36 @@ from .serializers import (
 
 
 class UserCreateAPIView(APIView):
-    @swagger_auto_schema(request_body=UserCreateSerializer)
+    @swagger_auto_schema(
+        operation_description="""Creates a new user in the system.
+
+        This endpoint is typically used for creating admin users.
+        The password will be hashed before storage.""",
+        request_body=UserCreateSerializer,
+        responses={
+            201: openapi.Response(
+                description="User created successfully",
+                examples={
+                    "application/json": {
+                        "message": "User created successfully",
+                        "user_id": 1,
+                        "username": "john.doe",
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Bad request - validation errors",
+                examples={
+                    "application/json": {
+                        "username": ["This field is required."],
+                        "password": ["This field is required."],
+                    }
+                },
+            ),
+        },
+        tags=["Authentication"],
+    )
     def post(self, request):
-        """
-        Creates a new user.
-
-        Accepts POST requests with the following data:
-
-        - username: string
-        - email: string
-        - name: string
-        - password: string
-        - is_admin: boolean
-        - is_superuser: boolean
-
-        Returns a JSON response with the following data:
-
-        - message: string
-        - user_id: integer
-        - username: string
-
-        Returns HTTP 201 status code on success, or HTTP 400 status code on failure.
-        """
         start = time.time()
         serializer = UserCreateSerializer(data=request.data)
         if serializer.is_valid():
@@ -71,34 +79,59 @@ class UserCreateAPIView(APIView):
 
 class UserLoginAPIView(APIView):
     @swagger_auto_schema(
+        operation_description="""Authenticates a user against LDAP (CUSTOMER_AD) and returns JWT tokens.
+
+        The username field accepts either a username or email address.
+        Authentication is performed against LDAP, and only active, non-deleted users can login.
+        Username matching is case-insensitive.""",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                "username": openapi.Schema(type=openapi.TYPE_STRING),
-                "password": openapi.Schema(type=openapi.TYPE_STRING),
+                "username": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Username or email address",
+                    example="john.doe",
+                ),
+                "password": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="User password",
+                    example="SecurePassword123",
+                ),
             },
             required=["username", "password"],
-        )
+        ),
+        responses={
+            200: openapi.Response(
+                description="Authentication successful",
+                examples={
+                    "application/json": {
+                        "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+                        "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Bad request - missing credentials or invalid credentials",
+                examples={
+                    "application/json": {
+                        "error": "Please provide both username and password"
+                    }
+                },
+            ),
+            404: openapi.Response(
+                description="User not found",
+                examples={"application/json": {"error": "User does not exist"}},
+            ),
+            503: openapi.Response(
+                description="Service unavailable",
+                examples={
+                    "application/json": {"error": "An error occurred: <error_details>"}
+                },
+            ),
+        },
+        tags=["Authentication"],
     )
     def post(self, request):
-        # Extract credentials from request
-        """
-        Authenticates a user and returns JWT tokens.
-
-        Accepts POST requests with the following data:
-        - username: string (can be either username or email)
-        - password: string
-
-        Returns a JSON response with the following data on success:
-        - refresh: string (refresh token)
-        - access: string (access token)
-
-        Returns HTTP 200 status code on successful authentication,
-        HTTP 400 for missing credentials,
-        HTTP 401 for invalid password,
-        HTTP 404 if the user does not exist,
-        or HTTP 500 for any other server error.
-        """
         start = time.time()
         username = request.data.get("username")
         password = request.data.get("password")
@@ -168,9 +201,54 @@ class UserDetailsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
-    # @swagger_auto_schema(
-    #     request_body=UserDetailSerializer
-    # )
+    @swagger_auto_schema(
+        operation_description="""Retrieves the authenticated user's details including permissions and integrated tools.
+
+        Returns user profile information, permissions (for tenant users), and integrated tools (for tenant users).
+        For admin users, permissions and integrated_tools arrays will be empty.""",
+        responses={
+            200: openapi.Response(
+                description="User details retrieved successfully",
+                schema=UserDetailSerializer,
+                examples={
+                    "application/json": {
+                        "user": {
+                            "id": 1,
+                            "username": "john.doe",
+                            "email": "john.doe@example.com",
+                            "name": "John Doe",
+                            "profile_picture": "http://example.com/media/profiles/pic.jpg",
+                            "is_tenant": False,
+                            "is_super_admin": True,
+                            "is_admin": False,
+                            "is_read_only": False,
+                            "company_name": "ACME Corp",
+                            "created_at": "2024-01-15T10:30:00Z",
+                            "updated_at": "2024-01-20T14:45:00Z",
+                            "permissions": [],
+                            "created_by_id": None,
+                            "integrated_tools": [],
+                        }
+                    }
+                },
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided or invalid",
+                examples={
+                    "application/json": {
+                        "detail": "Authentication credentials were not provided."
+                    }
+                },
+            ),
+            503: openapi.Response(
+                description="Service unavailable",
+                examples={
+                    "application/json": {"error": "An error occurred: <error_details>"}
+                },
+            ),
+        },
+        tags=["Authentication"],
+    )
     def get(self, request):
         """
         Retrieves the user details.
@@ -202,20 +280,35 @@ class UserDetailsAPIView(APIView):
 
 
 class UserLogoutAPIView(APIView):
-    """
-    Logs out a user by blacklisting the provided refresh token.
+    @swagger_auto_schema(
+        operation_description="""Logs out a user by blacklisting the provided refresh token.
 
-    Accepts POST requests with the following data:
-    - refresh: string (refresh token)
-
-    Returns a JSON response with the following data on success:
-    - message: string ("Successfully logged out")
-
-    Returns HTTP 200 status code on successful logout,
-    HTTP 400 for missing or invalid refresh token,
-    or HTTP 500 for any other server error.
-    """
-
+        This prevents the refresh token from being used to generate new access tokens.
+        Note: The current access token remains valid until it expires.""",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "refresh": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="JWT refresh token to blacklist",
+                ),
+            },
+            required=["refresh"],
+        ),
+        responses={
+            200: openapi.Response(
+                description="Successfully logged out",
+                examples={"application/json": {"message": "Successfully logged out"}},
+            ),
+            400: openapi.Response(
+                description="Missing refresh token",
+                examples={
+                    "application/json": {"error": "Please provide a refresh token"}
+                },
+            ),
+        },
+        tags=["Authentication"],
+    )
     def post(self, request):
         start = time.time()
         refresh_token = request.data.get("refresh")
@@ -252,6 +345,66 @@ class CompanyProfilePictureUpdateAPIView(APIView):
     permission_classes = [IsAdminUser]
     parser_classes = (MultiPartParser, FormParser)
 
+    @swagger_auto_schema(
+        operation_description="""Updates the company profile picture and/or company name.
+
+        Only admin users can update company profiles.
+        To remove the profile picture, send profile_picture as null or empty string.
+        At least one of company_name or profile_picture must be provided.""",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_PATH,
+                description="ID of the company to update",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+            openapi.Parameter(
+                "company_name",
+                openapi.IN_FORM,
+                description="New company name",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "profile_picture",
+                openapi.IN_FORM,
+                description="Company profile picture image file (or null to remove)",
+                type=openapi.TYPE_FILE,
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Company updated successfully",
+                examples={
+                    "application/json": {
+                        "message": "Company 'ACME Corp' updated successfully.",
+                        "profile_picture": "http://example.com/media/companies/profile.jpg",
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Bad request - missing required fields",
+                examples={
+                    "application/json": {
+                        "error": "At least one of 'company_name' or 'profile_picture' must be provided."
+                    }
+                },
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided",
+            ),
+            403: openapi.Response(
+                description="User is not an admin",
+            ),
+            404: openapi.Response(
+                description="Company not found",
+                examples={"application/json": {"error": "Company not found."}},
+            ),
+        },
+        tags=["Company Management"],
+    )
     def patch(self, request, company_id):
         try:
             company = Company.objects.get(id=company_id)
@@ -303,6 +456,61 @@ class LDAPUsersAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="""Fetches all users from LDAP directory (CUSTOMER_AD or ADMIN_AD).
+
+        Only admin users can access this endpoint.
+        The ad_flag parameter determines which Active Directory to query.""",
+        manual_parameters=[
+            openapi.Parameter(
+                "ad_flag",
+                openapi.IN_QUERY,
+                description="Active Directory to query. Options: CUSTOMER (default) or ADMIN",
+                type=openapi.TYPE_STRING,
+                enum=["CUSTOMER", "ADMIN"],
+                default="CUSTOMER",
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="LDAP users retrieved successfully",
+                examples={
+                    "application/json": {
+                        "data": [
+                            {
+                                "username": "john.doe",
+                                "name": "John Doe",
+                                "email": "john.doe@example.com",
+                                "department": "IT Security",
+                            },
+                            {
+                                "username": "jane.smith",
+                                "name": "Jane Smith",
+                                "email": "jane.smith@example.com",
+                                "department": "Operations",
+                            },
+                        ]
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Invalid ad_flag value",
+                examples={"application/json": {"error": "Invalid ad_flag value."}},
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided",
+            ),
+            403: openapi.Response(
+                description="User is not an admin",
+            ),
+            404: openapi.Response(
+                description="No users found",
+                examples={"application/json": {"message": "No users found"}},
+            ),
+        },
+        tags=["LDAP Management"],
+    )
     def get(self, request):
         # Get ad_flag query parameter and validate it's provided
         ad_flag = request.query_params.get("ad_flag", "CUSTOMER")
@@ -354,6 +562,54 @@ class LDAPGroupListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="""Fetches all groups from LDAP directory.
+
+        Only admin users can access this endpoint.
+        Returns a list of all LDAP group names from the specified Active Directory.""",
+        manual_parameters=[
+            openapi.Parameter(
+                "ad_flag",
+                openapi.IN_QUERY,
+                description="Active Directory to query. Options: CUSTOMER (default) or ADMIN",
+                type=openapi.TYPE_STRING,
+                enum=["CUSTOMER", "ADMIN"],
+                default="CUSTOMER",
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="LDAP groups retrieved successfully",
+                examples={
+                    "application/json": {
+                        "groups": [
+                            "CSOC_SOAR_ADMIN",
+                            "CSOC_SOAR_SR_SECURITY_ANALYST",
+                            "CSOC_SOAR_ANALYST",
+                            "Security_Team",
+                            "Operations_Team",
+                        ]
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Invalid or missing ad_flag parameter",
+                examples={"application/json": {"error": "Invalid ad_flag value."}},
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided",
+            ),
+            403: openapi.Response(
+                description="User is not an admin",
+            ),
+            500: openapi.Response(
+                description="Internal server error",
+                examples={"application/json": {"error": "<error_details>"}},
+            ),
+        },
+        tags=["LDAP Management"],
+    )
     def get(self, request):
         try:
             # Get ad_flag query parameter and validate it's provided
@@ -405,6 +661,68 @@ class LDAPGroupUsersView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="""Fetches users belonging to a specific LDAP group.
+
+        Only admin users can access this endpoint.
+        Returns only users who are NOT already assigned to any tenant.
+        This is useful for bulk user assignment to tenants.""",
+        manual_parameters=[
+            openapi.Parameter(
+                "group_name",
+                openapi.IN_PATH,
+                description="Name of the LDAP group",
+                type=openapi.TYPE_STRING,
+                required=True,
+            ),
+            openapi.Parameter(
+                "ad_flag",
+                openapi.IN_QUERY,
+                description="Active Directory to query. Options: CUSTOMER (default) or ADMIN",
+                type=openapi.TYPE_STRING,
+                enum=["CUSTOMER", "ADMIN"],
+                default="CUSTOMER",
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Group users retrieved successfully",
+                examples={
+                    "application/json": {
+                        "group": "Security_Team",
+                        "users": [
+                            {
+                                "username": "john.doe",
+                                "name": "John Doe",
+                                "email": "john.doe@example.com",
+                                "department": "IT Security",
+                            }
+                        ],
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Invalid ad_flag or all users already assigned",
+                examples={
+                    "application/json": {
+                        "error": "All users of this group are already assigned to some tenants."
+                    }
+                },
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided",
+            ),
+            403: openapi.Response(
+                description="User is not an admin",
+            ),
+            500: openapi.Response(
+                description="Internal server error",
+                examples={"application/json": {"error": "<error_details>"}},
+            ),
+        },
+        tags=["LDAP Management"],
+    )
     def get(self, request, group_name):
         try:
             # Get ad_flag query parameter and validate it's provided
@@ -476,39 +794,77 @@ class LDAPGroupUsersView(APIView):
 
 class AdminLoginAPIView(APIView):
     @swagger_auto_schema(
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                "username": openapi.Schema(type=openapi.TYPE_STRING),
-                "password": openapi.Schema(type=openapi.TYPE_STRING),
-            },
-            required=["username", "password"],
-        )
-    )
-    def post(self, request):
-        """
-        Authenticates an admin user against ADMIN_AD and creates/updates admin user based on LDAP group membership.
+        operation_description="""Authenticates an admin user against ADMIN_AD and creates/updates admin user based on LDAP group membership.
 
-        The Admin login will use the ADMIN_AD. Users who can access and login to the portal will come under these groups:
+        **Admin Groups & Privilege Levels:**
         - CSOC_SOAR_ADMIN (super_admin) - Highest privilege
         - CSOC_SOAR_SR_SECURITY_ANALYST (admin) - Medium privilege
         - CSOC_SOAR_ANALYST (read_only) - Lowest privilege
 
-        If a user exists in more than one mentioned group, they will be assigned the highest privilege level.
-        Group hierarchy: SUPER_ADMIN > ADMIN > READ_ONLY
+        **Group Hierarchy:** SUPER_ADMIN > ADMIN > READ_ONLY
 
-        For first-time admin login, username and password will be taken, checked against LDAP,
-        group membership evaluated, and user will be created with highest available privilege.
+        If a user belongs to multiple admin groups, the highest privilege level is assigned.
 
-        Authentication is always done against LDAP - no passwords are stored in DB.
+        **First-time Login:**
+        For first-time admin login, the user is automatically created based on LDAP group membership.
 
-        Args:
-            username (str): Admin username
-            password (str): Admin password
-
-        Returns:
-            JSON response with JWT tokens on success or error message on failure.
-        """
+        **Important:** Authentication is always done against LDAP - no passwords are stored in the database.""",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "username": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Admin username from ADMIN_AD",
+                    example="admin.user",
+                ),
+                "password": openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description="Admin password",
+                    example="AdminPassword123",
+                ),
+            },
+            required=["username", "password"],
+        ),
+        responses={
+            200: openapi.Response(
+                description="Admin authentication successful",
+                examples={
+                    "application/json": {
+                        "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+                        "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Missing credentials",
+                examples={
+                    "application/json": {
+                        "error": "Please provide both username and password"
+                    }
+                },
+            ),
+            401: openapi.Response(
+                description="Invalid LDAP credentials",
+                examples={"application/json": {"error": "Invalid LDAP credentials"}},
+            ),
+            403: openapi.Response(
+                description="User not in valid admin groups",
+                examples={
+                    "application/json": {
+                        "error": "User is not a member of any valid admin groups"
+                    }
+                },
+            ),
+            500: openapi.Response(
+                description="Internal server error",
+                examples={
+                    "application/json": {"error": "An error occurred: <error_details>"}
+                },
+            ),
+        },
+        tags=["Authentication"],
+    )
+    def post(self, request):
         start = time.time()
         username = request.data.get("username")
         password = request.data.get("password")
