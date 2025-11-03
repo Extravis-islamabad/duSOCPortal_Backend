@@ -680,7 +680,7 @@ class TestIntegrationAPIView(APIView):
             ),
             403: openapi.Response(description="User is not an admin"),
         },
-        tags=["Integration Testing"],
+        tags=["Integration Management"],
     )
     def post(self, request, *args, **kwargs):
         data = request.data
@@ -789,7 +789,7 @@ class TestIntegrationConnectionAPIView(APIView):
                 ),
             ),
         },
-        tags=["Integration Testing"],
+        tags=["Integration Management"],
     )
     def get(self, request, integration_id):
         try:
