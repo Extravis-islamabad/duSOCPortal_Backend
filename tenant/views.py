@@ -8808,6 +8808,9 @@ class ConsolidatedReport(APIView):
             .order_by("interval")
         )
         eps_data = []
+        total_peak_eps_count = (
+            0  # Total counter for all records exceeding contracted volume
+        )
         for entry in eps_data_raw:
             interval_value = entry["interval"]
             # Use the appropriate model (eps_model) based on filter type
@@ -8852,6 +8855,22 @@ class ConsolidatedReport(APIView):
             else:
                 interval_str = entry["interval"].strftime("%Y-%m-%d")
 
+            # Count how many records in this interval have peak_eps exceeding contracted volume
+            interval_peak_count = 0
+            if contracted_volume:
+                # Query to count all records in this interval where peak_eps > contracted_volume
+                interval_peak_count = (
+                    eps_model.objects.filter(**filter_kwargs)
+                    .annotate(interval=time_trunc)
+                    .filter(
+                        interval=interval_value,
+                        domain__name=entry["domain__name"],
+                        peak_eps__gt=contracted_volume,  # Count where peak_eps exceeds contracted volume
+                    )
+                    .count()
+                )
+                total_peak_eps_count += interval_peak_count
+
             eps_data.append(
                 {
                     "interval": interval_str,
@@ -8867,6 +8886,7 @@ class ConsolidatedReport(APIView):
                         )
                     ),
                     "peak_eps_time": peak_eps_time,
+                    "peak_eps_count": interval_peak_count,  # Count of records exceeding threshold in this interval
                 }
             )
 
@@ -8883,6 +8903,7 @@ class ConsolidatedReport(APIView):
             "contracted_volume_type": contracted_volume_type,
             "contracted_volume_type_display": contracted_volume_type_display,
             "eps_data": eps_data,
+            # "peak_eps_count": total_peak_eps_count,  # Total count of all records exceeding contracted volume
             "incident_clousure_trend": incident_closure_trends
             # "sla_metrics":sla_f_metrics
         }
