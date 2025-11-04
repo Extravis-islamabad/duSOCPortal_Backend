@@ -4,7 +4,6 @@
 graph TB
     subgraph "Client Layer"
         WEB["Web Client"]
-        MOBILE["Mobile Client"]
     end
 
     subgraph "API Gateway Layer"
