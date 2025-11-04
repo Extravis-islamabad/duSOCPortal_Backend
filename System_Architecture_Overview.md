@@ -777,7 +777,6 @@ IBMQradarDailyEPS
 
 1. **LDAP Authentication**: User validation against corporate Active Directory
 1. **Password Hashing**: Custom password hashing via PasswordCreation utility
-1. **API Token Security**: Credentials stored encrypted (noted as TODO in code)
 1. **JWT Tokens**: Time-limited access tokens with refresh mechanism
 1. **Read-Only Users**: Designated read-only admin role for monitoring
 1. **Soft Deletes**: Users marked as deleted rather than permanently removed
