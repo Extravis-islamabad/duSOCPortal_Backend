@@ -4,6 +4,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db.models import Avg, Count, Max, Q
 from django.db.models.functions import TruncDate, TruncDay, TruncHour, TruncWeek
 from django.utils import timezone
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from loguru import logger
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
@@ -51,6 +53,34 @@ class TenantCreateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="""Creates a new tenant company and triggers threat intelligence sync tasks.
+
+        Only admin users can create tenants.""",
+        request_body=TenantCreateSerializer,
+        responses={
+            201: openapi.Response(
+                description="Tenant created successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "company_name": openapi.Schema(type=openapi.TYPE_STRING),
+                        "company_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                    },
+                    example={
+                        "message": "Tenants created successfully",
+                        "company_name": "Acme Corp",
+                        "company_id": 1,
+                    },
+                ),
+            ),
+            400: openapi.Response(description="Bad request - validation errors"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def post(self, request):
         serializer = TenantCreateSerializer(
             data=request.data, context={"request": request}
@@ -74,6 +104,42 @@ class CompanyTenantSettingsUpdateAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="""Updates company tenant settings and synchronizes LDAP users if provided.
+
+        Only admin users can update company tenant settings.""",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_PATH,
+                description="ID of the company to update",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        request_body=CompanyTenantUpdateSerializer,
+        responses={
+            200: openapi.Response(
+                description="Company settings updated successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                        "new_users_added": openapi.Schema(type=openapi.TYPE_INTEGER),
+                    },
+                    example={
+                        "message": "Company settings updated successfully. 2 new user(s) added.",
+                        "new_users_added": 2,
+                    },
+                ),
+            ),
+            400: openapi.Response(description="Bad request - validation errors"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def put(self, request, company_id):
         try:
             company = Company.objects.get(id=company_id)
@@ -132,6 +198,34 @@ class TenantInactiveView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Deactivates all active tenant users under the specified company.",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_PATH,
+                description="Company ID",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Users deactivated successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    example={
+                        "message": "users under company 'Acme' have been deactivated."
+                    },
+                ),
+            ),
+            400: openapi.Response(description="No active users found"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def post(self, request, company_id):
         try:
             company = Company.objects.get(id=company_id)
@@ -169,6 +263,30 @@ class DeleteTenantByCompanyView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsSuperAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Permanently deletes all tenants and users under a company, and deletes the company.",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_PATH,
+                description="Company ID",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Deleted successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT, example={"message": "Deleted Tenants"}
+                ),
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Super admin only"),
+            404: openapi.Response(description="Company not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def delete(self, request, company_id):
         try:
             company = Company.objects.get(id=company_id)
@@ -204,6 +322,33 @@ class ReactivateTenantUsersAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Reactivates all tenant users under the specified company.",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_PATH,
+                description="Company ID",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Users reactivated successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    example={
+                        "message": "users under company 'Acme' have been reactivated."
+                    },
+                ),
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def post(self, request, company_id):
         try:
             company = Company.objects.get(id=company_id)
@@ -230,6 +375,27 @@ class TenantDetailAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves tenant details for the specified company.",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_PATH,
+                description="Company ID",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Tenant details", schema=TenantDetailSerializer
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request, company_id):
         logger.info(
             f"Tenant detail request by user: {request.user.username} for company_id: {company_id}"
@@ -268,6 +434,43 @@ class TenantsByCompanyAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Lists tenants for a company with optional active/inactive filter and pagination.",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_PATH,
+                description="Company ID",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+            openapi.Parameter(
+                "is_active",
+                openapi.IN_QUERY,
+                description="Filter by active status (true/false)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Tenants retrieved",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            400: openapi.Response(description="Invalid query parameter"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request, company_id):
         try:
             company = Company.objects.get(id=company_id)
@@ -334,6 +537,27 @@ class DistinctCompaniesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves companies that have at least one active tenant (paginated).",
+        manual_parameters=[
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Companies retrieved",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         companies = (
             Company.objects.all()
@@ -386,6 +610,50 @@ class TenantManagementAPIView(APIView):
             return [IsAdminUser()]
         return [IsAdminUser()]
 
+    @swagger_auto_schema(
+        operation_description="Deletes (is_deleted=true) or deactivates (is_active=false) a specific tenant user.",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_PATH,
+                description="Company ID",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+            openapi.Parameter(
+                "tenant_id",
+                openapi.IN_PATH,
+                description="Tenant ID",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+            openapi.Parameter(
+                "is_deleted",
+                openapi.IN_QUERY,
+                description="Set to 'true' to permanently delete",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "is_active",
+                openapi.IN_QUERY,
+                description="Set to 'false' to deactivate",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Operation successful",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            400: openapi.Response(description="Invalid parameters"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company or tenant not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def delete(self, request, company_id, tenant_id):
         """
         Handle DELETE request to delete or deactivate a specific tenant.
@@ -475,6 +743,47 @@ class TenantManagementAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+    @swagger_auto_schema(
+        operation_description="Updates tenant user active status.",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_PATH,
+                description="Company ID",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+            openapi.Parameter(
+                "tenant_id",
+                openapi.IN_PATH,
+                description="Tenant ID",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "is_active": openapi.Schema(
+                    type=openapi.TYPE_BOOLEAN,
+                    description="Set true to activate, false to deactivate",
+                )
+            },
+            required=["is_active"],
+            example={"is_active": True},
+        ),
+        responses={
+            200: openapi.Response(
+                description="Status updated",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            400: openapi.Response(description="Invalid request body"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company or tenant not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def patch(self, request, company_id, tenant_id):
         """
         Handle PATCH request to update tenant status (activate/deactivate).
@@ -543,6 +852,27 @@ class NonActiveTenantsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Lists companies with no users or where all users are inactive (paginated).",
+        manual_parameters=[
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Companies retrieved",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         logger.info(
             f"Non-active tenant companies requested by: {request.user.username}"
@@ -609,6 +939,21 @@ class SyncIBMQradarDataAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Triggers background synchronization of IBM QRadar data.",
+        responses={
+            200: openapi.Response(
+                description="Sync started",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    example={"message": "Sync process for IBM QRadar data started."},
+                ),
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         sync_ibm_qradar_data.delay()
         sync_ibm_qradar_data_token.delay()
@@ -619,6 +964,21 @@ class SyncCortexSOARDataAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Triggers background synchronization of Cortex SOAR data.",
+        responses={
+            200: openapi.Response(
+                description="Sync started",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    example={"message": "Sync process for Cotex SOAR data started."},
+                ),
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         sync_soar_data.delay()
         return Response({"message": "Sync process for Cotex SOAR data started."})
@@ -628,6 +988,21 @@ class SyncITSMDataAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Triggers background synchronization of ITSM data.",
+        responses={
+            200: openapi.Response(
+                description="Sync started",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    example={"message": "Sync process for ITSM SOAR data started."},
+                ),
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         sync_itsm.delay()
         return Response({"message": "Sync process for ITSM SOAR data started."})
@@ -637,6 +1012,21 @@ class VolumeTypeChoicesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Returns available volume type choices.",
+        responses={
+            200: openapi.Response(
+                description="Choices",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(type=openapi.TYPE_OBJECT),
+                ),
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         choices = [
             {"id": choice.value, "label": choice.label} for choice in VolumeTypeChoices
@@ -648,6 +1038,21 @@ class SlaLevelsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Returns available SLA level choices (P1-P4).",
+        responses={
+            200: openapi.Response(
+                description="Choices",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(type=openapi.TYPE_OBJECT),
+                ),
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         return Response(
             [{"value": level.value, "label": level.label} for level in SlaLevelChoices]
@@ -672,6 +1077,37 @@ class CheckCompanyNameExistView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Checks if a company name already exists (case-insensitive).",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_name",
+                openapi.IN_QUERY,
+                description="Company name to check",
+                type=openapi.TYPE_STRING,
+                required=True,
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Available",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    example={"message": "Company name is available."},
+                ),
+            ),
+            400: openapi.Response(
+                description="Missing or duplicate company name",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    example={"error": "Company with this name already exists."},
+                ),
+            ),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         company_name = request.query_params.get("company_name")
         if not company_name:
@@ -706,6 +1142,36 @@ class AssetsSummaryAPIView(APIView):
         super().__init__(*args, **kwargs)
         self.request = None
 
+    @swagger_auto_schema(
+        operation_description="Returns assets summary for all companies or a specific company (paginated).",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_QUERY,
+                description="Filter by company ID",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Summary retrieved",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            400: openapi.Response(description="Bad request"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         self.request = request
         company_id = request.query_params.get("company_id")
@@ -854,6 +1320,43 @@ class IncidentPrioritySummaryAPIView(APIView):
         super().__init__(*args, **kwargs)
         self.request = None
 
+    @swagger_auto_schema(
+        operation_description="Returns incident counts grouped by priority for all or a specific company (paginated).",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_QUERY,
+                description="Filter by company ID",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+            openapi.Parameter(
+                "priority",
+                openapi.IN_QUERY,
+                description="Priority filter (1-4)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Summary retrieved",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            400: openapi.Response(description="Bad request"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         self.request = request
         company_id = request.query_params.get("company_id")
@@ -1065,6 +1568,57 @@ class IncidentStatusSummaryAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Returns open/closed incident counts for all or a specific company with optional date filters (paginated).",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_QUERY,
+                description="Filter by company ID",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+            openapi.Parameter(
+                "filter_type",
+                openapi.IN_QUERY,
+                description="Time filter (1=Today, 2=Week, 3=Month)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Custom start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="Custom end date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Summary retrieved",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            400: openapi.Response(description="Bad request"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         company_id = request.query_params.get("company_id")
 
@@ -1278,6 +1832,57 @@ class TenantSLAMatrixAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Returns SLA compliance matrix across priorities for all or a specific company (paginated).",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_QUERY,
+                description="Filter by company ID",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+            openapi.Parameter(
+                "filter_type",
+                openapi.IN_QUERY,
+                description="Time filter (1=Today, 2=Week, 3=Month)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Custom start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="Custom end date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Matrix retrieved",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            400: openapi.Response(description="Bad request"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.request = None
@@ -1678,6 +2283,51 @@ class IncidentCompletionStatusAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsReadonlyAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Returns incident completion/SLA compliance status by priority for a company.",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_QUERY,
+                description="Company ID (required)",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+            openapi.Parameter(
+                "filter_type",
+                openapi.IN_QUERY,
+                description="Time filter (1=Today, 2=Week, 3=Month)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Custom start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="Custom end date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Status retrieved",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            400: openapi.Response(description="Missing company_id or bad request"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         company_id = request.query_params.get("company_id")
 
@@ -1959,6 +2609,51 @@ class EPSUtilizationAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Returns EPS utilization graph and utilization statistics for one or all companies.",
+        manual_parameters=[
+            openapi.Parameter(
+                "company_id",
+                openapi.IN_QUERY,
+                description="Filter by company ID",
+                type=openapi.TYPE_INTEGER,
+                required=False,
+            ),
+            openapi.Parameter(
+                "filter_type",
+                openapi.IN_QUERY,
+                description="Time filter (1=Today, 2=Week, 3=Month)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Custom start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="Custom end date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="EPS data retrieved",
+                schema=openapi.Schema(type=openapi.TYPE_OBJECT),
+            ),
+            400: openapi.Response(description="Bad request"),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Not authorized"),
+            404: openapi.Response(description="Company not found"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["Admin Endpoints"],
+    )
     def get(self, request):
         company_id = request.query_params.get("company_id")
 
