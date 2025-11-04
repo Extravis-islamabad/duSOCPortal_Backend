@@ -1,6 +1,4 @@
-# duSOCPortal Backend - Low-Level Design (LLD) Diagram
-
-## System Architecture Overview
+# System Architecture Overview
 
 ```mermaid
 graph TB
