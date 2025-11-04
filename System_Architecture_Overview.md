@@ -805,5 +805,3 @@ IBMQradarDailyEPS
 - **Encryption**: Cryptography library
 
 ______________________________________________________________________
-
-*This LLD diagram represents the system architecture as of the latest codebase analysis.*
