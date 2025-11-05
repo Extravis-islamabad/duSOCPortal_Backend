@@ -4982,20 +4982,32 @@ class UseCaseIncidentsView(APIView):
             soar_ids = [t.id for t in soar_tenants]
 
             # Step 4: Build True Positive filters (same as DetailedIncidentReport)
-            all_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+            base_filters = Q(cortex_soar_tenant__in=soar_ids) & (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
                 & Q(incident_tta__isnull=False)
                 & Q(incident_ttn__isnull=False)
                 & Q(incident_ttdn__isnull=False)
                 & Q(itsm_sync_status__isnull=False)
+                & Q(status__in=["1", "2"])
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
+
+            true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(status__in=["1", "2"])
                 & Q(itsm_sync_status__iexact="Ready")
                 & Q(incident_priority__isnull=False)
                 & ~Q(incident_priority__exact="")
             )
 
-            false_positive_filters = Q(itsm_sync_status__iexact="Done")
-            filters = all_filters | false_positive_filters
+            filters = base_filters | true_positive_filters
             # Step 5: Apply date filtering (same logic as DetailedIncidentReport)
             filter_type = request.query_params.get("filter_type", FilterType.WEEK.value)
             if filter_type is not None:
