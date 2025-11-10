@@ -85,6 +85,10 @@ class UserDetailSerializer(serializers.ModelSerializer):
         return []
 
     def get_profile_picture(self, obj):
+        """
+        Returns the URL of the profile picture associated with the tenant if it exists.
+        For admins (or non-tenants), returns None.
+        """
         if obj.is_tenant:
             tenant = Tenant.objects.filter(tenant=obj).first()
             if tenant and tenant.company and tenant.company.profile_picture:
