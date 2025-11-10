@@ -464,3 +464,10 @@ class APIConstants:
     API_VERSION = "v1.0.0"
     API_NAME = "duSOC Portal Backend API"
     API_DESCRIPTION = "Backend API for duSOC Portal application"
+
+
+class RedirectionURLConstant:
+    PUBLIC_DOMAIN = os.getenv("PUBLIC_DOMAIN", None)
+    if PUBLIC_DOMAIN is None:
+        logger.warning("Public domain is not set...")
+        raise ValueError("Public domain is not set...")

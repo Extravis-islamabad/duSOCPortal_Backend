@@ -4,6 +4,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from common.constants import RedirectionURLConstant
 from tenant.models import Tenant, TenantRole, TenantRolePermissions
 
 from .models import User
@@ -87,8 +88,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
         if obj.is_tenant:
             tenant = Tenant.objects.filter(tenant=obj).first()
             if tenant and tenant.company and tenant.company.profile_picture:
-                request = self.context.get("request")
-                return request.build_absolute_uri(tenant.company.profile_picture.url)
+                return f"{RedirectionURLConstant.PUBLIC_DOMAIN}/{tenant.company.profile_picture.url}"
         return None
 
     def get_company_name(self, obj):
