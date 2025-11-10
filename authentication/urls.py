@@ -1,9 +1,9 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
     AdminLoginAPIView,
     CompanyProfilePictureUpdateAPIView,
+    CustomTokenRefreshView,
     LDAPGroupListView,
     LDAPGroupUsersView,
     LDAPUsersAPIView,
@@ -18,7 +18,7 @@ urlpatterns = [
     path("admin/login/", AdminLoginAPIView.as_view(), name="admin-login"),
     path("logout/", UserLogoutAPIView.as_view(), name="user-logout"),
     path("user_details/", UserDetailsAPIView.as_view(), name="user_details"),
-    path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("token/refresh/", CustomTokenRefreshView.as_view(), name="token_refresh"),
     path(
         "upload-profile-picture/<int:company_id>/",
         CompanyProfilePictureUpdateAPIView.as_view(),

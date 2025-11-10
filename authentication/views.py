@@ -1121,6 +1121,4 @@ class AdminLoginAPIView(APIView):
 
 
 class CustomTokenRefreshView(TokenViewBase):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
     serializer_class = CustomTokenRefreshSerializer

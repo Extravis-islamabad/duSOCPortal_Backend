@@ -175,6 +175,8 @@ class ProfilePictureUploadSerializer(serializers.ModelSerializer):
 
 class CustomTokenRefreshSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
+        from django.contrib.auth import get_user_model
+
         self.refresh = attrs["refresh"]
 
         try:
@@ -182,12 +184,24 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
         except TokenError as e:
             raise InvalidToken(e.args[0])
 
+        # Check if the user associated with the token still exists
+        User = get_user_model()
+        user_id = refresh.get("user_id")
+
+        if user_id:
+            try:
+                user = User.objects.get(id=user_id, is_active=True, is_deleted=False)
+            except User.DoesNotExist:
+                raise InvalidToken("User no longer exists or is inactive")
+        else:
+            raise InvalidToken("Invalid token: no user_id")
+
         data = {}
         data["access"] = str(refresh.access_token)
 
         if api_settings.ROTATE_REFRESH_TOKENS:
             refresh.blacklist()  # blacklist the old one
-            new_refresh = RefreshToken.for_user(self.context["request"].user)
+            new_refresh = RefreshToken.for_user(user)
             data["refresh"] = str(new_refresh)
 
         return data
