@@ -92,7 +92,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
         if obj.is_tenant:
             tenant = Tenant.objects.filter(tenant=obj).first()
             if tenant and tenant.company and tenant.company.profile_picture:
-                return f"{RedirectionURLConstant.PUBLIC_DOMAIN}/{tenant.company.profile_picture.url}"
+                return f"{RedirectionURLConstant.PUBLIC_DOMAIN}{tenant.company.profile_picture.url}"
         return None
 
     def get_company_name(self, obj):

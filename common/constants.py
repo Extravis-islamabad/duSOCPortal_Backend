@@ -63,6 +63,7 @@ class AllowedOriginsConstants:
         TENANT_URL,
         ADMIN_URL,
         "http://localhost:3000",
+        "https://uat.cloud.du.ae:3000",
     ]
 
 
