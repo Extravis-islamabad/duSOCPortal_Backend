@@ -1,6 +1,6 @@
 # tenant/serializers.py
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from loguru import logger
 from rest_framework import serializers
 
@@ -1673,27 +1673,66 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
         return None
 
     def get_total_incidents(self, obj):
-        return DUCortexSOARIncidentFinalModel.objects.filter(
-            cortex_soar_tenant__in=obj.soar_tenants.all(),
-            status__in=["1", "2"],
-            itsm_sync_status__in=["Done", "Ready"],
-            owner__isnull=False,
-            owner__gt="",
-            incident_tta__isnull=False,
-            incident_ttn__isnull=False,
-            incident_ttdn__isnull=False,
-            incident_priority__isnull=False,
-            incident_priority__gt="",
-        ).count()
+        soar_ids = obj.soar_tenants.all()
+
+        base_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(status__in=["1", "2"])
+            & Q(incident_priority__isnull=False)
+            & ~Q(incident_priority__exact="")
+        )
+
+        true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(status__in=["1", "2"])
+            & Q(itsm_sync_status__iexact="Ready")
+            & Q(incident_priority__isnull=False)
+            & ~Q(incident_priority__exact="")
+        )
+
+        filters = base_filters | true_positive_filters
+        return DUCortexSOARIncidentFinalModel.objects.filter(filters).count()
 
     def get_active_incidents(self, obj):
-        return (
-            DUCortexSOARIncidentFinalModel.objects.filter(
-                cortex_soar_tenant__in=obj.soar_tenants.all()
-            )
-            .exclude(incident_phase__in=["Closed", "Resolved"])
-            .count()
+        soar_ids = obj.soar_tenants.all()
+
+        base_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(status__in=["1"])
+            & Q(incident_priority__isnull=False)
+            & ~Q(incident_priority__exact="")
         )
+
+        true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+            ~Q(owner__isnull=True)
+            & ~Q(owner__exact="")
+            & Q(incident_tta__isnull=False)
+            & Q(incident_ttn__isnull=False)
+            & Q(incident_ttdn__isnull=False)
+            & Q(itsm_sync_status__isnull=False)
+            & Q(status__in=["1"])
+            & Q(itsm_sync_status__iexact="Ready")
+            & Q(incident_priority__isnull=False)
+            & ~Q(incident_priority__exact="")
+        )
+
+        filters = base_filters | true_positive_filters
+        return DUCortexSOARIncidentFinalModel.objects.filter(filters).count()
 
     def get_tickets_count(self, obj):
         return DuITSMFinalTickets.objects.filter(
