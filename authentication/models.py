@@ -119,3 +119,19 @@ class RolePermission(models.Model):
         # Set permission_text to the label from PermissionChoices based on permission
         self.permission_text = UserPermissionChoices(self.permission).label
         super().save(*args, **kwargs)
+
+
+class UserPreferences(models.Model):
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="preferences"
+    )
+    data = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "user_preferences"
+        verbose_name = "User Preference"
+        verbose_name_plural = "User Preferences"
+
+    def __str__(self):
+        return f"{self.user.username} - Preferences"
