@@ -7,7 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from common.constants import RedirectionURLConstant
 from tenant.models import Tenant, TenantRole, TenantRolePermissions
 
-from .models import User
+from .models import User, UserPreferences
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -175,6 +175,13 @@ class ProfilePictureUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["profile_picture", "company_name"]
+
+
+class UserPreferencesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserPreferences
+        fields = ["data", "updated_at"]
+        read_only_fields = ["updated_at"]
 
 
 class CustomTokenRefreshSerializer(TokenRefreshSerializer):

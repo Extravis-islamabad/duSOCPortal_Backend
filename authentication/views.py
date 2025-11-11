@@ -21,11 +21,12 @@ from common.constants import LDAPConstants, RBACConstants
 from common.utils import LDAP
 from tenant.models import Company
 
-from .models import User
+from .models import User, UserPreferences
 from .serializers import (
     CustomTokenRefreshSerializer,
     UserCreateSerializer,
     UserDetailSerializer,
+    UserPreferencesSerializer,
 )
 
 
@@ -1122,3 +1123,224 @@ class AdminLoginAPIView(APIView):
 
 class CustomTokenRefreshView(TokenViewBase):
     serializer_class = CustomTokenRefreshSerializer
+
+
+class UserPreferencesGetAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="""Retrieves the authenticated user's localStorage data.
+
+        Returns the user's stored preferences/localStorage data that can be synced across browsers.
+        If no preferences exist, returns an empty data object.""",
+        responses={
+            200: openapi.Response(
+                description="User preferences retrieved successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "data": openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            description="User's localStorage data as JSON object",
+                        ),
+                        "updated_at": openapi.Schema(
+                            type=openapi.TYPE_STRING,
+                            format="date-time",
+                            description="Last update timestamp",
+                        ),
+                    },
+                    example={
+                        "data": {
+                            "theme": "dark",
+                            "language": "en",
+                            "dashboardLayout": "grid",
+                        },
+                        "updated_at": "2025-11-11T11:45:00Z",
+                    },
+                ),
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided or invalid",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "detail": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={"detail": "Authentication credentials were not provided."},
+                ),
+            ),
+        },
+        tags=["User Preferences"],
+    )
+    def get(self, request):
+        start = time.time()
+        try:
+            preferences, created = UserPreferences.objects.get_or_create(
+                user=request.user
+            )
+            serializer = UserPreferencesSerializer(preferences)
+            logger.info(
+                f"UserPreferencesGetAPIView.get took {time.time() - start} seconds"
+            )
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(
+                f"An error occurred in UserPreferencesGetAPIView.get: {str(e)}"
+            )
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+
+class UserPreferencesSaveAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="""Saves or updates the authenticated user's localStorage data.
+
+        This endpoint allows the frontend to sync localStorage data to the backend.
+        The data field should contain a JSON object with all localStorage key-value pairs.""",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "data": openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    description="JSON object containing localStorage key-value pairs",
+                    example={
+                        "theme": "dark",
+                        "language": "en",
+                        "dashboardLayout": "grid",
+                        "notifications": "enabled",
+                    },
+                ),
+            },
+            required=["data"],
+        ),
+        responses={
+            200: openapi.Response(
+                description="User preferences saved successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "data": openapi.Schema(type=openapi.TYPE_OBJECT),
+                        "updated_at": openapi.Schema(
+                            type=openapi.TYPE_STRING, format="date-time"
+                        ),
+                    },
+                ),
+            ),
+            400: openapi.Response(
+                description="Bad request - validation errors",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "error": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={"error": "Invalid data format"},
+                ),
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided or invalid",
+            ),
+        },
+        tags=["User Preferences"],
+    )
+    def post(self, request):
+        start = time.time()
+        try:
+            preferences, created = UserPreferences.objects.get_or_create(
+                user=request.user
+            )
+            serializer = UserPreferencesSerializer(
+                preferences, data=request.data, partial=True
+            )
+
+            if serializer.is_valid():
+                serializer.save()
+                logger.info(
+                    f"UserPreferencesSaveAPIView.post took {time.time() - start} seconds"
+                )
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            logger.info(
+                f"UserPreferencesSaveAPIView.post took {time.time() - start} seconds"
+            )
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            logger.error(
+                f"An error occurred in UserPreferencesSaveAPIView.post: {str(e)}"
+            )
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+
+class UserPreferencesClearAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="""Clears all stored localStorage data for the authenticated user.
+
+        This will reset the user's preferences to an empty state.
+        Useful for logout or reset scenarios.""",
+        responses={
+            200: openapi.Response(
+                description="User preferences cleared successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={"message": "Preferences cleared successfully"},
+                ),
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided or invalid",
+            ),
+            404: openapi.Response(
+                description="No preferences found for user",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                    example={"message": "No preferences found"},
+                ),
+            ),
+        },
+        tags=["User Preferences"],
+    )
+    def delete(self, request):
+        start = time.time()
+        try:
+            preferences = UserPreferences.objects.get(user=request.user)
+            preferences.data = {}
+            preferences.save()
+            logger.info(
+                f"UserPreferencesClearAPIView.delete took {time.time() - start} seconds"
+            )
+            return Response(
+                {"message": "Preferences cleared successfully"},
+                status=status.HTTP_200_OK,
+            )
+        except UserPreferences.DoesNotExist:
+            logger.info(
+                f"UserPreferencesClearAPIView.delete took {time.time() - start} seconds"
+            )
+            return Response(
+                {"message": "No preferences found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            logger.error(
+                f"An error occurred in UserPreferencesClearAPIView.delete: {str(e)}"
+            )
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )

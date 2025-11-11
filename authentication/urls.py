@@ -10,6 +10,9 @@ from .views import (
     UserDetailsAPIView,
     UserLoginAPIView,
     UserLogoutAPIView,
+    UserPreferencesClearAPIView,
+    UserPreferencesGetAPIView,
+    UserPreferencesSaveAPIView,
 )
 
 urlpatterns = [
@@ -30,5 +33,21 @@ urlpatterns = [
         "api/ldap/groups/<str:group_name>/users/",
         LDAPGroupUsersView.as_view(),
         name="ldap-group-users",
+    ),
+    # User Preferences endpoints
+    path(
+        "preferences/",
+        UserPreferencesGetAPIView.as_view(),
+        name="get-user-preferences",
+    ),
+    path(
+        "preferences/save/",
+        UserPreferencesSaveAPIView.as_view(),
+        name="save-user-preferences",
+    ),
+    path(
+        "preferences/clear/",
+        UserPreferencesClearAPIView.as_view(),
+        name="clear-user-preferences",
     ),
 ]
