@@ -8,6 +8,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 import pandas as pd
 from django.conf import settings
+from django.db import transaction
 from django.db.models import (
     Avg,
     Count,
@@ -26,6 +27,8 @@ from django.templatetags.static import static
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import make_aware
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from loguru import logger
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
@@ -51,6 +54,7 @@ from integration.models import (
 from tenant.cortex_soar_tasks import sync_notes_for_incident, sync_requests_for_soar
 from tenant.models import (
     Alert,
+    Company,
     CorrelatedEventLog,
     CywareAlertDetails,
     CywareTenantAlertDetails,
@@ -113,6 +117,41 @@ class PermissionChoicesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves available permission choices for tenant roles.",
+        responses={
+            200: openapi.Response(
+                description="Permission choices retrieved successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "permissions": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    "id": openapi.Schema(type=openapi.TYPE_STRING),
+                                    "text": openapi.Schema(type=openapi.TYPE_STRING),
+                                },
+                            ),
+                        )
+                    },
+                    example={
+                        "permissions": [
+                            {"id": "VIEW_DASHBOARD", "text": "View Dashboard"},
+                            {"id": "MANAGE_INCIDENTS", "text": "Manage Incidents"},
+                        ]
+                    },
+                ),
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided"
+            ),
+            403: openapi.Response(description="User is not an admin"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["Tenant"],
+    )
     def get(self, request):
         """
         Retrieves the permission choices.
@@ -147,6 +186,42 @@ class TenantAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves tenant information and associated roles for the authenticated user.",
+        responses={
+            200: openapi.Response(
+                description="Tenant information retrieved successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "tenant_id": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "tenant_username": openapi.Schema(type=openapi.TYPE_STRING),
+                        "roles": openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(type=openapi.TYPE_OBJECT),
+                        ),
+                    },
+                    example={
+                        "tenant_id": 1,
+                        "tenant_username": "tenant.user",
+                        "roles": [
+                            {
+                                "id": 1,
+                                "role_name": "Security Analyst",
+                                "role_permissions": ["VIEW_DASHBOARD"],
+                            }
+                        ],
+                    },
+                ),
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided"
+            ),
+            404: openapi.Response(description="Tenant not found"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["Tenant"],
+    )
     def get(self, request, tenant_id=None):
         start = time.time()
         try:
@@ -191,6 +266,28 @@ class DuIbmQradarTenantsListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Lists IBM QRadar tenants for the specified integration.",
+        manual_parameters=[
+            openapi.Parameter(
+                "integration_id",
+                openapi.IN_QUERY,
+                description="ID of the QRadar integration",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(description="QRadar tenants retrieved successfully"),
+            400: openapi.Response(description="Pass a valid integration_id"),
+            401: openapi.Response(
+                description="Authentication credentials were not provided"
+            ),
+            403: openapi.Response(description="User is not an admin"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["QRadar"],
+    )
     def get(self, request):
         # Check if integration_id is provided
         integration_id = request.query_params.get("integration_id", None)
@@ -219,6 +316,30 @@ class EventCollectorsListAPIView(APIView):
     API endpoint to retrieve all records from the IBMQradarEventCollector table.
     """
 
+    @swagger_auto_schema(
+        operation_description="Retrieves IBM QRadar event collectors for the specified integration.",
+        manual_parameters=[
+            openapi.Parameter(
+                "integration_id",
+                openapi.IN_QUERY,
+                description="ID of the QRadar integration",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Event collectors retrieved successfully"
+            ),
+            400: openapi.Response(description="Pass a valid integration_id"),
+            401: openapi.Response(
+                description="Authentication credentials were not provided"
+            ),
+            403: openapi.Response(description="User is not an admin"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["QRadar"],
+    )
     def get(self, request, *args, **kwargs):
         # Check if integration_id is provided
         integration_id = request.query_params.get("integration_id", None)
@@ -247,6 +368,28 @@ class DuITSMTenantsListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Lists ITSM tenants for the specified integration.",
+        manual_parameters=[
+            openapi.Parameter(
+                "integration_id",
+                openapi.IN_QUERY,
+                description="ID of the ITSM integration",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(description="ITSM tenants retrieved successfully"),
+            400: openapi.Response(description="Pass a valid integration_id"),
+            401: openapi.Response(
+                description="Authentication credentials were not provided"
+            ),
+            403: openapi.Response(description="User is not an admin"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["ITSM"],
+    )
     def get(self, request):
         # Check if integration_id is provided
         integration_id = request.query_params.get("integration_id", None)
@@ -274,6 +417,30 @@ class DuCortexSOARTenantsListView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminUser]
 
+    @swagger_auto_schema(
+        operation_description="Lists Cortex SOAR tenants for the specified integration.",
+        manual_parameters=[
+            openapi.Parameter(
+                "integration_id",
+                openapi.IN_QUERY,
+                description="ID of the Cortex SOAR integration",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Cortex SOAR tenants retrieved successfully"
+            ),
+            400: openapi.Response(description="Pass a valid integration_id"),
+            401: openapi.Response(
+                description="Authentication credentials were not provided"
+            ),
+            403: openapi.Response(description="User is not an admin"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["SOAR"],
+    )
     def get(self, request):
         # Check if integration_id is provided
         integration_id = request.query_params.get("integration_id", None)
@@ -301,6 +468,26 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
+        # Delete company with id = 121 (and cascade related M2M links)
+        try:
+            with transaction.atomic():
+                deleted_count, deleted_map = Company.objects.filter(
+                    company_name="DW"
+                ).delete()
+            return Response(
+                {
+                    "message": "Company deletion attempted",
+                    "deleted_count": deleted_count,
+                    "details": deleted_map,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            logger.error(f"Error deleting company id=121: {e}")
+            return Response(
+                {"error": f"Failed to delete company id=121: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
         # with IBMQradarToken(
         #     ip_address="10.225.148.146",
         #     port=443,
@@ -359,6 +546,28 @@ class DateTimeStorageView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves the stored datetime value for the portal.",
+        responses={
+            200: openapi.Response(
+                description="DateTime value retrieved successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "exists": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        "datetime_value": openapi.Schema(
+                            type=openapi.TYPE_STRING, format="date-time", nullable=True
+                        ),
+                    },
+                ),
+            ),
+            401: openapi.Response(
+                description="Authentication credentials were not provided"
+            ),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["System"],
+    )
     def get(self, request):
         """
         Retrieve the stored datetime value for the portal (single-record storage).
@@ -388,6 +597,99 @@ class GetTenantAssetsList(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves IBM QRadar assets for the authenticated tenant with comprehensive filtering.",
+        manual_parameters=[
+            openapi.Parameter(
+                "name",
+                openapi.IN_QUERY,
+                description="Filter by asset name",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "id",
+                openapi.IN_QUERY,
+                description="Filter by asset ID",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "db_id",
+                openapi.IN_QUERY,
+                description="Filter by database ID",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "log_source_type",
+                openapi.IN_QUERY,
+                description="Filter by log source type",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "enabled",
+                openapi.IN_QUERY,
+                description="Filter by enabled status",
+                type=openapi.TYPE_BOOLEAN,
+            ),
+            openapi.Parameter(
+                "last_event_date",
+                openapi.IN_QUERY,
+                description="Filter by last event date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Creation date start (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="Creation date end (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "average_eps",
+                openapi.IN_QUERY,
+                description="Filter by average EPS",
+                type=openapi.TYPE_NUMBER,
+            ),
+            openapi.Parameter(
+                "status",
+                openapi.IN_QUERY,
+                description="Status filter (SUCCESS/ERROR/ALL)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "sub_status",
+                openapi.IN_QUERY,
+                description="Sub-status filter (comma-separated)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "sort",
+                openapi.IN_QUERY,
+                description="Sort by creation date (desc)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+            ),
+        ],
+        responses={
+            200: openapi.Response(description="Assets retrieved successfully"),
+            400: openapi.Response(
+                description="Invalid filter parameters or no active SIEM integration"
+            ),
+            404: openapi.Response(
+                description="Tenant not found or no Event Collectors mapped"
+            ),
+        },
+        tags=["QRadar Assets"],
+    )
     def get(self, request):
         """
         Retrieve IBM QRadar assets with pagination
@@ -662,6 +964,99 @@ class DownloadTenantAssetsExcel(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Downloads IBM QRadar assets as an Excel file with the same filters as the list endpoint.",
+        manual_parameters=[
+            openapi.Parameter(
+                "name",
+                openapi.IN_QUERY,
+                description="Filter by asset name",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "id",
+                openapi.IN_QUERY,
+                description="Filter by asset ID",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "db_id",
+                openapi.IN_QUERY,
+                description="Filter by database ID",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "log_source_type",
+                openapi.IN_QUERY,
+                description="Filter by log source type",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "enabled",
+                openapi.IN_QUERY,
+                description="Filter by enabled status",
+                type=openapi.TYPE_BOOLEAN,
+            ),
+            openapi.Parameter(
+                "last_event_date",
+                openapi.IN_QUERY,
+                description="Filter by last event date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Creation date start (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="Creation date end (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "average_eps",
+                openapi.IN_QUERY,
+                description="Filter by average EPS",
+                type=openapi.TYPE_NUMBER,
+            ),
+            openapi.Parameter(
+                "status",
+                openapi.IN_QUERY,
+                description="Status filter (SUCCESS/ERROR/ALL)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "sub_status",
+                openapi.IN_QUERY,
+                description="Sub-status filter (comma-separated)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "sort",
+                openapi.IN_QUERY,
+                description="Sort by creation date (desc)",
+                type=openapi.TYPE_STRING,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Excel file generated successfully",
+                content={
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Invalid filter parameters or no active SIEM integration"
+            ),
+            404: openapi.Response(description="No assets found with specified filters"),
+            500: openapi.Response(description="Failed to generate Excel file"),
+        },
+        tags=["QRadar Assets"],
+    )
     def get(self, request):
         """
         Download IBM QRadar assets as Excel file with all the same filtering options
@@ -1032,6 +1427,31 @@ class GetTenantAssetsStats(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Returns statistical summary of tenant's QRadar assets.",
+        responses={
+            200: openapi.Response(
+                description="Asset statistics retrieved successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "total_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "success_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "error_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "disabled_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "na_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
+                        "warning_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
+                    },
+                ),
+            ),
+            400: openapi.Response(description="No active SIEM integration configured"),
+            404: openapi.Response(
+                description="Tenant not found or no Event Collectors mapped"
+            ),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["QRadar Assets"],
+    )
     def get(self, request):
         """
         Return asset statistics:
@@ -1102,6 +1522,74 @@ class TenantITSMTicketsView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves ITSM tickets for the authenticated tenant with filtering options.",
+        manual_parameters=[
+            openapi.Parameter(
+                "account_name",
+                openapi.IN_QUERY,
+                description="Filter by account name",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "db_id",
+                openapi.IN_QUERY,
+                description="Filter by ticket database ID",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "id",
+                openapi.IN_QUERY,
+                description="Filter by ticket ID",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "subject",
+                openapi.IN_QUERY,
+                description="Filter by subject",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "status",
+                openapi.IN_QUERY,
+                description="Filter by status",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "created_by",
+                openapi.IN_QUERY,
+                description="Filter by creator name",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="End date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+            ),
+        ],
+        responses={
+            200: openapi.Response(description="ITSM tickets retrieved successfully"),
+            400: openapi.Response(
+                description="Invalid filter parameters or no active ITSM integration"
+            ),
+            404: openapi.Response(description="Tenant or ITSM tenants not found"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["ITSM Tickets"],
+    )
     def get(self, request):
         """
         Retrieve ITSM tickets filtered by:
@@ -1275,6 +1763,25 @@ class TenantITSMTicketDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves a single ITSM ticket by database ID.",
+        manual_parameters=[
+            openapi.Parameter(
+                "db_id",
+                openapi.IN_PATH,
+                description="Database ID of the ticket",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(description="Ticket details retrieved successfully"),
+            404: openapi.Response(
+                description="Tenant not found or ticket not found for tenant"
+            ),
+        },
+        tags=["ITSM Tickets"],
+    )
     def get(self, request, db_id):
         """
         Get a single ITSM ticket by db_id for the authenticated tenant.
@@ -1307,6 +1814,23 @@ class TenantCortexSOARIncidentsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves Cortex SOAR incidents for the authenticated tenant.",
+        manual_parameters=[
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+            ),
+        ],
+        responses={
+            200: openapi.Response(description="SOAR incidents retrieved successfully"),
+            400: openapi.Response(description="No active SOAR integration configured"),
+            404: openapi.Response(description="Tenant or SOAR tenants not found"),
+        },
+        tags=["SOAR Incidents"],
+    )
     def get(self, request):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
@@ -1340,6 +1864,40 @@ class TypeDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Calculates incident type distribution for the tenant's SOAR incidents.",
+        manual_parameters=[
+            openapi.Parameter(
+                "filter_type",
+                openapi.IN_QUERY,
+                description="Date filter type (1=Today, 2=Week, 3=Month)",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="End date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Type distribution calculated successfully"
+            ),
+            400: openapi.Response(
+                description="Invalid filter parameters or no active SOAR integration"
+            ),
+            404: openapi.Response(description="Tenant or SOAR tenants not found"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["SOAR Analytics"],
+    )
     def get(self, request):
         # Extract tenant_id from X-Tenant-ID header, default to 'CDC-Mey-Tabreeds'
         try:
@@ -1462,6 +2020,18 @@ class OwnerDistributionView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Calculates incident owner distribution for the tenant's SOAR incidents.",
+        responses={
+            200: openapi.Response(
+                description="Owner distribution calculated successfully"
+            ),
+            400: openapi.Response(description="No active SOAR integration configured"),
+            404: openapi.Response(description="Tenant or SOAR tenants not found"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["SOAR Analytics"],
+    )
     def get(self, request):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
@@ -1525,6 +2095,70 @@ class DashboardView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Provides dashboard metrics for the tenant's SOAR incidents with optional trend analysis.",
+        manual_parameters=[
+            openapi.Parameter(
+                "filters",
+                openapi.IN_QUERY,
+                description="Comma-separated list of metrics to include",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "filter_type",
+                openapi.IN_QUERY,
+                description="Date filter type (1=Today, 2=Week, 3=Month, 4=Custom)",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Start date for custom range (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="End date for custom range (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "incident_id",
+                openapi.IN_QUERY,
+                description="Filter by specific incident ID",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "owner",
+                openapi.IN_QUERY,
+                description="Filter by incident owner",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "priority",
+                openapi.IN_QUERY,
+                description="Filter by incident priority",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "status",
+                openapi.IN_QUERY,
+                description="Filter by incident status (1=open, 2=closed)",
+                type=openapi.TYPE_INTEGER,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Dashboard metrics calculated successfully"
+            ),
+            400: openapi.Response(
+                description="Invalid filter parameters or no active SOAR integration"
+            ),
+            404: openapi.Response(description="Tenant or SOAR tenants not found"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["Dashboard"],
+    )
     def get(self, request):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
@@ -2190,6 +2824,152 @@ class IncidentsView(APIView):
         except (ValueError, AttributeError):
             return None, None
 
+    @swagger_auto_schema(
+        operation_description="Retrieves paginated list of SOAR incidents with comprehensive filtering.",
+        manual_parameters=[
+            openapi.Parameter(
+                "id",
+                openapi.IN_QUERY,
+                description="Filter by incident ID",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "db_id",
+                openapi.IN_QUERY,
+                description="Filter by database ID",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "account",
+                openapi.IN_QUERY,
+                description="Filter by account",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "name",
+                openapi.IN_QUERY,
+                description="Filter by name",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "description",
+                openapi.IN_QUERY,
+                description="Filter by description",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "status",
+                openapi.IN_QUERY,
+                description="Filter by status",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "priority",
+                openapi.IN_QUERY,
+                description="Filter by priority",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "phase",
+                openapi.IN_QUERY,
+                description="Filter by phase",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "assignee",
+                openapi.IN_QUERY,
+                description="Filter by assignee",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "playbook",
+                openapi.IN_QUERY,
+                description="Filter by playbook ID",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "sla",
+                openapi.IN_QUERY,
+                description="Filter by SLA",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "mitre_tactic",
+                openapi.IN_QUERY,
+                description="Filter by MITRE tactic",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "mitre_technique",
+                openapi.IN_QUERY,
+                description="Filter by MITRE technique",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "configuration_item",
+                openapi.IN_QUERY,
+                description="Filter by configuration item",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "filter",
+                openapi.IN_QUERY,
+                description="Quick filter type",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "filter_type",
+                openapi.IN_QUERY,
+                description="Date filter type (1=Today, 2=Week, 3=Month, 4=Custom)",
+                type=openapi.TYPE_INTEGER,
+            ),
+            openapi.Parameter(
+                "start_date",
+                openapi.IN_QUERY,
+                description="Created start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "end_date",
+                openapi.IN_QUERY,
+                description="Created end date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "occurred_start",
+                openapi.IN_QUERY,
+                description="Occurred start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "occurred_end",
+                openapi.IN_QUERY,
+                description="Occurred end date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING,
+            ),
+            openapi.Parameter(
+                "false_positives",
+                openapi.IN_QUERY,
+                description="Return only false positives",
+                type=openapi.TYPE_BOOLEAN,
+            ),
+            openapi.Parameter(
+                "page",
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER,
+            ),
+        ],
+        responses={
+            200: openapi.Response(description="Incidents retrieved successfully"),
+            400: openapi.Response(
+                description="Invalid filter parameters or no active SOAR integration"
+            ),
+            404: openapi.Response(description="Tenant or SOAR tenants not found"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["SOAR Incidents"],
+    )
     def get(self, request):
         try:
             # Step 1: Get current tenant
@@ -2555,6 +3335,29 @@ class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves detailed information for a specific SOAR incident, including SLA breach calculations and related items.",
+        manual_parameters=[
+            openapi.Parameter(
+                "incident_db_id",
+                openapi.IN_PATH,
+                description="Database ID of the SOAR incident",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Incident details retrieved successfully"
+            ),
+            400: openapi.Response(description="No active SOAR integration configured"),
+            404: openapi.Response(
+                description="Tenant, SOAR tenants, or incident not found"
+            ),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["SOAR Incidents"],
+    )
     def get(self, request, incident_db_id):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
@@ -2937,6 +3740,25 @@ class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    @swagger_auto_schema(
+        operation_description="Retrieves QRadar offense details with associated flows and assets.",
+        manual_parameters=[
+            openapi.Parameter(
+                "offense_id",
+                openapi.IN_PATH,
+                description="ID of the QRadar offense",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(description="Offense details retrieved successfully"),
+            400: openapi.Response(description="No active SIEM integration configured"),
+            404: openapi.Response(description="Tenant, mappings, or offense not found"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["QRadar Offenses"],
+    )
     def get(self, request, offense_id):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
@@ -7937,11 +8759,9 @@ class DownloadIncidentsView(APIView):
                     "incident_priority",
                     "incident_phase",
                     "created",
-                    "created_at",
+                    # "created_at",
                     "owner",
-                    "playbook_id",
                     "occured",
-                    "sla",
                     "mitre_tactic",
                     "mitre_technique",
                     "configuration_item",
@@ -7977,15 +8797,15 @@ class DownloadIncidentsView(APIView):
                 else:
                     occured_at_str = "N/A"
 
-                if row["created"]:
-                    try:
-                        created_date = (
-                            row["created"].isoformat() if row["created"] else "N/A"
-                        )
-                    except Exception:
-                        created_date = "N/A"
-                else:
-                    created_date = "N/A"
+                # if row["created"]:
+                #     try:
+                #         created_date = (
+                #             row["created"].isoformat() if row["created"] else "N/A"
+                #         )
+                #     except Exception:
+                #         created_date = "N/A"
+                # else:
+                #     created_date = "N/A"
 
                 # Extract offense ID from name
                 name = row.get("name") or ""
@@ -8026,9 +8846,6 @@ class DownloadIncidentsView(APIView):
                         "PRIORITY": row["incident_priority"] or "N/A",
                         "PHASE": row["incident_phase"] or "N/A",
                         "ASSIGNEE": row["owner"] or "Unassigned",
-                        "PLAYBOOK": row["playbook_id"] or "N/A",
-                        "SLA": row["sla"] or "N/A",
-                        "CREATED": created_date,
                         "OCCURRED": occured_at_str,
                         "MITRE_TACTIC": row["mitre_tactic"] or "N/A",
                         "MITRE_TECHNIQUE": row["mitre_technique"] or "N/A",
