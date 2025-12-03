@@ -1,0 +1,251 @@
+version: '3.9' #version
+
+services:
+  backend:
+    image: backend-api
+    container_name: duSOC_Backend_Container
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    command: ["sh", "./start_server.sh"]
+    ports:
+      - "8000:8000"
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      # db:
+      #   condition: service_healthy
+      # celery:
+      #   condition: service_started
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      celery-beat:
+        condition: service_started
+      celery-intel:
+        condition: service_started
+      celery-qradar:
+        condition: service_started
+      celery-itsm:
+        condition: service_started
+      celery-soar:
+        condition: service_started
+    volumes:
+      - .:/app  # Optional: for live sync with host
+
+  # db:
+  #   container_name: duSOC_Postgres_Container
+  #   image: postgres:16
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_DB: ${DB_NAME}
+  #     POSTGRES_USER: ${DB_USER}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #   volumes:
+  #     - dusocportal_backend_dusocportal_backend_postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+  #     interval: 10s
+  #     retries: 5
+  #     start_period: 10s
+  #     timeout: 5s
+
+  redis:
+    container_name: duSOC_Redis_Container
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    container_name: duSOC_RabbitMQ_Container
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"  # AMQP port
+      - "15672:15672"  # Management UI
+    restart: always
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # celery:
+  #   image: backend-api
+  #   container_name: duSOC_Celery_Container
+  #   # build:
+  #   #   context: .
+  #   #   dockerfile: Dockerfile
+  #   command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "celery", "--loglevel=info"]
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     # db:
+  #     #   condition: service_healthy
+  #     redis:
+  #       condition: service_started
+  #     rabbitmq:
+  #       condition: service_started
+  #   restart: always
+  #   volumes:
+  #     - .:/app  # Optional: for live sync with host
+  #   environment:
+  #     - C_FORCE_ROOT=true  # Allows Celery to run as root in the container (optional, use with caution)
+
+  celery-intel:
+    image: backend-api
+    container_name: duSOC_Celery_Cyware
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "cyware", "--loglevel=info", "-E"]
+    env_file:
+      - .env
+    restart: always
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      - C_FORCE_ROOT=true
+
+  celery-qradar:
+    image: backend-api
+    container_name: duSOC_Celery_Qradar
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "qradar", "--loglevel=info", "-E"]
+    env_file:
+      - .env
+    restart: always
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      - C_FORCE_ROOT=true
+
+  celery-itsm:
+    image: backend-api
+    container_name: duSOC_Celery_Itsm
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "itsm", "--loglevel=info", "-E"]
+    env_file:
+      - .env
+    restart: always
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      - C_FORCE_ROOT=true
+
+  celery-soar:
+    image: backend-api
+    container_name: duSOC_Celery_Soar
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    command: ["celery", "-A", "sockportal__backend", "worker", "-Q", "soar", "--loglevel=info", "-E"]
+    env_file:
+      - .env
+    restart: always
+    depends_on:
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      - C_FORCE_ROOT=true
+
+
+  celery-beat:
+    image: backend-api
+    container_name: duSOC_Celery_Beat_Container
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    command: ["celery", "-A", "sockportal__backend",  "beat", "--loglevel=info"]
+    env_file:
+      - .env
+    restart: always
+    depends_on:
+      # db:
+      #   condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      - C_FORCE_ROOT=true
+
+  flower:
+    image: mher/flower:latest
+    container_name: duSOC_Celery_Flower
+    command: >
+      celery
+      --broker=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
+      --result-backend=redis://redis:6379/0
+      flower
+      --address=0.0.0.0
+      --port=5566
+      --persistent=True
+      --db=/data/flower.db
+      --state_save_interval=5000
+      --purge_offline_workers=3600
+      --max_tasks=10000
+      --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+    env_file:
+      - .env
+    ports:
+      - "5566:5566"
+    depends_on:
+      rabbitmq:
+        condition: service_started
+      redis:
+        condition: service_started
+    restart: always
+    volumes:
+      - flower_data:/data
+    environment:
+      - CELERY_BROKER_URL=amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672//
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - FLOWER_UNAUTHENTICATED_API=false
+
+
+volumes:
+  # dusocportal_backend_dusocportal_backend_postgres_data:
+  redis_data:
+  rabbitmq_data:
+  flower_data:

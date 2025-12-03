@@ -1,0 +1,49 @@
+# Python-specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+
+# Django-specific
+staticfiles/
+media/
+*.sqlite3
+
+# Development and testing
+*.log
+*.pid
+*.seed
+.pytest_cache/
+coverage/
+.coverage
+*.cover
+tests/
+test_*.py
+
+# Git and IDE
+.git
+.gitignore
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Docker and CI/CD
+Dockerfile
+docker-compose.yml
+.dockerignore
+.github/
+.circleci/
+.gitlab-ci.yml
+
+# Miscellaneous
+*.bak
+*.swp
+*~
+node_modules/
+dist/
+build
+.env
