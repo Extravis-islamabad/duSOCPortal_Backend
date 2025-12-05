@@ -40,7 +40,6 @@ from tenant.views import (
     TenantCortexSOARIncidentsAPIView,
     TenantITSMTicketDetailView,
     TenantITSMTicketsView,
-    TestView,
     TopLogSourcesAPIView,
     TotalAssetsByTenantAPIView,
     TotalTicketsByTenantAPIView,
@@ -161,7 +160,7 @@ urlpatterns = [
     ),
     #     path("test/", TestView.as_view(), name="test"),
     # ]
-    path("test/", TestView.as_view(), name="test"),
+    # path("test/", TestView.as_view(), name="test"),
     path(
         "api/recent-incidents/",
         RecentIncidentsView.as_view(),
