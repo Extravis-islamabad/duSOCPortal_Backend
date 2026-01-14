@@ -1563,7 +1563,7 @@ class DateTimeStorage(models.Model):
 
 class FortiSOARTenants(models.Model):
     id = models.AutoField(primary_key=True)
-    db_id = models.UUIDField(unique=True)
+    db_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=255, blank=True, default=None)
     integration = models.ForeignKey(
         Integration,
