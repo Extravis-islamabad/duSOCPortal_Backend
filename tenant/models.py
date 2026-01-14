@@ -1559,3 +1559,22 @@ class DateTimeStorage(models.Model):
             bool: True if a datetime is stored, False otherwise
         """
         return cls.objects.filter(id=1).exists()
+
+
+class FortiSOARTenants(models.Model):
+    id = models.AutoField(primary_key=True)
+    db_id = models.UUIDField(unique=True)
+    name = models.CharField(max_length=255, blank=True, default=None)
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.CASCADE,
+        related_name="du_forti_soar_tenants",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "du_forti_soar_tenants"
+
+    def __str__(self):
+        return self.name
