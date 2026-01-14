@@ -5,6 +5,7 @@ from django.dispatch import receiver
 from loguru import logger
 
 from tenant.cortex_soar_tasks import sync_cortex_soar_tenants, sync_soar_data
+from tenant.forti_soar_tasks import sync_forti_soar_tenants
 from tenant.ibm_qradar_tasks import (
     sync_event_collectors,
     sync_event_collectors_token,
@@ -107,6 +108,20 @@ def trigger_integration_tasks(
 
                     sync_cortex_soar_tenants.delay(**kwargs)
                     sync_soar_data.delay()
+
+            elif instance.integration.soar_subtype == SoarSubTypes.FORTI_SOAR:
+                if instance.credential_type == CredentialTypes.API_KEY:
+                    ip_address = instance.ip_address
+                    port = instance.port
+                    token = instance.api_key
+                    kwargs = {
+                        "token": token,
+                        "ip_address": ip_address,
+                        "port": port,
+                        "integration_id": instance.integration.id,
+                    }
+                    sync_forti_soar_tenants.delay(**kwargs)
+                    # TODO: Write celery tasks for this
 
         elif (
             instance.integration.integration_type
