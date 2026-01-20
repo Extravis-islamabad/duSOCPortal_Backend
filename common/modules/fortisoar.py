@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 import pandas as pd
 import requests
@@ -6,7 +7,7 @@ from django.db import transaction
 from loguru import logger
 
 from common.constants import EnvConstants, FortiSOARConstants, SSLConstants
-from tenant.models import FortiSOARTenants
+from tenant.models import DUFortiSOARIncidentModel, DUFortiSOARTenants
 
 
 class FortiSOAR:
@@ -49,9 +50,34 @@ class FortiSOAR:
         logger.info("Logging out of FortiSOAR")
 
     def _get_base_url(self):
+        """
+        Returns the base URL of the FortiSOAR instance.
+
+        If the port number of the FortiSOAR instance is not 80, it returns the base URL in the format
+        https://{ip_address}:{port}. Otherwise, it returns the base URL in the format https://{ip_address}.
+
+        :return: The base URL of the FortiSOAR instance.
+        """
         if self.port != 80:
             return f"https://{self.ip_address}:{self.port}"
         return f"https://{self.ip_address}"
+
+    def safe_parse_datetime(self, value):
+        """
+        Safely parses a datetime string into a datetime object.
+
+        This method takes a value which is expected to be a valid datetime string and
+        attempts to parse it into a datetime object. If the value is not a valid
+        datetime string, it catches the exception and returns None.
+
+        :param value: The value to parse, expected to be a valid datetime string.
+        :return: A datetime object if the value is a valid datetime string, otherwise None.
+        """
+        try:
+            dt = datetime.fromtimestamp(value)
+            return dt.replace(microsecond=0).isoformat()
+        except Exception:
+            return None
 
     def _get_tenants(self, timeout=SSLConstants.TIMEOUT):
         """
@@ -175,9 +201,106 @@ class FortiSOAR:
         df = pd.DataFrame(tenants_data)
         df = df[["id", "name"]]
         df.rename(columns={"id": "db_id"}, inplace=True)
+        df = df[df["name"].str.lower() != "self"]
         df["integration_id"] = integration_id
         results = df.to_dict(orient="records")
         return results
+
+    def transform_alerts(self, data, integration_id, forti_soar_tenant_id, name):
+        """
+        Transforms the list of alerts from the FortiSOAR API response into a list of dictionaries.
+
+        :param data: A dictionary containing the FortiSOAR API response.
+        :param integration_id: The integration ID to be associated with the alerts.
+        :return: A list of dictionaries containing the transformed alert information.
+        """
+
+        alerts_data = data.get("hydra:member", [])
+
+        if not alerts_data:
+            logger.warning("No alerts found in FortiSOAR API response")
+            return []
+
+        records = []
+        for alert in alerts_data:
+            # Handle iTSMSyncStatus with safe nested access
+            itsm_sync_obj = alert.get("iTSMSyncStatus")
+            itsmsyncstatus = itsm_sync_obj.get("itemValue") if itsm_sync_obj else None
+            if itsmsyncstatus in ("", " ", None):
+                itsmsyncstatus = None
+            else:
+                itsmsyncstatus = str(itsmsyncstatus).strip()
+
+            incident_tta = self.safe_parse_datetime(alert.get("incidentTTA"))
+            incident_ttn = self.safe_parse_datetime(alert.get("incidentTTN"))
+            incident_ttdn = self.safe_parse_datetime(alert.get("incidentTTDN"))
+
+            if incident_tta is None or incident_ttn is None or incident_ttdn is None:
+                continue
+
+            status_obj = alert.get("status")
+            severity_obj = alert.get("severity")
+            priority_obj = alert.get("incidentPriority")
+            phase_obj = alert.get("incidentPhase")
+            closing_user_obj = alert.get("sOCGroup")
+            initial_notification_obj = alert.get("initialNotification")
+            initial_notification_value = (
+                initial_notification_obj.get("itemValue")
+                if initial_notification_obj
+                else None
+            )
+            event_time = alert.get("eventTime")
+
+            record = DUFortiSOARIncidentModel(
+                db_id=alert.get("id"),
+                created=self.safe_parse_datetime(alert.get("createDate")),
+                modified=self.safe_parse_datetime(alert.get("modifyDate")),
+                account=name,
+                name=alert.get("name"),
+                status=status_obj.get("itemValue") if status_obj else None,
+                # record["status_value"] = status_obj.get("orderIndex") if status_obj else None
+                reason=alert.get("qradarCloseReason"),
+                occured=(
+                    datetime.strptime(event_time, "%m/%d/%Y %I:%M %p").strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+                    if event_time
+                    else None
+                ),
+                closed=self.safe_parse_datetime(alert.get("resolveddate")),
+                owner=alert.get("assignedTo"),
+                severity=severity_obj.get("orderIndex") if severity_obj else None,
+                # record["severity_text"] = severity_obj.get("itemValue") if severity_obj else None
+                tta_calculation=alert.get("tTACalculation"),
+                incident_priority=priority_obj.get("itemValue")
+                if priority_obj
+                else None,
+                incident_phase=phase_obj.get("itemValue") if phase_obj else None,
+                source_ips=alert.get("sourceIp"),
+                incident_tta=incident_tta,
+                incident_ttn=incident_ttn,
+                incident_ttdn=incident_ttdn,
+                closing_user_id=closing_user_obj.get("itemValue")
+                if closing_user_obj
+                else None,
+                initial_notification=True
+                if initial_notification_value == "Yes"
+                else None,
+                list_of_rules_offense=alert.get("listOfRulesOffense"),
+                configuration_item=alert.get("logSourceName"),
+                log_source_type=alert.get("logSourceType"),
+                qradar_category=alert.get("qradarCategory"),
+                qradar_sub_category=alert.get("qradarSubCategory"),
+                itsm_sync_status=itsmsyncstatus,
+                mitre_tactic=alert.get("mitreTactic"),
+                mitre_technique=alert.get("mitreTechnique"),
+                close_notes=alert.get("closureNotes"),
+                integration=integration_id,
+                forti_soar_tenant=forti_soar_tenant_id,
+            )
+
+            records.append(record)
+        return records
 
     def _insert_tenants(self, accounts: dict):
         """
@@ -187,11 +310,11 @@ class FortiSOAR:
         """
         start = time.time()
         logger.info(f"FortiSOAR._insert_accounts() started : {start}")
-        records = [FortiSOARTenants(**item) for item in accounts]
+        records = [DUFortiSOARTenants(**item) for item in accounts]
         logger.info(f"Inserting the accounts records: {len(records)}")
         try:
             with transaction.atomic():
-                FortiSOARTenants.objects.bulk_create(
+                DUFortiSOARTenants.objects.bulk_create(
                     records,
                     update_conflicts=True,
                     update_fields=["name"],
@@ -204,3 +327,68 @@ class FortiSOAR:
         except Exception as e:
             logger.error(f"An error occurred in FortiSOAR._insert_accounts(): {str(e)}")
             transaction.rollback()
+
+    def _insert_alerts(self, records: list):
+        """
+        Inserts or updates incident records in the DUFortiSOARIncidentModel table.
+
+        :param records: A list of DUFortiSOARIncidentModel instances to insert/update.
+        """
+        start = time.time()
+        logger.info(f"FortiSOAR._insert_incidents() started : {start}")
+        logger.info(f"Inserting the incident records: {len(records)}")
+
+        try:
+            with transaction.atomic():
+                DUFortiSOARIncidentModel.objects.bulk_create(
+                    records,
+                    update_conflicts=True,
+                    update_fields=[
+                        "created",
+                        "modified",
+                        "name",
+                        "status",
+                        "reason",
+                        "occured",
+                        "closed",
+                        "sla",
+                        "severity",
+                        "investigated_id",
+                        "closing_user_id",
+                        "owner",
+                        "playbook_id",
+                        "incident_phase",
+                        "incident_priority",
+                        "incident_tta",
+                        "incident_ttdn",
+                        "incident_ttn",
+                        "initial_notification",
+                        "list_of_rules_offense",
+                        "log_source_type",
+                        "low_level_categories_events",
+                        "source_ips",
+                        "qradar_category",
+                        "itsm_sync_status",
+                        "qradar_sub_category",
+                        "tta_calculation",
+                        "integration",
+                        "forti_soar_tenant",
+                        "mitre_tactic",
+                        "mitre_technique",
+                        "configuration_item",
+                        "close_notes",
+                    ],
+                    unique_fields=["account", "db_id"],
+                )
+                logger.info(f"Inserted the incident records: {len(records)}")
+                logger.success(
+                    f"FortiSOAR._insert_incidents() took: {time.time() - start} seconds"
+                )
+        except Exception as e:
+            logger.error(
+                f"An error occurred in FortiSOAR._insert_incidents(): {str(e)}"
+            )
+            transaction.rollback()
+            raise Exception(
+                f"An error occurred in FortiSOAR._insert_incidents(): {str(e)}"
+            )
