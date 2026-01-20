@@ -12,6 +12,7 @@ from integration.models import (
 )
 
 
+@shared_task
 def sync_forti_soar_tenants(token, ip_address, port, integration_id):
     logger.info("Running sync_forti_soar_tenants() task")
     start = time.time()
