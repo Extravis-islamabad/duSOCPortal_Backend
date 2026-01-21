@@ -8,7 +8,6 @@ from decimal import ROUND_HALF_UP, Decimal
 
 import pandas as pd
 from django.conf import settings
-from django.db import transaction
 from django.db.models import (
     Avg,
     Count,
@@ -51,10 +50,10 @@ from integration.models import (
     SoarSubTypes,
     ThreatIntelligenceSubTypes,
 )
-from tenant.cortex_soar_tasks import sync_notes_for_incident, sync_requests_for_soar
+from tenant.cortex_soar_tasks import sync_notes_for_incident
+from tenant.forti_soar_tasks import sync_forti_soar_data
 from tenant.models import (
     Alert,
-    Company,
     CorrelatedEventLog,
     CywareAlertDetails,
     CywareTenantAlertDetails,
@@ -67,6 +66,7 @@ from tenant.models import (
     DosEventLog,
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
+    DUFortiSOARTenants,
     DuIbmQradarTenants,
     DuITSMFinalTickets,
     DuITSMTenants,
@@ -106,6 +106,7 @@ from tenant.serializers import (
     DuIbmQradarTenantsSerializer,
     DuITSMTenantsSerializer,
     DuITSMTicketsSerializer,
+    FortiSOARTenantsSerializer,
     IBMQradarAssestsSerializer,
     IBMQradarEventCollectorSerializer,
     RecentIncidentsSerializer,
@@ -463,83 +464,131 @@ class DuCortexSOARTenantsListView(APIView):
             )
 
 
+class DuFortiSOARTenantsListView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAdminUser]
+
+    @swagger_auto_schema(
+        operation_description="Lists FortiSOAR tenants for the specified integration.",
+        manual_parameters=[
+            openapi.Parameter(
+                "integration_id",
+                openapi.IN_QUERY,
+                description="ID of the FortiSOAR integration",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="FortiSOAR tenants retrieved successfully"
+            ),
+            400: openapi.Response(description="Pass a valid integration_id"),
+            401: openapi.Response(
+                description="Authentication credentials were not provided"
+            ),
+            403: openapi.Response(description="User is not an admin"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["SOAR"],
+    )
+    def get(self, request):
+        # Check if integration_id is provided
+        integration_id = request.query_params.get("integration_id", None)
+
+        if not integration_id:
+            return Response(
+                {"error": "Pass a valid integration_id"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # Filter tenants by integration_id
+            tenants = DUFortiSOARTenants.objects.filter(integration_id=integration_id)
+            serializer = FortiSOARTenantsSerializer(tenants, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
 class TestView(APIView):
     # authentication_classes = [JWTAuthentication]
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        # Delete company with id = 121 (and cascade related M2M links)
-        try:
-            with transaction.atomic():
-                deleted_count, deleted_map = Company.objects.filter(
-                    company_name="DW"
-                ).delete()
-            return Response(
-                {
-                    "message": "Company deletion attempted",
-                    "deleted_count": deleted_count,
-                    "details": deleted_map,
-                },
-                status=status.HTTP_200_OK,
-            )
-        except Exception as e:
-            logger.error(f"Error deleting company id=121: {e}")
-            return Response(
-                {"error": f"Failed to delete company id=121: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-        # with IBMQradarToken(
-        #     ip_address="10.225.148.146",
+        # a = FortiSOAR(
+        #     token="c06a7a718b2fd1e323700fc2d2b20e031d99093bfa2085c071b9d0eace507e11",
+        #     ip_address="10.160.188.245",
         #     port=443,
-        #     api_key="4d4b7dab-755f-43c9-a43d-fe7c31168362",
-        # ) as ibm:
-        #     # data = ibm.test_integration()
-        #     data = ibm._get_offenses()
-        #     print(data)
-        # sync_threat_alert_details()
-        # sync_ibm_tenant_daily_eps()
-        # sync_ibm_admin_eps.delay()
-        # sync_successful_logons.delay()
-        # sync_dos_event_counts()
-        sync_requests_for_soar()
-        # sync_correlated_events_data(
-        #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
         # )
+        # tenants = DUFortiSOARTenants.objects.all()
+        # count=0
+        # for tenant in tenants:
+        #     if count == 0:
+        #         count+=1
+        #         continue
 
-        # sync_aep_entra_failures_data(
-        #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
-        # )
+        # data = a._get_alerts(tenant_name="CDC-Mey-DW")
+        sync_forti_soar_data()
 
-        # sync_allowed_outbound_data(
-        #     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
-        # )
-        # This will delete the tenants and cascade delete related incidents
-        # sync_notes()
-        # sync_ibm.delay()
-        # sync_itsm_tickets_soar_ids.delay()
-        # sync_daily_closure_reason_counts.delay()
-        # sync_dos_event_counts.delay()
-        # sync_suspicious_event_counts.delay()
-        # sync_destination_address_counts.delay()
-        # sync_total_traffic.delay()
-        # sync_weekly_correlated_event_counts.delay()
-        # sync_correlated_event_counts.delay()
-        # sync_recon_event_counts.delay()
-        # sync_ibm_event_counts.delay()
-        # sync_threat_intel.delay()
-        # sync_threat_intel_for_tenants.delay()
-        # sync_threat_alert_details.delay()
-        # with Cyware(
-        #     base_url="https://du.cyware.com",
-        #     access_key="c54d63c9-8c08-4921-adee-8a83a2112104",
-        #     secret_key="24303184-4d71-4935-9608-24ffba93c8e0",
-        # ) as cyware:
-        #     data = cyware.get_list_groups()
-        #     print(data)
-        # sync_requests_for_soar.delay()
-        # sync_itsm_tenants_tickets.delay()
-        # sync_event_log_sources.delay()
-        return Response({"message": "Hello, world!"})
+        return Response({"data": "gffh"}, status=status.HTTP_200_OK)
+
+
+# with IBMQradarToken(
+#     ip_address="10.225.148.146",
+#     port=443,
+#     api_key="4d4b7dab-755f-43c9-a43d-fe7c31168362",
+# ) as ibm:
+#     # data = ibm.test_integration()
+#     data = ibm._get_offenses()
+#     print(data)
+# sync_threat_alert_details()
+# sync_ibm_tenant_daily_eps()
+# sync_ibm_admin_eps.delay()
+# sync_successful_logons.delay()
+# sync_dos_event_counts()
+# sync_requests_for_soar()
+# sync_correlated_events_data(
+#     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
+# )
+
+# sync_aep_entra_failures_data(
+#     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
+# )
+
+# sync_allowed_outbound_data(
+#     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
+# )
+# This will delete the tenants and cascade delete related incidents
+# sync_notes()
+# sync_ibm.delay()
+# sync_itsm_tickets_soar_ids.delay()
+# sync_daily_closure_reason_counts.delay()
+# sync_dos_event_counts.delay()
+# sync_suspicious_event_counts.delay()
+# sync_destination_address_counts.delay()
+# sync_total_traffic.delay()
+# sync_weekly_correlated_event_counts.delay()
+# sync_correlated_event_counts.delay()
+# sync_recon_event_counts.delay()
+# sync_ibm_event_counts.delay()
+# sync_threat_intel.delay()
+# sync_threat_intel_for_tenants.delay()
+# sync_threat_alert_details.delay()
+# with Cyware(
+#     base_url="https://du.cyware.com",
+#     access_key="c54d63c9-8c08-4921-adee-8a83a2112104",
+#     secret_key="24303184-4d71-4935-9608-24ffba93c8e0",
+# ) as cyware:
+#     data = cyware.get_list_groups()
+#     print(data)
+# sync_requests_for_soar.delay()
+# sync_itsm_tenants_tickets.delay()
+# sync_event_log_sources.delay()
+# return Response({"message": "Hello, world!"})
 
 
 class DateTimeStorageView(APIView):
