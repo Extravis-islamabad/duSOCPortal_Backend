@@ -297,6 +297,7 @@ class FortiSOAR:
                 close_notes=alert.get("closureNotes"),
                 integration=integration_id,
                 forti_soar_tenant=forti_soar_tenant_id,
+                analysis_notes=alert.get("analysisNotes"),
             )
 
             records.append(record)
@@ -377,6 +378,7 @@ class FortiSOAR:
                         "mitre_technique",
                         "configuration_item",
                         "close_notes",
+                        "analysis_notes",
                     ],
                     unique_fields=["account", "db_id"],
                 )
