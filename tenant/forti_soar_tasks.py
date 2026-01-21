@@ -91,7 +91,6 @@ def sync_forti_soar_data():
         integration__soar_subtype=SoarSubTypes.FORTI_SOAR,
         credential_type=CredentialTypes.API_KEY,
     )
-
     for result in results:
         sync_forti_soar_tenants(
             token=result.api_key,
