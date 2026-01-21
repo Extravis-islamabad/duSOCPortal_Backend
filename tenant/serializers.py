@@ -31,6 +31,7 @@ from .models import (  # SoarTenantSlaMetric,
     DefaultSoarSlaMetric,
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
+    DUFortiSOARTenants,
     DuIbmQradarTenants,
     DuITSMFinalTickets,
     DuITSMTenants,
@@ -1379,6 +1380,12 @@ class DuITSMTenantsSerializer(serializers.ModelSerializer):
 class DuCortexSOARTenantsSerializer(serializers.ModelSerializer):
     class Meta:
         model = DuCortexSOARTenants
+        fields = ["id", "name"]
+
+
+class FortiSOARTenantsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DUFortiSOARTenants
         fields = ["id", "name"]
 
 

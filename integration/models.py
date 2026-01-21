@@ -19,8 +19,9 @@ class SiemSubTypes(models.IntegerChoices):
 
 class SoarSubTypes(models.IntegerChoices):
     CORTEX_SOAR = 1, "Cortex SOAR"
-    IBM_RESILIENT = 2, "IBM Resilient"
-    OTHER = 3, "Other"
+    FORTI_SOAR = 2, "Forti SOAR"
+    IBM_RESILIENT = 3, "IBM Resilient"
+    OTHER = 4, "Other"
 
 
 class ItsmSubTypes(models.IntegerChoices):
