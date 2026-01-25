@@ -660,6 +660,8 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     integrations = serializers.SerializerMethodField()
     itsm_tenants = serializers.SerializerMethodField()
     soar_tenants = serializers.SerializerMethodField()
+    forti_soar_tenants = serializers.SerializerMethodField()
+    sla_overrides = serializers.SerializerMethodField()
     related_tenants = serializers.SerializerMethodField()
 
     class Meta:
@@ -688,6 +690,8 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "integrations",
             "itsm_tenants",
             "soar_tenants",
+            "forti_soar_tenants",
+            "sla_overrides",
             "related_tenants",
         ]
 
@@ -772,6 +776,52 @@ class TenantDetailSerializer(serializers.ModelSerializer):
         except Exception:
             return []
 
+    def get_forti_soar_tenants(self, obj):
+        try:
+            tenants = obj.company.forti_soar_tenants.all()
+            return [
+                {
+                    "forti_soar_tenant_id": tenant.id,
+                    "forti_soar_tenant_name": tenant.name,
+                }
+                for tenant in tenants
+            ]
+        except Exception:
+            return []
+
+    def get_sla_overrides(self, obj):
+        try:
+            if obj.company.is_default_sla:
+                metrics = DefaultSoarSlaMetric.objects.all()
+            else:
+                metrics = SoarTenantSlaMetric.objects.filter(
+                    company=obj.company
+                ).order_by("sla_level", "id")
+
+            metric_by_level = {}
+            for metric in metrics:
+                if metric.sla_level not in metric_by_level:
+                    metric_by_level[metric.sla_level] = metric
+
+            ordered_levels = [level for level, _ in SlaLevelChoices.choices]
+            overrides = []
+            for level in ordered_levels:
+                metric = metric_by_level.get(level)
+                if not metric:
+                    continue
+                overrides.append(
+                    {
+                        "sla_level": metric.sla_level,
+                        "sla_level_text": SlaLevelChoices(metric.sla_level).label,
+                        "tta_minutes": metric.tta_minutes,
+                        "ttn_minutes": metric.ttn_minutes,
+                        "ttdn_minutes": metric.ttdn_minutes,
+                    }
+                )
+            return overrides
+        except Exception:
+            return []
+
     def get_qradar_tenants(self, obj):
         try:
             mappings = TenantQradarMapping.objects.filter(company=obj.company)
@@ -840,32 +890,10 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     def get_soar_tenants(self, obj):
         try:
             tenants = obj.company.soar_tenants.all()
-            result = []
-            for tenant in tenants:
-                if obj.company.is_default_sla:
-                    metrics = DefaultSoarSlaMetric.objects.all()
-                else:
-                    metrics = SoarTenantSlaMetric.objects.filter(
-                        company=obj.company, soar_tenant=tenant
-                    )
-                sla_overrides = [
-                    {
-                        "sla_level": m.sla_level,
-                        "sla_level_text": SlaLevelChoices(m.sla_level).label,
-                        "tta_minutes": m.tta_minutes,
-                        "ttn_minutes": m.ttn_minutes,
-                        "ttdn_minutes": m.ttdn_minutes,
-                    }
-                    for m in metrics
-                ]
-                result.append(
-                    {
-                        "soar_tenant_id": tenant.id,
-                        "soar_tenant_name": tenant.name,
-                        "sla_overrides": sla_overrides,
-                    }
-                )
-            return result
+            return [
+                {"soar_tenant_id": tenant.id, "soar_tenant_name": tenant.name}
+                for tenant in tenants
+            ]
         except Exception:
             return []
 
