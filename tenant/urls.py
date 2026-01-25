@@ -14,6 +14,7 @@ from tenant.views import (
     DownloadIncidentsView,
     DownloadTenantAssetsExcel,
     DuCortexSOARTenantsListView,
+    DuFortiSOARTenantsListView,
     DuIbmQradarTenantsListView,
     DuITSMTenantsListView,
     EPSGraphAPIView,
@@ -40,6 +41,7 @@ from tenant.views import (
     TenantCortexSOARIncidentsAPIView,
     TenantITSMTicketDetailView,
     TenantITSMTicketsView,
+    TestView,
     TopLogSourcesAPIView,
     TotalAssetsByTenantAPIView,
     TotalTicketsByTenantAPIView,
@@ -70,6 +72,11 @@ urlpatterns = [
         "get_cortex_soar_tenants/",
         DuCortexSOARTenantsListView.as_view(),
         name="get-cortex-soar-tenants",
+    ),
+    path(
+        "get_forti_soar_tenants/",
+        DuFortiSOARTenantsListView.as_view(),
+        name="get-forti-soar-tenants",
     ),
     path("get_tenant_assets/", GetTenantAssetsList.as_view(), name="get-tenant-assets"),
     path(
@@ -158,9 +165,7 @@ urlpatterns = [
         AlertListView.as_view(),
         name="get-threat-intelligence",
     ),
-    #     path("test/", TestView.as_view(), name="test"),
-    # ]
-    # path("test/", TestView.as_view(), name="test"),
+    path("test/", TestView.as_view(), name="test"),
     path(
         "api/recent-incidents/",
         RecentIncidentsView.as_view(),

@@ -5,6 +5,7 @@ from rest_framework import serializers
 from common.constants import EncryptedKeyConstants
 from common.modules.cortex_soar import CortexSOAR
 from common.modules.cyware import Cyware
+from common.modules.fortisoar import FortiSOAR
 from common.modules.ibm_qradar import IBMQradar
 from common.modules.ibm_qradar_token import IBMQradarToken
 from common.modules.itsm import ITSM
@@ -187,6 +188,24 @@ class IntegrationSerializer(serializers.ModelSerializer):
             else:
                 raise serializers.ValidationError(
                     "Unsupported credential type for Cortex SOAR for Now..."
+                )
+        elif (
+            integration_type == IntegrationTypes.SOAR_INTEGRATION
+            and soar_subtype == SoarSubTypes.FORTI_SOAR
+        ):
+            if credentials_type == CredentialTypes.API_KEY:
+                with FortiSOAR(
+                    ip_address=credentials.get("ip_address"),
+                    port=credentials.get("port"),
+                    token=credentials.get("api_key"),
+                ) as soar:
+                    if not soar._get_tenants(timeout=4):
+                        raise serializers.ValidationError(
+                            "Forti SOAR integration is not accessible."
+                        )
+            else:
+                raise serializers.ValidationError(
+                    "Unsupported credential type for Forti SOAR for Now..."
                 )
         elif (
             integration_type == IntegrationTypes.THREAT_INTELLIGENCE

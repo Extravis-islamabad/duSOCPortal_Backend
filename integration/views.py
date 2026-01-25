@@ -11,6 +11,7 @@ from authentication.permissions import IsAdminUser, IsReadonlyAdminUser
 from common.constants import EncryptedKeyConstants
 from common.modules.cortex_soar import CortexSOAR
 from common.modules.cyware import Cyware
+from common.modules.fortisoar import FortiSOAR
 from common.modules.ibm_qradar import IBMQradar
 from common.modules.ibm_qradar_token import IBMQradarToken
 from common.modules.itsm import ITSM
@@ -102,6 +103,25 @@ def test_integration_connection(
         else:
             raise serializers.ValidationError(
                 "Unsupported credential type for Cortex SOAR."
+            )
+
+    elif (
+        integration_type == IntegrationTypes.SOAR_INTEGRATION
+        and subtype == SoarSubTypes.FORTI_SOAR
+    ):
+        if credentials_type == CredentialTypes.API_KEY:
+            with FortiSOAR(
+                ip_address=credentials.get("ip_address"),
+                port=credentials.get("port"),
+                token=credentials.get("api_key"),
+            ) as soar:
+                if not soar._get_tenants(timeout=5):
+                    raise serializers.ValidationError(
+                        "Forti SOAR integration is not accessible."
+                    )
+        else:
+            raise serializers.ValidationError(
+                "Unsupported credential type for Forti SOAR."
             )
 
     elif (

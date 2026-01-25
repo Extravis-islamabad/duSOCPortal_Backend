@@ -20,6 +20,7 @@ app.conf.task_routes = {
     "tenant.ibm_qradar_tasks.*": {"queue": "qradar"},
     "tenant.itsm_tasks.*": {"queue": "itsm"},
     "tenant.cortex_soar_tasks.*": {"queue": "soar"},
+    "tenant.forti_soar_tasks.*": {"queue": "forti_soar"},
 }
 
 # Task retry configuration
@@ -107,5 +108,10 @@ app.conf.beat_schedule = {
         "task": "tenant.threat_intelligence_tasks.sync_threat_intel_all",
         "schedule": crontab(minute="*/30"),
         "options": {"queue": "cyware"},
+    },
+    "forti_soar_all_syc_tasks": {
+        "task": "tenant.forti_soar_tasks.sync_forti_soar_data",
+        "schedule": crontab(minute="*/5"),
+        "options": {"queue": "forti_soar"},
     },
 }
