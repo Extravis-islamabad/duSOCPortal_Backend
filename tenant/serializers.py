@@ -56,11 +56,6 @@ class SlaOverrideSerializer(serializers.Serializer):
     ttdn_minutes = serializers.IntegerField()
 
 
-class SoarTenantInputSerializer(serializers.Serializer):
-    soar_tenant_id = serializers.IntegerField()
-    sla_overrides = SlaOverrideSerializer(many=True, required=False)
-
-
 class CompanyTenantUpdateSerializer(serializers.Serializer):
     permissions = serializers.ListField(
         child=serializers.IntegerField(min_value=1, max_value=5),
@@ -89,67 +84,23 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
     )
     # SLA related fields
     is_default_sla = serializers.BooleanField(required=False, allow_null=True)
-    soar_tenants_sla = SoarTenantInputSerializer(many=True, required=False)
+    soar_tenants = serializers.ListField(
+        child=serializers.IntegerField(), required=False
+    )
+    forti_soar_tenants = serializers.ListField(
+        child=serializers.IntegerField(), required=False
+    )
+    sla_overrides = SlaOverrideSerializer(many=True, required=False)
 
     def validate(self, data):
         # SLA validation
         is_default_sla = data.get("is_default_sla")
+        soar_tenants = data.get("soar_tenants", [])
+        forti_soar_tenants = data.get("forti_soar_tenants", [])
+        sla_overrides = data.get("sla_overrides", [])
+        company = self.context.get("company")
 
-        # If is_default_sla is False, validate custom SLA fields
-        if is_default_sla is False:
-            soar_tenants_sla = data.get("soar_tenants_sla", [])
-
-            if not soar_tenants_sla:
-                raise serializers.ValidationError(
-                    {
-                        "soar_tenants_sla": "SOAR tenant SLA configuration is required when is_default_sla is False."
-                    }
-                )
-
-            # Validate each SOAR tenant has SLA metrics
-            for soar_tenant_data in soar_tenants_sla:
-                sla_overrides = soar_tenant_data.get("sla_overrides", [])
-
-                if not sla_overrides:
-                    raise serializers.ValidationError(
-                        {
-                            "soar_tenants_sla": "Custom SLA fields (sla_level, tta_minutes, ttn_minutes, ttdn_minutes) are required when is_default_sla is False."
-                        }
-                    )
-
-                # Check that all required SLA levels are provided
-                provided_levels = {override["sla_level"] for override in sla_overrides}
-                required_levels = {level.value for level in SlaLevelChoices}
-
-                if provided_levels != required_levels:
-                    missing_levels = required_levels - provided_levels
-                    missing_labels = [
-                        f"{level.label} ({level.value})"
-                        for level in SlaLevelChoices
-                        if level.value in missing_levels
-                    ]
-                    raise serializers.ValidationError(
-                        {
-                            "soar_tenants_sla": f"All SLA levels must be provided. Missing: {', '.join(missing_labels)}"
-                        }
-                    )
-
-                # Validate each SLA override has all required fields
-                for override in sla_overrides:
-                    if not all(
-                        key in override
-                        for key in [
-                            "sla_level",
-                            "tta_minutes",
-                            "ttn_minutes",
-                            "ttdn_minutes",
-                        ]
-                    ):
-                        raise serializers.ValidationError(
-                            {
-                                "soar_tenants_sla": "Each SLA override must include sla_level, tta_minutes, ttn_minutes, and ttdn_minutes."
-                            }
-                        )
+        integrations = None
         if "integration_ids" in data:
             existing = Integration.objects.filter(
                 id__in=data["integration_ids"]
@@ -178,50 +129,18 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                         }
                     )
 
-            # Check for Cortex SOAR integration
-            has_cortex_soar = integrations.filter(
+            # Check for Cortex/Forti SOAR integration
+            has_soar_integration = integrations.filter(
                 integration_type=IntegrationTypes.SOAR_INTEGRATION,
-                soar_subtype=SoarSubTypes.CORTEX_SOAR,
+                soar_subtype__in=[SoarSubTypes.CORTEX_SOAR, SoarSubTypes.FORTI_SOAR],
             ).exists()
 
-            if has_cortex_soar:
-                # When Cortex SOAR is integrated, soar_tenants_sla is required
-                soar_tenants_sla = data.get("soar_tenants_sla")
-
-                # Check if soar_tenants_sla is None or empty
-                if not soar_tenants_sla:
-                    raise serializers.ValidationError(
-                        {
-                            "soar_tenants_sla": "SOAR tenant configuration is required when integrating with Cortex SOAR. You must provide at least one SOAR tenant."
-                        }
-                    )
-
-                # Extract and validate soar_tenant_ids from soar_tenants_sla
-                soar_tenant_ids = []
-                for idx, st in enumerate(soar_tenants_sla):
-                    tenant_id = st.get("soar_tenant_id")
-
-                    # Check if soar_tenant_id is None or not provided
-                    if tenant_id is None:
-                        raise serializers.ValidationError(
-                            {
-                                "soar_tenants_sla": f"soar_tenant_id cannot be null. For integrating with Cortex SOAR, you must pass valid SOAR tenant IDs. Error at index {idx}."
-                            }
-                        )
-
-                    soar_tenant_ids.append(tenant_id)
-
-                # Verify the SOAR tenant IDs exist in the database
-                existing = DuCortexSOARTenants.objects.filter(
-                    id__in=soar_tenant_ids
-                ).values_list("id", flat=True)
-                missing = set(soar_tenant_ids) - set(existing)
-                if missing:
-                    raise serializers.ValidationError(
-                        {
-                            "soar_tenants_sla": f"Invalid SOAR tenant IDs: {list(missing)}. These SOAR tenants do not exist."
-                        }
-                    )
+            if has_soar_integration and not (soar_tenants or forti_soar_tenants):
+                raise serializers.ValidationError(
+                    {
+                        "soar_tenants": "SOAR tenant configuration is required when integrating with Cortex or Forti SOAR. You must provide at least one SOAR tenant."
+                    }
+                )
 
             # Check for IBM QRadar integration
             has_ibm_qradar = integrations.filter(
@@ -237,6 +156,45 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                             "qradar_tenants": "QRadar tenant configuration cannot be null when integrating with IBM QRadar"
                         }
                     )
+        else:
+            integrations = (
+                company.integrations.all() if company else Integration.objects.none()
+            )
+
+        has_soar_integration = integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype__in=[SoarSubTypes.CORTEX_SOAR, SoarSubTypes.FORTI_SOAR],
+        ).exists()
+
+        has_soar_tenants = bool(soar_tenants or forti_soar_tenants)
+        if not has_soar_tenants and company:
+            has_soar_tenants = company.soar_tenants.exists()
+            if hasattr(company, "forti_soar_tenants"):
+                has_soar_tenants = (
+                    has_soar_tenants or company.forti_soar_tenants.exists()
+                )
+
+        if is_default_sla is False and has_soar_integration and has_soar_tenants:
+            if not sla_overrides:
+                raise serializers.ValidationError(
+                    {
+                        "sla_overrides": "Custom SLA fields (sla_level, tta_minutes, ttn_minutes, ttdn_minutes) are required when is_default_sla is False."
+                    }
+                )
+
+            provided_levels = {override["sla_level"] for override in sla_overrides}
+            required_levels = {level for level, _ in SlaLevelChoices.choices}
+            if provided_levels != required_levels:
+                missing_levels = required_levels - provided_levels
+                missing_labels = [
+                    f"{SlaLevelChoices(level).label} ({level})"
+                    for level in missing_levels
+                ]
+                raise serializers.ValidationError(
+                    {
+                        "sla_overrides": f"All SLA levels must be provided. Missing: {', '.join(missing_labels)}"
+                    }
+                )
 
         if "itsm_tenant_ids" in data:
             existing = DuITSMTenants.objects.filter(
@@ -248,11 +206,9 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                     {"itsm_tenant_ids": f"Invalid ITSM tenant IDs: {missing}"}
                 )
 
-        # Validate SOAR tenant IDs from soar_tenants_sla
-        if "soar_tenants_sla" in data:
-            soar_tenant_ids = [
-                st.get("soar_tenant_id") for st in data["soar_tenants_sla"]
-            ]
+        # Validate SOAR tenant IDs from soar_tenants
+        if "soar_tenants" in data:
+            soar_tenant_ids = data["soar_tenants"]
             if soar_tenant_ids:
                 existing = DuCortexSOARTenants.objects.filter(
                     id__in=soar_tenant_ids
@@ -260,7 +216,21 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                 missing = set(soar_tenant_ids) - set(existing)
                 if missing:
                     raise serializers.ValidationError(
-                        {"soar_tenants_sla": f"Invalid SOAR tenant IDs: {missing}"}
+                        {"soar_tenants": f"Invalid SOAR tenant IDs: {missing}"}
+                    )
+
+        if "forti_soar_tenants" in data:
+            forti_soar_tenant_ids = data["forti_soar_tenants"]
+            if forti_soar_tenant_ids:
+                existing = DUFortiSOARTenants.objects.filter(
+                    id__in=forti_soar_tenant_ids
+                ).values_list("id", flat=True)
+                missing = set(forti_soar_tenant_ids) - set(existing)
+                if missing:
+                    raise serializers.ValidationError(
+                        {
+                            "forti_soar_tenants": f"Invalid Forti SOAR tenant IDs: {missing}"
+                        }
                     )
 
         if "qradar_tenants" in data:
@@ -367,7 +337,9 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
 
         # SLA related fields
         is_default_sla = validated_data.get("is_default_sla")
-        soar_tenants_sla = validated_data.get("soar_tenants_sla", [])
+        soar_tenants = validated_data.get("soar_tenants", [])
+        forti_soar_tenants = validated_data.get("forti_soar_tenants", [])
+        sla_overrides = validated_data.get("sla_overrides", [])
 
         # Handle LDAP user onboarding - only add new users
         if ldap_users:
@@ -456,13 +428,18 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
         if "itsm_tenant_ids" in validated_data:
             company.itsm_tenants.set(DuITSMTenants.objects.filter(id__in=itsm_ids))
 
-        # Handle SOAR tenants from soar_tenants_sla
-        if soar_tenants_sla:
-            soar_tenant_ids = [st.get("soar_tenant_id") for st in soar_tenants_sla]
-            if soar_tenant_ids:
-                company.soar_tenants.set(
-                    DuCortexSOARTenants.objects.filter(id__in=soar_tenant_ids)
-                )
+        # Handle SOAR tenants
+        if "soar_tenants" in validated_data:
+            soar_tenant_ids = soar_tenants
+            company.soar_tenants.set(
+                DuCortexSOARTenants.objects.filter(id__in=soar_tenant_ids)
+            )
+
+        if "forti_soar_tenants" in validated_data:
+            forti_soar_tenant_ids = forti_soar_tenants
+            company.forti_soar_tenants.set(
+                DUFortiSOARTenants.objects.filter(id__in=forti_soar_tenant_ids)
+            )
 
         if "is_defualt_threat_intel" in validated_data:
             company.is_defualt_threat_intel = validated_data["is_defualt_threat_intel"]
@@ -485,19 +462,16 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                 # Delete existing custom SLA metrics for this company
                 SoarTenantSlaMetric.objects.filter(company=company).delete()
 
-                # Create new custom SLA metrics
-                for soar_tenant_data in soar_tenants_sla:
-                    soar_tenant_id = soar_tenant_data.get("soar_tenant_id")
-                    try:
-                        soar_tenant = DuCortexSOARTenants.objects.get(id=soar_tenant_id)
-                    except DuCortexSOARTenants.DoesNotExist:
-                        raise serializers.ValidationError(
-                            {
-                                "soar_tenants_sla": f"SOAR tenant with ID {soar_tenant_id} not found."
-                            }
-                        )
+                # Create new custom SLA metrics (shared across SOAR tenants)
+                if "soar_tenants" in validated_data:
+                    target_soar_tenants = DuCortexSOARTenants.objects.filter(
+                        id__in=soar_tenants
+                    )
+                else:
+                    target_soar_tenants = company.soar_tenants.all()
 
-                    for override in soar_tenant_data.get("sla_overrides", []):
+                for soar_tenant in target_soar_tenants:
+                    for override in sla_overrides:
                         SoarTenantSlaMetric.objects.create(
                             company=company,
                             soar_tenant=soar_tenant,
@@ -686,6 +660,8 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     integrations = serializers.SerializerMethodField()
     itsm_tenants = serializers.SerializerMethodField()
     soar_tenants = serializers.SerializerMethodField()
+    forti_soar_tenants = serializers.SerializerMethodField()
+    sla_overrides = serializers.SerializerMethodField()
     related_tenants = serializers.SerializerMethodField()
 
     class Meta:
@@ -714,6 +690,8 @@ class TenantDetailSerializer(serializers.ModelSerializer):
             "integrations",
             "itsm_tenants",
             "soar_tenants",
+            "forti_soar_tenants",
+            "sla_overrides",
             "related_tenants",
         ]
 
@@ -798,6 +776,52 @@ class TenantDetailSerializer(serializers.ModelSerializer):
         except Exception:
             return []
 
+    def get_forti_soar_tenants(self, obj):
+        try:
+            tenants = obj.company.forti_soar_tenants.all()
+            return [
+                {
+                    "forti_soar_tenant_id": tenant.id,
+                    "forti_soar_tenant_name": tenant.name,
+                }
+                for tenant in tenants
+            ]
+        except Exception:
+            return []
+
+    def get_sla_overrides(self, obj):
+        try:
+            if obj.company.is_default_sla:
+                metrics = DefaultSoarSlaMetric.objects.all()
+            else:
+                metrics = SoarTenantSlaMetric.objects.filter(
+                    company=obj.company
+                ).order_by("sla_level", "id")
+
+            metric_by_level = {}
+            for metric in metrics:
+                if metric.sla_level not in metric_by_level:
+                    metric_by_level[metric.sla_level] = metric
+
+            ordered_levels = [level for level, _ in SlaLevelChoices.choices]
+            overrides = []
+            for level in ordered_levels:
+                metric = metric_by_level.get(level)
+                if not metric:
+                    continue
+                overrides.append(
+                    {
+                        "sla_level": metric.sla_level,
+                        "sla_level_text": SlaLevelChoices(metric.sla_level).label,
+                        "tta_minutes": metric.tta_minutes,
+                        "ttn_minutes": metric.ttn_minutes,
+                        "ttdn_minutes": metric.ttdn_minutes,
+                    }
+                )
+            return overrides
+        except Exception:
+            return []
+
     def get_qradar_tenants(self, obj):
         try:
             mappings = TenantQradarMapping.objects.filter(company=obj.company)
@@ -866,32 +890,10 @@ class TenantDetailSerializer(serializers.ModelSerializer):
     def get_soar_tenants(self, obj):
         try:
             tenants = obj.company.soar_tenants.all()
-            result = []
-            for tenant in tenants:
-                if obj.company.is_default_sla:
-                    metrics = DefaultSoarSlaMetric.objects.all()
-                else:
-                    metrics = SoarTenantSlaMetric.objects.filter(
-                        company=obj.company, soar_tenant=tenant
-                    )
-                sla_overrides = [
-                    {
-                        "sla_level": m.sla_level,
-                        "sla_level_text": SlaLevelChoices(m.sla_level).label,
-                        "tta_minutes": m.tta_minutes,
-                        "ttn_minutes": m.ttn_minutes,
-                        "ttdn_minutes": m.ttdn_minutes,
-                    }
-                    for m in metrics
-                ]
-                result.append(
-                    {
-                        "soar_tenant_id": tenant.id,
-                        "soar_tenant_name": tenant.name,
-                        "sla_overrides": sla_overrides,
-                    }
-                )
-            return result
+            return [
+                {"soar_tenant_id": tenant.id, "soar_tenant_name": tenant.name}
+                for tenant in tenants
+            ]
         except Exception:
             return []
 
@@ -968,7 +970,13 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     itsm_tenant_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
     )
-    soar_tenants = SoarTenantInputSerializer(many=True, required=False, write_only=True)
+    soar_tenants = serializers.ListField(
+        child=serializers.IntegerField(), required=False, write_only=True
+    )
+    forti_soar_tenants = serializers.ListField(
+        child=serializers.IntegerField(), required=False, write_only=True
+    )
+    sla_overrides = SlaOverrideSerializer(many=True, required=False, write_only=True)
     role_permissions = serializers.ListField(
         child=serializers.IntegerField(), required=False, write_only=True
     )
@@ -1000,6 +1008,8 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             "integration_ids",
             "itsm_tenant_ids",
             "soar_tenants",
+            "forti_soar_tenants",
+            "sla_overrides",
             "role_permissions",
             "id",
             "company_name",
@@ -1053,6 +1063,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         #     )
 
         integration_ids = data.get("integration_ids", [])
+        integrations = Integration.objects.none()
         if integration_ids:
             integrations = Integration.objects.filter(id__in=integration_ids)
             if len(integrations) != len(integration_ids):
@@ -1094,21 +1105,50 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"itsm_tenant_ids": f"Invalid ITSM tenant IDs: {missing}"}
                 )
-        if "soar_tenants" in data and not data.get("is_default_sla", True):
+        soar_tenants = data.get("soar_tenants", [])
+        forti_soar_tenants = data.get("forti_soar_tenants", [])
+        sla_overrides = data.get("sla_overrides", [])
+        has_soar_integration = integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype__in=[SoarSubTypes.CORTEX_SOAR, SoarSubTypes.FORTI_SOAR],
+        ).exists()
+        has_soar_tenants = bool(soar_tenants or forti_soar_tenants)
+
+        if (
+            has_soar_integration
+            and has_soar_tenants
+            and data.get("is_default_sla") is False
+        ):
+            if not sla_overrides:
+                raise serializers.ValidationError(
+                    {
+                        "sla_overrides": "Custom SLA fields (sla_level, tta_minutes, ttn_minutes, ttdn_minutes) are required when is_default_sla is False."
+                    }
+                )
+            provided_levels = {override["sla_level"] for override in sla_overrides}
             required_levels = {level for level, _ in SlaLevelChoices.choices}
-            for soar in data["soar_tenants"]:
-                provided_levels = {
-                    sla["sla_level"] for sla in soar.get("sla_overrides", [])
-                }
-                if provided_levels != required_levels:
-                    raise serializers.ValidationError(
-                        {
-                            "soar_tenants": "Custom SLA must cover all SLA levels (P1 to P4)"
-                        }
-                    )
+            if provided_levels != required_levels:
+                missing_levels = required_levels - provided_levels
+                missing_labels = [
+                    f"{SlaLevelChoices(level).label} ({level})"
+                    for level in missing_levels
+                ]
+                raise serializers.ValidationError(
+                    {
+                        "sla_overrides": f"Custom SLA must cover all SLA levels. Missing: {', '.join(missing_labels)}"
+                    }
+                )
 
         if "soar_tenants" in data:
-            soar_ids = [s["soar_tenant_id"] for s in data["soar_tenants"]]
+            soar_ids = data["soar_tenants"]
+            existing = DuCortexSOARTenants.objects.filter(id__in=soar_ids).values_list(
+                "id", flat=True
+            )
+            missing = set(soar_ids) - set(existing)
+            if missing:
+                raise serializers.ValidationError(
+                    {"soar_tenants": f"Invalid SOAR tenant IDs: {missing}"}
+                )
             already_assigned = DuCortexSOARTenants.objects.filter(
                 id__in=soar_ids, company__isnull=False
             ).values_list("id", flat=True)
@@ -1116,6 +1156,26 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {
                         "soar_tenants": f"SOAR tenants already assigned: {list(already_assigned)}"
+                    }
+                )
+
+        if "forti_soar_tenants" in data:
+            forti_soar_ids = data["forti_soar_tenants"]
+            existing = DUFortiSOARTenants.objects.filter(
+                id__in=forti_soar_ids
+            ).values_list("id", flat=True)
+            missing = set(forti_soar_ids) - set(existing)
+            if missing:
+                raise serializers.ValidationError(
+                    {"forti_soar_tenants": f"Invalid Forti SOAR tenant IDs: {missing}"}
+                )
+            already_assigned = DUFortiSOARTenants.objects.filter(
+                id__in=forti_soar_ids, company__isnull=False
+            ).values_list("id", flat=True)
+            if already_assigned:
+                raise serializers.ValidationError(
+                    {
+                        "forti_soar_tenants": f"Forti SOAR tenants already assigned: {list(already_assigned)}"
                     }
                 )
 
@@ -1192,6 +1252,8 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         qradar_tenants_data = validated_data.pop("qradar_tenants", [])
         itsm_tenant_ids = validated_data.pop("itsm_tenant_ids", [])
         soar_tenant_data = validated_data.pop("soar_tenants", [])
+        forti_soar_tenant_data = validated_data.pop("forti_soar_tenants", [])
+        sla_overrides = validated_data.pop("sla_overrides", [])
         is_defualt_threat_intel = validated_data.pop("is_defualt_threat_intel", True)
         threat_intelligence = validated_data.pop("threat_intelligence", None)
         access_key = validated_data.pop("access_key", None)
@@ -1267,21 +1329,30 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     DuITSMTenants.objects.filter(id__in=itsm_tenant_ids)
                 )
 
-            for soar in soar_tenant_data:
-                soar_tenant = DuCortexSOARTenants.objects.get(id=soar["soar_tenant_id"])
+            if soar_tenant_data:
+                soar_ids = soar_tenant_data
                 company.soar_tenants.set(
-                    DuCortexSOARTenants.objects.filter(id=soar["soar_tenant_id"])
+                    DuCortexSOARTenants.objects.filter(id__in=soar_ids)
                 )
                 if not is_default_sla:
-                    for override in soar.get("sla_overrides", []):
-                        SoarTenantSlaMetric.objects.create(
-                            company=tenant.company,
-                            soar_tenant=soar_tenant,
-                            sla_level=override["sla_level"],
-                            tta_minutes=override["tta_minutes"],
-                            ttn_minutes=override["ttn_minutes"],
-                            ttdn_minutes=override["ttdn_minutes"],
-                        )
+                    for soar_tenant in DuCortexSOARTenants.objects.filter(
+                        id__in=soar_ids
+                    ):
+                        for override in sla_overrides:
+                            SoarTenantSlaMetric.objects.create(
+                                company=company,
+                                soar_tenant=soar_tenant,
+                                sla_level=override["sla_level"],
+                                tta_minutes=override["tta_minutes"],
+                                ttn_minutes=override["ttn_minutes"],
+                                ttdn_minutes=override["ttdn_minutes"],
+                            )
+
+            if forti_soar_tenant_data:
+                forti_soar_ids = forti_soar_tenant_data
+                company.forti_soar_tenants.set(
+                    DUFortiSOARTenants.objects.filter(id__in=forti_soar_ids)
+                )
             for qt in qradar_tenants_data:
                 qradar_tenant = DuIbmQradarTenants.objects.get(
                     id=qt["qradar_tenant_id"]
