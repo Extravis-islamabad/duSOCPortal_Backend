@@ -109,4 +109,9 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute="*/30"),
         "options": {"queue": "cyware"},
     },
+    "forti_soar_all_syc_tasks": {
+        "task": "tenant.forti_soar_tasks.sync_forti_soar_data",
+        "schedule": crontab(minute="*/5"),
+        "options": {"queue": "forti_soar"},
+    },
 }
