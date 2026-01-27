@@ -27,6 +27,7 @@ from tenant.models import (
     Company,
     DefaultSoarSlaMetric,
     DUCortexSOARIncidentFinalModel,
+    DUFortiSOARIncidentModel,
     IBMQradarAssests,
     IBMQradarEPS,
     SlaLevelChoices,
@@ -1424,8 +1425,9 @@ class IncidentPrioritySummaryAPIView(APIView):
         for company in companies:
             # Get all SOAR tenant IDs for this company
             soar_ids = company.soar_tenants.values_list("id", flat=True)
+            forti_soar_ids = company.forti_soar_tenants.values_list("id", flat=True)
 
-            if not soar_ids:
+            if not soar_ids and not forti_soar_ids:
                 # Company has no SOAR tenants
                 companies_summary.append(
                     {
@@ -1435,9 +1437,13 @@ class IncidentPrioritySummaryAPIView(APIView):
                     }
                 )
                 continue
-
-            # Build base filter for company's SOAR tenants
-            base_filters = Q(cortex_soar_tenant__in=soar_ids)
+            # Build base filters for company's SOAR tenants
+            base_cortex_filters = (
+                Q(cortex_soar_tenant__in=soar_ids) if soar_ids else None
+            )
+            base_forti_filters = (
+                Q(forti_soar_tenant__in=forti_soar_ids) if forti_soar_ids else None
+            )
 
             # Apply priority filter if specified
             if priority_filter:
@@ -1449,10 +1455,19 @@ class IncidentPrioritySummaryAPIView(APIView):
                 }
                 if priority_filter in priority_mapping:
                     priority_string = priority_mapping[priority_filter]
-                    base_filters &= Q(incident_priority__icontains=priority_string)
+                    if base_cortex_filters is not None:
+                        base_cortex_filters &= Q(
+                            incident_priority__icontains=priority_string
+                        )
+                    if base_forti_filters is not None:
+                        base_forti_filters &= Q(
+                            incident_priority__icontains=priority_string
+                        )
 
             # Get priority breakdown for this company
-            priority_summary = self._get_priority_breakdown(base_filters)
+            priority_summary = self._get_priority_breakdown(
+                base_cortex_filters, base_forti_filters
+            )
             # total_incidents = sum(item['total_count'] for item in priority_summary)
 
             companies_summary.append(
@@ -1490,7 +1505,7 @@ class IncidentPrioritySummaryAPIView(APIView):
 
         return summary_response
 
-    def _get_priority_breakdown(self, base_filters):
+    def _get_priority_breakdown(self, base_cortex_filters, base_forti_filters):
         """Get total incident counts by priority (only true positive OR false positive)"""
         priority_breakdown = []
 
@@ -1506,42 +1521,82 @@ class IncidentPrioritySummaryAPIView(APIView):
             priority_name = priority_info["priority"]
             priority_key = priority_info["filter_key"]
 
-            # Filter for this specific priority
-            priority_filters = base_filters & Q(
-                incident_priority__icontains=priority_key
-            )
+            total_count = 0
 
-            # True Positive Logic: Ready incidents with proper fields
-            true_positive_filters = priority_filters & (
-                ~Q(owner__isnull=True)
-                & ~Q(owner__exact="")
-                & Q(incident_tta__isnull=False)
-                & Q(incident_ttn__isnull=False)
-                & Q(incident_ttdn__isnull=False)
-                & Q(itsm_sync_status__isnull=False)
-                & Q(itsm_sync_status__iexact="Ready")
-                & Q(incident_priority__isnull=False)
-                & ~Q(incident_priority__exact="")
-            )
+            if base_cortex_filters is not None:
+                # Filter for this specific priority
+                cortex_priority_filters = base_cortex_filters & Q(
+                    incident_priority__icontains=priority_key
+                )
 
-            false_positive_filters = priority_filters & (
-                ~Q(owner__isnull=True)
-                & ~Q(owner__exact="")
-                & Q(incident_tta__isnull=False)
-                & Q(incident_ttn__isnull=False)
-                & Q(incident_ttdn__isnull=False)
-                & Q(itsm_sync_status__isnull=False)
-                & Q(itsm_sync_status__iexact="Done")
-                & Q(incident_priority__isnull=False)
-                & ~Q(incident_priority__exact="")
-            )
+                # True Positive Logic: Ready incidents with proper fields
+                cortex_true_positive_filters = cortex_priority_filters & (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Ready")
+                    & Q(incident_priority__isnull=False)
+                    & ~Q(incident_priority__exact="")
+                )
 
-            # Combine true positive OR false positive (using union to avoid duplicates)
-            combined_filters = true_positive_filters | false_positive_filters
+                cortex_false_positive_filters = cortex_priority_filters & (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Done")
+                    & Q(incident_priority__isnull=False)
+                    & ~Q(incident_priority__exact="")
+                )
 
-            total_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                combined_filters
-            ).count()
+                cortex_combined = (
+                    cortex_true_positive_filters | cortex_false_positive_filters
+                )
+                total_count += DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_combined
+                ).count()
+
+            if base_forti_filters is not None:
+                forti_priority_filters = base_forti_filters & Q(
+                    incident_priority__icontains=priority_key
+                )
+
+                # TODO : confirm owner field not in the fortisoar what to do
+                forti_true_positive_filters = forti_priority_filters & (
+                    # ~Q(owner__isnull=True)
+                    # & ~Q(owner__exact="")
+                    Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Ready")
+                    & Q(incident_priority__isnull=False)
+                    & ~Q(incident_priority__exact="")
+                )
+
+                forti_false_positive_filters = forti_priority_filters & (
+                    # ~Q(owner__isnull=True)
+                    # & ~Q(owner__exact="")
+                    Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Done")
+                    & Q(incident_priority__isnull=False)
+                    & ~Q(incident_priority__exact="")
+                )
+
+                forti_combined = (
+                    forti_true_positive_filters | forti_false_positive_filters
+                )
+                total_count += DUFortiSOARIncidentModel.objects.filter(
+                    forti_combined
+                ).count()
 
             priority_breakdown.append(
                 {"priority": priority_name, "total_count": total_count}
