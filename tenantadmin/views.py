@@ -1566,7 +1566,7 @@ class IncidentPrioritySummaryAPIView(APIView):
                     incident_priority__icontains=priority_key
                 )
 
-                # TODO : confirm owner field not in the fortisoar what to do
+                # TODO : Confirm for the forti soar where owner is not comming what to do
                 forti_true_positive_filters = forti_priority_filters & (
                     # ~Q(owner__isnull=True)
                     # & ~Q(owner__exact="")
@@ -1777,8 +1777,9 @@ class IncidentStatusSummaryAPIView(APIView):
         for company in companies:
             # Get all SOAR tenant IDs for this company
             soar_ids = company.soar_tenants.values_list("id", flat=True)
+            forti_soar_ids = company.forti_soar_tenants.values_list("id", flat=True)
 
-            if not soar_ids:
+            if not soar_ids and not forti_soar_ids:
                 # Company has no SOAR tenants
                 companies_summary.append(
                     {
@@ -1790,24 +1791,44 @@ class IncidentStatusSummaryAPIView(APIView):
                     }
                 )
                 continue
+            open_count = 0
+            closed_count = 0
 
-            # Build base filter for company's SOAR tenants with true/false positive logic
-            base_filters = self._get_valid_incidents_filter(soar_ids)
+            if soar_ids:
+                # Build base filter for Cortex SOAR tenants with true/false positive logic
+                cortex_base_filters = self._get_valid_incidents_filter(
+                    soar_ids, tenant_field="cortex_soar_tenant"
+                )
 
-            # Apply date filters
-            filters = self._apply_date_filters(request, base_filters)
+                # Apply date filters
+                cortex_filters = self._apply_date_filters(request, cortex_base_filters)
 
-            # Count open incidents (status = "1" or phases not in closed states)
-            open_filters = filters & (Q(status="1"))
-            open_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                open_filters
-            ).count()
+                # Count open/closed Cortex incidents
+                open_count += DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_filters & Q(status="1")
+                ).count()
+                closed_count += DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_filters & Q(status="2")
+                ).count()
 
-            # Count closed incidents (status = "2" or phases in closed states)
-            closed_filters = filters & (Q(status="2"))
-            closed_count = DUCortexSOARIncidentFinalModel.objects.filter(
-                closed_filters
-            ).count()
+            if forti_soar_ids:
+                # Build base filter for Forti SOAR tenants with true/false positive logic
+                forti_base_filters = self._get_valid_incidents_filter(
+                    forti_soar_ids, tenant_field="forti_soar_tenant"
+                )
+
+                # Apply date filters
+                forti_filters = self._apply_date_filters(request, forti_base_filters)
+
+                # Count open/closed Forti incidents
+                open_count += (
+                    DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                    .exclude(status="Closed")
+                    .count()
+                )
+                closed_count += DUFortiSOARIncidentModel.objects.filter(
+                    forti_filters & Q(status="Closed")
+                ).count()
 
             total_count = open_count + closed_count
 
@@ -1845,33 +1866,41 @@ class IncidentStatusSummaryAPIView(APIView):
 
         return summary_response
 
-    def _get_valid_incidents_filter(self, soar_ids):
+    def _get_valid_incidents_filter(self, tenant_ids, tenant_field):
         """Get filter for incidents that match true positive OR false positive logic"""
-        base_filters = Q(cortex_soar_tenant__in=soar_ids)
+        base_filters = Q(**{f"{tenant_field}__in": tenant_ids})
+
+        owner_filters = Q()
+        if tenant_field == "cortex_soar_tenant":
+            owner_filters = ~Q(owner__isnull=True) & ~Q(owner__exact="")
 
         # True Positive Logic: Ready incidents with proper fields
-        true_positive_filters = base_filters & (
-            ~Q(owner__isnull=True)
-            & ~Q(owner__exact="")
-            & Q(incident_tta__isnull=False)
-            & Q(incident_ttn__isnull=False)
-            & Q(incident_ttdn__isnull=False)
-            & Q(itsm_sync_status__isnull=False)
-            & Q(itsm_sync_status__iexact="Ready")
-            & Q(incident_priority__isnull=False)
-            & ~Q(incident_priority__exact="")
+        true_positive_filters = (
+            base_filters
+            & owner_filters
+            & (
+                Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
         )
 
-        false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
-            ~Q(owner__isnull=True)
-            & ~Q(owner__exact="")
-            & Q(incident_tta__isnull=False)
-            & Q(incident_ttn__isnull=False)
-            & Q(incident_ttdn__isnull=False)
-            & Q(itsm_sync_status__isnull=False)
-            & Q(itsm_sync_status__iexact="Done")
-            & Q(incident_priority__isnull=False)
-            & ~Q(incident_priority__exact="")
+        false_positive_filters = (
+            base_filters
+            & owner_filters
+            & (
+                Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Done")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
         )
 
         # Combine true positive OR false positive
