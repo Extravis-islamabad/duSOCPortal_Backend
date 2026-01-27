@@ -19,7 +19,12 @@ from authentication.permissions import (
     IsReadonlyAdminUser,
     IsSuperAdminUser,
 )
-from common.constants import APIConstants, FilterType, PaginationConstants
+from common.constants import (
+    APIConstants,
+    FilterType,
+    PaginationConstants,
+    SoarPriorityConstants,
+)
 from tenant.cortex_soar_tasks import sync_soar_data
 from tenant.ibm_qradar_tasks import sync_ibm_qradar_data, sync_ibm_qradar_data_token
 from tenant.itsm_tasks import sync_itsm
@@ -2052,8 +2057,9 @@ class TenantSLAMatrixAPIView(APIView):
         """Calculate SLA matrix for a specific company with date filtering"""
         # Get all SOAR tenant IDs for this company
         soar_ids = company.soar_tenants.values_list("id", flat=True)
+        forti_soar_ids = company.forti_soar_tenants.values_list("id", flat=True)
 
-        if not soar_ids:
+        if not soar_ids and not forti_soar_ids:
             # Company has no SOAR tenants, return empty data
             return {
                 "company_id": company.id,
@@ -2068,37 +2074,61 @@ class TenantSLAMatrixAPIView(APIView):
         if is_default:
             sla_metrics = DefaultSoarSlaMetric.objects.all()
         else:
-            sla_metrics = SoarTenantSlaMetric.objects.filter(
-                soar_tenant__in=soar_ids, company=company
-            )
+            sla_metrics = SoarTenantSlaMetric.objects.filter(company=company)
 
         # Create a dictionary of SLA metrics by level for quick lookup
         sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
-        # Get valid incidents (true positive OR false positive)
-        base_filters = self._get_valid_incidents_filter(soar_ids)
-        base_filters &= Q(
-            incident_priority__in=[
-                SlaLevelChoices.P1.label,
-                SlaLevelChoices.P2.label,
-                SlaLevelChoices.P3.label,
-                SlaLevelChoices.P4.label,
-            ]
-        )
+        priority_values = [
+            SlaLevelChoices.P1.label,
+            SlaLevelChoices.P2.label,
+            SlaLevelChoices.P3.label,
+            SlaLevelChoices.P4.label,
+        ] + SoarPriorityConstants.VALUES
 
-        # We need TTA, TTN, and TTDN fields to calculate SLA compliance
-        base_filters &= (
-            Q(incident_tta__isnull=False)
-            & Q(incident_ttn__isnull=False)
-            & Q(incident_ttdn__isnull=False)
-        )
+        incidents = []
 
-        # Apply date filters
-        filters = self._apply_date_filters(request, base_filters)
+        if soar_ids:
+            # Get valid Cortex incidents (true positive OR false positive)
+            cortex_filters = self._get_valid_incidents_filter(
+                soar_ids, tenant_field="cortex_soar_tenant"
+            )
+            cortex_filters &= Q(incident_priority__in=priority_values)
 
-        incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-            filters
-        ).select_related()
+            # We need TTA, TTN, and TTDN fields to calculate SLA compliance
+            cortex_filters &= (
+                Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+            )
+
+            # Apply date filters
+            cortex_filters = self._apply_date_filters(request, cortex_filters)
+
+            incidents.extend(
+                DUCortexSOARIncidentFinalModel.objects.filter(
+                    cortex_filters
+                ).select_related()
+            )
+
+        if forti_soar_ids:
+            # Get valid Forti incidents (true positive OR false positive)
+            forti_filters = self._get_valid_incidents_filter(
+                forti_soar_ids, tenant_field="forti_soar_tenant"
+            )
+            forti_filters &= Q(incident_priority__in=priority_values)
+
+            forti_filters &= (
+                Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+            )
+
+            forti_filters = self._apply_date_filters(request, forti_filters)
+
+            incidents.extend(
+                DUFortiSOARIncidentModel.objects.filter(forti_filters).select_related()
+            )
 
         # Initialize SLA metrics structure for all priority levels
         sla_metrics_data = {}
@@ -2147,6 +2177,14 @@ class TenantSLAMatrixAPIView(APIView):
         # Process incidents and calculate metrics
         for incident in incidents:
             priority = incident.incident_priority
+            priority_aliases = {
+                SoarPriorityConstants.P1: SlaLevelChoices.P1.label,
+                SoarPriorityConstants.P2: SlaLevelChoices.P2.label,
+                SoarPriorityConstants.P3: SlaLevelChoices.P3.label,
+                SoarPriorityConstants.P4: SlaLevelChoices.P4.label,
+            }
+            if priority in priority_aliases:
+                priority = priority_aliases[priority]
             # Skip if priority doesn't match any of our defined levels
             if priority not in sla_metrics_data:
                 continue
@@ -2283,21 +2321,27 @@ class TenantSLAMatrixAPIView(APIView):
 
         return filters
 
-    def _get_valid_incidents_filter(self, soar_ids):
+    def _get_valid_incidents_filter(self, tenant_ids, tenant_field):
         """Get filter for incidents that match true positive OR false positive logic"""
-        base_filters = Q(cortex_soar_tenant__in=soar_ids)
+        base_filters = Q(**{f"{tenant_field}__in": tenant_ids})
+
+        owner_filters = Q()
+        if tenant_field == "cortex_soar_tenant":
+            owner_filters = ~Q(owner__isnull=True) & ~Q(owner__exact="")
 
         # True Positive Logic: Ready incidents with proper fields
-        true_positive_filters = base_filters & (
-            ~Q(owner__isnull=True)
-            & ~Q(owner__exact="")
-            & Q(incident_tta__isnull=False)
-            & Q(incident_ttn__isnull=False)
-            & Q(incident_ttdn__isnull=False)
-            & Q(itsm_sync_status__isnull=False)
-            & Q(itsm_sync_status__iexact="Ready")
-            & Q(incident_priority__isnull=False)
-            & ~Q(incident_priority__exact="")
+        true_positive_filters = (
+            base_filters
+            & owner_filters
+            & (
+                Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
         )
 
         false_positive_filters = base_filters & (

@@ -138,6 +138,7 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
+
     AQL_QUERY_FOR_DOS_EVENTS = """
     SELECT COUNT(*) AS total_dos_events
     FROM events
@@ -434,6 +435,14 @@ class CywareConstants:
     CUSTOM_FIELDS_ENDPOINT = "api/csap/v1/list_additional_fields/"
     CATEGORIES_ENDPOINT = "api/csap/v1/list_category/"
     ALERT_DETAIL_ENDPOINT = "api/csap/v1/get_alert_detail/"
+
+
+class SoarPriorityConstants:
+    P1 = "P1"
+    P2 = "P2"
+    P3 = "P3"
+    P4 = "P4"
+    VALUES = [P1, P2, P3, P4]
 
 
 class EncryptedKeyConstants:
