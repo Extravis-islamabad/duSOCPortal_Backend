@@ -31,7 +31,7 @@ deploy-backend: build-backend
 
 # Restart backend-related services only
 restart-backend-services:
-	$(COMPOSE) restart backend celery-beat celery-intel celery-qradar celery-itsm celery-soar flower
+	$(COMPOSE) restart backend celery-beat celery-intel celery-qradar celery-itsm celery-soar celery-forti-soar flower
 
 # Logs
 logs:
