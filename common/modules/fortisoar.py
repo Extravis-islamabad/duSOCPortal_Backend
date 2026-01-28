@@ -250,6 +250,13 @@ class FortiSOAR:
                 else None
             )
             event_time = alert.get("eventTime")
+            owner_obj = alert.get("assignedTo")
+            owner_fist_name = owner_obj.get("firstname") if owner_obj else None
+            owner_last_name = owner_obj.get("lastname") if owner_obj else None
+            if owner_fist_name and owner_last_name:
+                owner = owner_fist_name + " " + owner_last_name
+            else:
+                owner = None
 
             record = DUFortiSOARIncidentModel(
                 db_id=alert.get("id"),
@@ -268,7 +275,7 @@ class FortiSOAR:
                     else None
                 ),
                 closed=self.safe_parse_datetime(alert.get("resolveddate")),
-                owner=alert.get("assignedTo"),
+                owner=owner,
                 severity=severity_obj.get("orderIndex") if severity_obj else None,
                 # record["severity_text"] = severity_obj.get("itemValue") if severity_obj else None
                 tta_calculation=alert.get("tTACalculation"),
