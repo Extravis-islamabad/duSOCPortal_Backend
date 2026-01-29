@@ -340,6 +340,44 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
         soar_tenants = validated_data.get("soar_tenants", [])
         forti_soar_tenants = validated_data.get("forti_soar_tenants", [])
         sla_overrides = validated_data.get("sla_overrides", [])
+        # Clear integration-specific data when integrations are removed
+        if "integration_ids" in validated_data:
+            existing_integration_ids = set(
+                company.integrations.values_list("id", flat=True)
+            )
+            new_integration_ids = set(integration_ids or [])
+            removed_integration_ids = existing_integration_ids - new_integration_ids
+
+            if removed_integration_ids:
+                removed_integrations = Integration.objects.filter(
+                    id__in=removed_integration_ids
+                )
+                # Clear IBM QRadar mappings/event collectors if QRadar integration removed
+                if removed_integrations.filter(
+                    integration_type=IntegrationTypes.SIEM_INTEGRATION,
+                    siem_subtype=SiemSubTypes.IBM_QRADAR,
+                ).exists():
+                    TenantQradarMapping.objects.filter(company=company).delete()
+                    company.qradar_tenant.clear()
+                    company.event_collectors.clear()
+                # Clear Forti SOAR tenants if Forti SOAR integration removed
+                if removed_integrations.filter(
+                    integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                    soar_subtype=SoarSubTypes.FORTI_SOAR,
+                ).exists():
+                    company.forti_soar_tenants.clear()
+                # Clear Cortex SOAR tenants and SLA metrics if Cortex SOAR integration removed
+                if removed_integrations.filter(
+                    integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                    soar_subtype=SoarSubTypes.CORTEX_SOAR,
+                ).exists():
+                    company.soar_tenants.clear()
+                    SoarTenantSlaMetric.objects.filter(company=company).delete()
+                # Clear ITSM tenants if ITSM integration removed
+                if removed_integrations.filter(
+                    integration_type=IntegrationTypes.ITSM_INTEGRATION
+                ).exists():
+                    company.itsm_tenants.clear()
 
         # Handle LDAP user onboarding - only add new users
         if ldap_users:
