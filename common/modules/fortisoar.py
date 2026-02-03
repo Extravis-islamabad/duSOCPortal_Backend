@@ -80,6 +80,61 @@ class FortiSOAR:
         except Exception:
             return None
 
+    def safe_parse_event_time(self, value):
+        """
+        Safely parses FortiSOAR eventTime values into a normalized string.
+
+        Supports multiple input formats (12h/24h, optional seconds, optional AM/PM).
+        Returns a string formatted as "%Y-%m-%d %H:%M:%S" or None if parsing fails.
+        """
+        if value in ("", " ", None):
+            return None
+
+        if isinstance(value, (int, float)):
+            try:
+                dt = datetime.fromtimestamp(value)
+                return dt.replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                return None
+
+        if isinstance(value, datetime):
+            return value.replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+
+        if not isinstance(value, str):
+            return None
+
+        raw = value.strip()
+        if not raw:
+            return None
+
+        candidates = [raw]
+        parts = raw.split()
+        if len(parts) >= 2 and parts[-1].upper() in ("AM", "PM"):
+            candidates.append(" ".join(parts[:-1]))
+
+        formats = [
+            "%m/%d/%Y %I:%M %p",
+            "%m/%d/%Y %I:%M:%S %p",
+            "%m/%d/%Y %H:%M %p",
+            "%m/%d/%Y %H:%M:%S %p",
+            "%m/%d/%Y %H:%M",
+            "%m/%d/%Y %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+        ]
+
+        for candidate in candidates:
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(candidate, fmt)
+                    return dt.replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    continue
+
+        return None
+
     def _get_tenants(self, timeout=SSLConstants.TIMEOUT):
         """
         Fetches the list of tenants from the FortiSOAR endpoint.
@@ -311,13 +366,7 @@ class FortiSOAR:
                 status=status_obj.get("itemValue") if status_obj else None,
                 # record["status_value"] = status_obj.get("orderIndex") if status_obj else None
                 reason=alert.get("qradarCloseReason"),
-                occured=(
-                    datetime.strptime(event_time, "%m/%d/%Y %I:%M %p").strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    )
-                    if event_time
-                    else None
-                ),
+                occured=self.safe_parse_event_time(event_time),
                 closed=self.safe_parse_datetime(alert.get("resolveddate")),
                 owner=owner,
                 severity=severity_obj.get("orderIndex") if severity_obj else None,
