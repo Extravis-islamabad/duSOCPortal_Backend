@@ -594,6 +594,7 @@ class DuCortexSOARTenants(models.Model):
 
     class Meta:
         db_table = "du_cortex_soar_tenants"
+        unique_together = ("db_id", "integration")
 
     def __str__(self):
         return self.name
@@ -659,7 +660,7 @@ class DUCortexSOARIncidentFinalModel(models.Model):
         db_table = "du_cortex_soar_final_incidents"
         constraints = [
             models.UniqueConstraint(
-                fields=["account", "db_id"], name="unique_account_db_id"
+                fields=["account", "db_id", "integration"], name="unique_account_db_id"
             )
         ]
 
@@ -1576,6 +1577,7 @@ class DUFortiSOARTenants(models.Model):
 
     class Meta:
         db_table = "du_forti_soar_tenants"
+        unique_together = ("db_id", "integration")
 
     def __str__(self):
         return self.name
@@ -1642,7 +1644,8 @@ class DUFortiSOARIncidentModel(models.Model):
         db_table = "du_forti_soar_incidents"
         constraints = [
             models.UniqueConstraint(
-                fields=["account", "db_id"], name="forti_soar_unique_account_db_id"
+                fields=["account", "db_id", "integration"],
+                name="forti_soar_unique_account_db_id",
             )
         ]
 
