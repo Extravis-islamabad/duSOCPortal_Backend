@@ -100,6 +100,8 @@ def sync_forti_soar_alert_for_tenant(
         port=port,
         token=api_key,
     ) as fsoar:
+        if forti_soar_tenant_name == "CDC-Mey-Test":
+            return
         data = fsoar._get_alerts(tenant_name=forti_soar_tenant_name)
         if not data:
             logger.warning(f"No alerts found for tenant {forti_soar_tenant_name}")
