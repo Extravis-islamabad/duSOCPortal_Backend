@@ -1,5 +1,6 @@
 import time
 from datetime import datetime
+from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 import requests
@@ -149,40 +150,84 @@ class FortiSOAR:
         """
         start = time.time()
         logger.info(f"FortiSOAR._get_alerts() started : {start}")
-        endpoint = f"{self.base_url}/{FortiSOARConstants.ALERTS_ENDPOINT}?tenant__name={tenant_name}"
-        try:
-            if EnvConstants.LOCAL:
-                proxies = {
-                    "http": "http://127.0.0.1:8080",
-                    "https": "http://127.0.0.1:8080",
-                }
-                response = requests.get(
-                    endpoint,
-                    headers=self.headers,
-                    verify=SSLConstants.VERIFY,
-                    proxies=proxies,
-                    timeout=timeout,
+        base_endpoint = f"{self.base_url}/{FortiSOARConstants.ALERTS_ENDPOINT}"
+        page = 1
+        last_page = None
+        all_alerts = []
+
+        while True:
+            params = {"tenant__name": tenant_name, "$page": page}
+            try:
+                if EnvConstants.LOCAL:
+                    proxies = {
+                        "http": "http://127.0.0.1:8080",
+                        "https": "http://127.0.0.1:8080",
+                    }
+                    response = requests.get(
+                        base_endpoint,
+                        params=params,
+                        headers=self.headers,
+                        verify=SSLConstants.VERIFY,
+                        proxies=proxies,
+                        timeout=timeout,
+                    )
+                else:
+                    response = requests.get(
+                        base_endpoint,
+                        params=params,
+                        headers=self.headers,
+                        verify=SSLConstants.VERIFY,
+                        timeout=timeout,
+                    )
+            except Exception as e:
+                logger.error(
+                    f"FortiSOAR._get_alerts() failed with exception : {str(e)} on page {page}"
                 )
-            else:
-                response = requests.get(
-                    endpoint,
-                    headers=self.headers,
-                    verify=SSLConstants.VERIFY,
-                    timeout=timeout,
+                raise Exception(
+                    f"FortiSOAR._get_alerts() failed with exception : {str(e)}"
                 )
-        except Exception as e:
-            logger.error(f"FortiSOAR._get_alerts() failed with exception : {str(e)}")
-            raise Exception(f"FortiSOAR._get_alerts() failed with exception : {str(e)}")
-        if response.status_code != 200:
-            logger.warning(
-                f"FortiSOAR._get_alerts() return the status code {response.status_code}"
-            )
-            raise Exception(
-                f"FortiSOAR._get_alerts() return the status code {response.status_code}"
+
+            if response.status_code != 200:
+                logger.warning(
+                    f"FortiSOAR._get_alerts() returned status code {response.status_code} on page {page}"
+                )
+                raise Exception(
+                    f"FortiSOAR._get_alerts() return the status code {response.status_code}"
+                )
+
+            data = response.json()
+            page_alerts = data.get("hydra:member", [])
+            all_alerts.extend(page_alerts)
+
+            # Determine last page from hydra:view metadata if available
+            view = data.get("hydra:view") or {}
+            if last_page is None and view.get("hydra:last"):
+                parsed = urlparse(view.get("hydra:last"))
+                qs = parse_qs(parsed.query)
+                last_page_param = qs.get("$page") or qs.get("%24page")
+                if last_page_param:
+                    try:
+                        last_page = int(last_page_param[0])
+                    except (TypeError, ValueError):
+                        last_page = None
+
+            logger.debug(
+                f"FortiSOAR._get_alerts() fetched page {page} with {len(page_alerts)} alerts"
             )
 
-        data = response.json()
-        return data
+            if last_page is not None and page >= last_page:
+                break
+            if not page_alerts:
+                break
+
+            page += 1
+
+        logger.info(
+            f"FortiSOAR._get_alerts() collected {len(all_alerts)} alerts across {page} pages"
+        )
+
+        # Return in the same structure expected by downstream consumers
+        return all_alerts
 
     def transform_tenants(self, data, integration_id):
         """
@@ -215,8 +260,7 @@ class FortiSOAR:
         :return: A list of dictionaries containing the transformed alert information.
         """
 
-        alerts_data = data.get("hydra:member", [])
-
+        alerts_data = data
         if not alerts_data:
             logger.warning("No alerts found in FortiSOAR API response")
             return []
@@ -302,8 +346,8 @@ class FortiSOAR:
                 mitre_tactic=alert.get("mitreTactic"),
                 mitre_technique=alert.get("mitreTechnique"),
                 close_notes=alert.get("closureNotes"),
-                integration=integration_id,
-                forti_soar_tenant=forti_soar_tenant_id,
+                integration_id=integration_id,
+                forti_soar_tenant_id=forti_soar_tenant_id,
                 analysis_notes=alert.get("analysisNotes"),
             )
 
