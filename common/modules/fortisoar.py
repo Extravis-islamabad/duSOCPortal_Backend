@@ -480,7 +480,7 @@ class FortiSOAR:
                         "close_notes",
                         "analysis_notes",
                     ],
-                    unique_fields=["account", "db_id"],
+                    unique_fields=["account", "db_id", "integration"],
                 )
                 logger.info(f"Inserted the incident records: {len(records)}")
                 logger.success(
