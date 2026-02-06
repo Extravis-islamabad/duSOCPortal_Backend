@@ -278,7 +278,7 @@ class FortiSOAR:
             page += 1
 
         logger.info(
-            f"FortiSOAR._get_alerts() collected {len(all_alerts)} alerts across {page} pages"
+            f"FortiSOAR._get_alerts() collected {len(all_alerts)} alerts across {page} pages for {tenant_name}"
         )
 
         # Return in the same structure expected by downstream consumers
@@ -357,6 +357,15 @@ class FortiSOAR:
             else:
                 owner = None
 
+            priority_value = priority_obj.get("itemValue") if priority_obj else None
+            priority_map = {
+                "P1": "P1 Critical",
+                "P2": "P2 High",
+                "P3": "P3 Medium",
+                "P4": "P4 Low",
+            }
+            mapped_priority = priority_map.get(priority_value, priority_value)
+
             record = DUFortiSOARIncidentModel(
                 db_id=alert.get("id"),
                 created=self.safe_parse_datetime(alert.get("createDate")),
@@ -372,9 +381,7 @@ class FortiSOAR:
                 severity=severity_obj.get("orderIndex") if severity_obj else None,
                 # record["severity_text"] = severity_obj.get("itemValue") if severity_obj else None
                 tta_calculation=alert.get("tTACalculation"),
-                incident_priority=priority_obj.get("itemValue")
-                if priority_obj
-                else None,
+                incident_priority=mapped_priority,
                 incident_phase=phase_obj.get("itemValue") if phase_obj else None,
                 source_ips=alert.get("sourceIp"),
                 incident_tta=incident_tta,
