@@ -3863,6 +3863,7 @@ class IncidentsView(APIView):
                     "playbook_id",
                     "occured",
                     "sla",
+                    "integration_id",
                     "mitre_tactic",
                     "mitre_technique",
                     "configuration_item",
@@ -3884,6 +3885,7 @@ class IncidentsView(APIView):
                     "playbook_id",
                     "occured",
                     "sla",
+                    "integration_id",
                     "mitre_tactic",
                     "mitre_technique",
                     "configuration_item",
@@ -3957,6 +3959,7 @@ class IncidentsView(APIView):
                         "playbook": row["playbook_id"],
                         "occurred": occurred_date,
                         "sla": row["sla"],
+                        "integration_id": row.get("integration_id"),
                         "mitre_tactic": row["mitre_tactic"],
                         "mitre_technique": row["mitre_technique"],
                         "configuration_item": row["configuration_item"],
@@ -4010,7 +4013,7 @@ class IncidentDetailView(APIView):
         },
         tags=["SOAR Incidents"],
     )
-    def get(self, request, incident_db_id):
+    def get(self, request, incident_db_id, integration_id):
         try:
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
