@@ -2081,7 +2081,7 @@ class TenantSLAMatrixAPIView(APIView):
             SlaLevelChoices.P2.label,
             SlaLevelChoices.P3.label,
             SlaLevelChoices.P4.label,
-        ] + SoarPriorityConstants.VALUES
+        ]
 
         incidents = []
 
