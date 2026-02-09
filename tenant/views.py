@@ -4654,12 +4654,17 @@ class OffenseCategoriesAPIView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         # Check for active SOAR integration
-        soar_integrations = tenant.company.integrations.filter(
+        cortex_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
         )
-        if not soar_integrations.exists():
+        forti_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.FORTI_SOAR,
+            status=True,
+        )
+        if not cortex_integrations.exists() and not forti_integrations.exists():
             return Response(
                 {"error": "No active SOAR integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -4667,44 +4672,80 @@ class OffenseCategoriesAPIView(APIView):
 
         try:
             # Step 1: Get SOAR tenant IDs
-            soar_tenants = tenant.company.soar_tenants.all()
-            if not soar_tenants:
+            soar_tenants = (
+                tenant.company.soar_tenants.all()
+                if cortex_integrations.exists()
+                else tenant.company.soar_tenants.none()
+            )
+            forti_soar_tenants = (
+                tenant.company.forti_soar_tenants.all()
+                if forti_integrations.exists()
+                else tenant.company.forti_soar_tenants.none()
+            )
+            if not soar_tenants.exists() and not forti_soar_tenants.exists():
                 return Response(
                     {"error": "No SOAR tenants found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-            soar_ids = [t.id for t in soar_tenants]
+            soar_ids = list(soar_tenants.values_list("id", flat=True))
+            forti_soar_ids = list(forti_soar_tenants.values_list("id", flat=True))
 
             # Step 2: Build base filters using same logic as DashboardView and IncidentSummaryView
-            # Base filters for True Positives (Ready incidents with all required fields)
-            true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
-                ~Q(owner__isnull=True)
-                & ~Q(owner__exact="")
-                & Q(incident_tta__isnull=False)
-                & Q(incident_ttn__isnull=False)
-                & Q(incident_ttdn__isnull=False)
-                & Q(itsm_sync_status__isnull=False)
-                & Q(itsm_sync_status__iexact="Ready")
-                & Q(incident_priority__isnull=False)
-                & ~Q(incident_priority__exact="")
-            )
-
-            # Base filters for False Positives (Done incidents)
-            false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
-                itsm_sync_status__iexact="Done"
-            )
+            cortex_filters = None
+            forti_filters = None
 
             # Check include_fp parameter (default to true for backward compatibility)
             include_fp = (
                 request.query_params.get("include_fp", "true").lower() == "true"
             )
+            if soar_ids:
+                # Base filters for True Positives (Ready incidents with all required fields)
+                cortex_true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Ready")
+                    & Q(incident_priority__isnull=False)
+                    & ~Q(incident_priority__exact="")
+                )
 
-            if include_fp:
-                # Include both True Positives and False Positives
-                filters = true_positive_filters | false_positive_filters
-            else:
-                # Include only True Positives
-                filters = true_positive_filters
+                if include_fp:
+                    cortex_false_positive_filters = Q(
+                        cortex_soar_tenant__in=soar_ids
+                    ) & Q(itsm_sync_status__iexact="Done")
+                    cortex_filters = (
+                        cortex_true_positive_filters | cortex_false_positive_filters
+                    )
+                else:
+                    cortex_filters = cortex_true_positive_filters
+
+            if forti_soar_ids:
+                forti_true_positive_filters = Q(
+                    forti_soar_tenant__in=forti_soar_ids
+                ) & (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Ready")
+                    & Q(incident_priority__isnull=False)
+                    & ~Q(incident_priority__exact="")
+                )
+
+                if include_fp:
+                    forti_false_positive_filters = Q(
+                        forti_soar_tenant__in=forti_soar_ids
+                    ) & Q(itsm_sync_status__iexact="Done")
+                    forti_filters = (
+                        forti_true_positive_filters | forti_false_positive_filters
+                    )
+                else:
+                    forti_filters = forti_true_positive_filters
 
             # Step 3: Handle date filtering
             filter_type = request.query_params.get("filter_type")
@@ -4716,9 +4757,13 @@ class OffenseCategoriesAPIView(APIView):
                 try:
                     start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
                     end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
-                    filters &= Q(created__date__gte=start_date_obj) & Q(
+                    date_filter = Q(created__date__gte=start_date_obj) & Q(
                         created__date__lte=end_date_obj
                     )
+                    if cortex_filters is not None:
+                        cortex_filters &= date_filter
+                    if forti_filters is not None:
+                        forti_filters &= date_filter
                 except ValueError:
                     return Response(
                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
@@ -4727,13 +4772,13 @@ class OffenseCategoriesAPIView(APIView):
                 try:
                     filter_type = FilterType(int(filter_type))
                     if filter_type == FilterType.TODAY:
-                        filters &= Q(created__date=now.date())
+                        date_filter = Q(created__date=now.date())
                     elif filter_type == FilterType.WEEK:
                         start_date = now - timedelta(days=7)
-                        filters &= Q(created__date__gte=start_date.date())
+                        date_filter = Q(created__date__gte=start_date.date())
                     elif filter_type == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
-                        filters &= Q(created__date__gte=start_date.date())
+                        date_filter = Q(created__date__gte=start_date.date())
                     elif filter_type == FilterType.CUSTOM_RANGE:
                         start_date_str = request.query_params.get("start_date")
                         end_date_str = request.query_params.get("end_date")
@@ -4751,7 +4796,7 @@ class OffenseCategoriesAPIView(APIView):
                             end_date_obj = datetime.strptime(
                                 end_date_str, "%Y-%m-%d"
                             ).date()
-                            filters &= Q(created__date__gte=start_date_obj) & Q(
+                            date_filter = Q(created__date__gte=start_date_obj) & Q(
                                 created__date__lte=end_date_obj
                             )
                         except ValueError:
@@ -4759,25 +4804,50 @@ class OffenseCategoriesAPIView(APIView):
                                 {"error": "Invalid date format. Use YYYY-MM-DD."},
                                 status=400,
                             )
+                    else:
+                        date_filter = None
+
+                    if "date_filter" in locals() and date_filter is not None:
+                        if cortex_filters is not None:
+                            cortex_filters &= date_filter
+                        if forti_filters is not None:
+                            forti_filters &= date_filter
                 except Exception as e:
                     return Response(
                         {"error": f"Invalid filter_type: {str(e)}"}, status=400
                     )
 
             # Step 4: Query incidents with qradar_category field and group by category
-            category_counts = (
-                DUCortexSOARIncidentFinalModel.objects.filter(filters)
-                .exclude(qradar_category__isnull=True)
-                .exclude(qradar_category__exact="")
-                .values("qradar_category")
-                .annotate(count=Count("id"))
-                .order_by("-count")  # Order by count descending
-            )
+            category_counter = Counter()
+
+            if cortex_filters is not None:
+                category_counts = (
+                    DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                    .exclude(qradar_category__isnull=True)
+                    .exclude(qradar_category__exact="")
+                    .values("qradar_category")
+                    .annotate(count=Count("id"))
+                )
+                for item in category_counts:
+                    category_counter[item["qradar_category"]] += item["count"]
+
+            if forti_filters is not None:
+                forti_category_counts = (
+                    DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                    .exclude(qradar_category__isnull=True)
+                    .exclude(qradar_category__exact="")
+                    .values("qradar_category")
+                    .annotate(count=Count("id"))
+                )
+                for item in forti_category_counts:
+                    category_counter[item["qradar_category"]] += item["count"]
 
             # Step 5: Format the response for graphing
             response_data = [
-                {"category": item["qradar_category"], "count": item["count"]}
-                for item in category_counts
+                {"category": category, "count": count}
+                for category, count in sorted(
+                    category_counter.items(), key=lambda x: x[1], reverse=True
+                )
             ]
 
             if not response_data:
