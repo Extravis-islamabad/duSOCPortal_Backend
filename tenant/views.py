@@ -4380,49 +4380,87 @@ class IncidentSummaryView(APIView):
         try:
             # Step 1: Validate tenant
             tenant = Tenant.objects.get(tenant=request.user)
-            soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
+            cortex_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.CORTEX_SOAR,
+                status=True,
+            )
+            forti_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.FORTI_SOAR,
+                status=True,
+            )
+            if not cortex_integrations.exists() and not forti_integrations.exists():
+                return Response(
+                    {"error": "No active SOAR integration configured for tenant."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            if not soar_ids:
+            soar_tenants = (
+                tenant.company.soar_tenants.all()
+                if cortex_integrations.exists()
+                else tenant.company.soar_tenants.none()
+            )
+            forti_soar_tenants = (
+                tenant.company.forti_soar_tenants.all()
+                if forti_integrations.exists()
+                else tenant.company.forti_soar_tenants.none()
+            )
+
+            if not soar_tenants.exists() and not forti_soar_tenants.exists():
                 return Response({"error": "No SOAR tenants found."}, status=404)
 
+            soar_ids = list(soar_tenants.values_list("id", flat=True))
+            forti_soar_ids = list(forti_soar_tenants.values_list("id", flat=True))
+
             # Step 2: Apply true positive logic filters (same as AllIncidentsView)
-            filters = Q(cortex_soar_tenant__in=soar_ids)
-            filters &= (
-                ~Q(owner__isnull=True)
-                & ~Q(owner__exact="")
-                & Q(incident_tta__isnull=False)
-                & Q(incident_ttn__isnull=False)
-                & Q(incident_ttdn__isnull=False)
-                & Q(itsm_sync_status__isnull=False)
-                & Q(itsm_sync_status__iexact="Ready")
-            )
-            false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
-                itsm_sync_status__iexact="Done"
-            )
-            filters = filters | false_positive_filters
+            cortex_filters = None
+            forti_filters = None
+
+            if soar_ids:
+                cortex_true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Ready")
+                )
+                cortex_false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & Q(
+                    itsm_sync_status__iexact="Done"
+                )
+                cortex_filters = (
+                    cortex_true_positive_filters | cortex_false_positive_filters
+                )
+
+            if forti_soar_ids:
+                forti_true_positive_filters = Q(
+                    forti_soar_tenant__in=forti_soar_ids
+                ) & (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Ready")
+                )
+                forti_false_positive_filters = Q(
+                    forti_soar_tenant__in=forti_soar_ids
+                ) & Q(itsm_sync_status__iexact="Done")
+                forti_filters = (
+                    forti_true_positive_filters | forti_false_positive_filters
+                )
             # Handle filter_type (same as AllIncidentsView)
             # filter_type = request.query_params.get("filter_type")
             now = timezone.now()
             start_date = now - timedelta(hours=24)
-            filters &= Q(created__gte=start_date, created__lte=now)
-            # if filter_type:
-            #     try:
-            #         filter_enum = FilterType(int(filter_type))
-            #         if filter_enum == FilterType.TODAY:
-            #             filters &= Q(created__date=now)
-            #         elif filter_enum == FilterType.WEEK:
-            #             start_date = now - timedelta(days=7)
-            #             filters &= Q(created__date__gte=start_date)
-            #         elif filter_enum == FilterType.MONTH:
-            #             start_date = now - timedelta(days=30)
-            #             filters &= Q(created__date__gte=start_date)
-            #     except Exception:
-            #         return Response(
-            #             {
-            #                 "error": "Invalid filter_type. Use 1=Today, 2=Week, 3=Month, 4=Year."
-            #             },
-            #             status=400,
-            #         )
+            date_filter = Q(created__gte=start_date, created__lte=now)
+            if cortex_filters is not None:
+                cortex_filters &= date_filter
+            if forti_filters is not None:
+                forti_filters &= date_filter
 
             priority = request.query_params.get("priority")
             if priority:
@@ -4436,7 +4474,12 @@ class IncidentSummaryView(APIView):
                     # Extract the prefix (e.g., "P1" from "P1 Critical")
                     priority_prefix = priority_str.split()[0]
 
-                    filters &= Q(incident_priority__icontains=priority_prefix)
+                    if cortex_filters is not None:
+                        cortex_filters &= Q(
+                            incident_priority__icontains=priority_prefix
+                        )
+                    if forti_filters is not None:
+                        forti_filters &= Q(incident_priority__icontains=priority_prefix)
                 except (ValueError, KeyError):
                     return Response(
                         {
@@ -4446,40 +4489,27 @@ class IncidentSummaryView(APIView):
                     )
 
             # Step 3: Apply filters and calculate summary counts
-            incidents_qs = DUCortexSOARIncidentFinalModel.objects.filter(filters)
-
-            # Severity summary (same as original)
-            # severity_counts = incidents_qs.values("severity").annotate(
-            #     count=Count("severity")
-            # )
-
-            # Initialize severity summary with all severity labels set to 0
-            # severity_summary = {label: 0 for label in SEVERITY_LABELS.values()}
-
-            # # Update counts for severities present in the data
-            # for item in severity_counts:
-            #     severity_value = item["severity"]
-            #     label = SEVERITY_LABELS.get(
-            #         severity_value, f"Unknown ({severity_value})"
-            #     )
-            #     severity_summary[label] = item["count"]
-
-            # Priority summary (using SlaLevelChoices)
-            priority_counts = incidents_qs.values("incident_priority").annotate(
-                count=Count("incident_priority")
-            )
-
-            # Initialize priority summary with priority labels set to 0
             priority_summary = {choice.label: 0 for choice in SlaLevelChoices}
 
-            # Update counts for priorities present in the data
-            for item in priority_counts:
-                priority_value = item["incident_priority"]
-                if priority_value:
-                    # Map priority strings to summary labels
-                    for choice in SlaLevelChoices:
-                        if choice.name in priority_value:  # e.g., "P1" in "P1 Critical"
-                            priority_summary[choice.label] += item["count"]
+            def accumulate_priority_counts(queryset):
+                priority_counts = queryset.values("incident_priority").annotate(
+                    count=Count("incident_priority")
+                )
+                for item in priority_counts:
+                    priority_value = item["incident_priority"]
+                    if priority_value:
+                        for choice in SlaLevelChoices:
+                            if choice.name in priority_value:
+                                priority_summary[choice.label] += item["count"]
+
+            if cortex_filters is not None:
+                accumulate_priority_counts(
+                    DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                )
+            if forti_filters is not None:
+                accumulate_priority_counts(
+                    DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                )
 
             # Step 4: Return both summaries
             return Response(
