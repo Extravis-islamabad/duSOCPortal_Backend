@@ -3558,6 +3558,9 @@ class IncidentsView(APIView):
         false_positives = (
             request.query_params.get("false_positives", "").lower() == "true"
         )
+        true_positives = (
+            request.query_params.get("true_positives", "").lower() == "true"
+        )
 
         date_format = "%Y-%m-%d"  # Expected format for date inputs
 
@@ -3592,6 +3595,8 @@ class IncidentsView(APIView):
             # Handle false positives parameter
             if false_positives:
                 cortex_filters = cortex_false_positive_filters
+            elif true_positives:
+                cortex_filters = cortex_true_positive_filters
             else:
                 cortex_filters = (
                     cortex_true_positive_filters | cortex_false_positive_filters
@@ -3624,12 +3629,14 @@ class IncidentsView(APIView):
 
             if false_positives:
                 forti_filters = forti_false_positive_filters
+            elif true_positives:
+                forti_filters = forti_true_positive_filters
             else:
                 forti_filters = (
                     forti_true_positive_filters | forti_false_positive_filters
                 )
 
-        def apply_common_filters(base_filters):
+        def apply_common_filters(base_filters, is_forti=False):
             # Step 6: Apply non-date filters
             if id_filter:
                 base_filters &= Q(id=id_filter)
@@ -3651,7 +3658,13 @@ class IncidentsView(APIView):
                 base_filters &= Q(name__icontains=description_filter)
 
             if status_filter:
-                base_filters &= Q(status__iexact=status_filter)
+                if is_forti and str(status_filter) in ["1", "2"]:
+                    if str(status_filter) == "1":
+                        base_filters &= ~Q(status__in=["Closed", "Resolved"])
+                    else:
+                        base_filters &= Q(status__in=["Closed", "Resolved"])
+                else:
+                    base_filters &= Q(status__iexact=status_filter)
 
             if priority_filter:
                 base_filters &= Q(incident_priority__iexact=priority_filter)
@@ -3699,9 +3712,9 @@ class IncidentsView(APIView):
 
         try:
             if cortex_filters is not None:
-                cortex_filters = apply_common_filters(cortex_filters)
+                cortex_filters = apply_common_filters(cortex_filters, is_forti=False)
             if forti_filters is not None:
-                forti_filters = apply_common_filters(forti_filters)
+                forti_filters = apply_common_filters(forti_filters, is_forti=True)
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
