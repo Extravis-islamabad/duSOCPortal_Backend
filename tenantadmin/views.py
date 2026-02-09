@@ -1571,11 +1571,10 @@ class IncidentPrioritySummaryAPIView(APIView):
                     incident_priority__icontains=priority_key
                 )
 
-                # TODO : Confirm for the forti soar where owner is not comming what to do
                 forti_true_positive_filters = forti_priority_filters & (
-                    # ~Q(owner__isnull=True)
-                    # & ~Q(owner__exact="")
-                    Q(incident_tta__isnull=False)
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
                     & Q(incident_ttn__isnull=False)
                     & Q(incident_ttdn__isnull=False)
                     & Q(itsm_sync_status__isnull=False)
@@ -1585,9 +1584,9 @@ class IncidentPrioritySummaryAPIView(APIView):
                 )
 
                 forti_false_positive_filters = forti_priority_filters & (
-                    # ~Q(owner__isnull=True)
-                    # & ~Q(owner__exact="")
-                    Q(incident_tta__isnull=False)
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
                     & Q(incident_ttn__isnull=False)
                     & Q(incident_ttdn__isnull=False)
                     & Q(itsm_sync_status__isnull=False)
