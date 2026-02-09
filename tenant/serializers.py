@@ -31,6 +31,7 @@ from .models import (  # SoarTenantSlaMetric,
     DefaultSoarSlaMetric,
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
+    DUFortiSOARIncidentModel,
     DUFortiSOARTenants,
     DuIbmQradarTenants,
     DuITSMFinalTickets,
@@ -1600,6 +1601,12 @@ class AlertSerializer(serializers.ModelSerializer):
 class RecentIncidentsSerializer(serializers.ModelSerializer):
     class Meta:
         model = DUCortexSOARIncidentFinalModel
+        exclude = ["created_at"]
+
+
+class RecentFortiIncidentsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DUFortiSOARIncidentModel
         exclude = ["created_at"]
 
 
