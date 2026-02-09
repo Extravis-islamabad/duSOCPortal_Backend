@@ -1571,11 +1571,10 @@ class IncidentPrioritySummaryAPIView(APIView):
                     incident_priority__icontains=priority_key
                 )
 
-                # TODO : Confirm for the forti soar where owner is not comming what to do
                 forti_true_positive_filters = forti_priority_filters & (
-                    # ~Q(owner__isnull=True)
-                    # & ~Q(owner__exact="")
-                    Q(incident_tta__isnull=False)
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
                     & Q(incident_ttn__isnull=False)
                     & Q(incident_ttdn__isnull=False)
                     & Q(itsm_sync_status__isnull=False)
@@ -1585,9 +1584,9 @@ class IncidentPrioritySummaryAPIView(APIView):
                 )
 
                 forti_false_positive_filters = forti_priority_filters & (
-                    # ~Q(owner__isnull=True)
-                    # & ~Q(owner__exact="")
-                    Q(incident_tta__isnull=False)
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
                     & Q(incident_ttn__isnull=False)
                     & Q(incident_ttdn__isnull=False)
                     & Q(itsm_sync_status__isnull=False)
@@ -1828,11 +1827,11 @@ class IncidentStatusSummaryAPIView(APIView):
                 # Count open/closed Forti incidents
                 open_count += (
                     DUFortiSOARIncidentModel.objects.filter(forti_filters)
-                    .exclude(status="Closed")
+                    .exclude(status__in=["Closed", "Resolved"])
                     .count()
                 )
                 closed_count += DUFortiSOARIncidentModel.objects.filter(
-                    forti_filters & Q(status="Closed")
+                    forti_filters & Q(status__in=["Closed", "Resolved"])
                 ).count()
 
             total_count = open_count + closed_count
@@ -1875,9 +1874,7 @@ class IncidentStatusSummaryAPIView(APIView):
         """Get filter for incidents that match true positive OR false positive logic"""
         base_filters = Q(**{f"{tenant_field}__in": tenant_ids})
 
-        owner_filters = Q()
-        if tenant_field == "cortex_soar_tenant":
-            owner_filters = ~Q(owner__isnull=True) & ~Q(owner__exact="")
+        owner_filters = ~Q(owner__isnull=True) & ~Q(owner__exact="")
 
         # True Positive Logic: Ready incidents with proper fields
         true_positive_filters = (
@@ -2084,7 +2081,7 @@ class TenantSLAMatrixAPIView(APIView):
             SlaLevelChoices.P2.label,
             SlaLevelChoices.P3.label,
             SlaLevelChoices.P4.label,
-        ] + SoarPriorityConstants.VALUES
+        ]
 
         incidents = []
 
