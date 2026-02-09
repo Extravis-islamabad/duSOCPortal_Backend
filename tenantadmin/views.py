@@ -1828,11 +1828,11 @@ class IncidentStatusSummaryAPIView(APIView):
                 # Count open/closed Forti incidents
                 open_count += (
                     DUFortiSOARIncidentModel.objects.filter(forti_filters)
-                    .exclude(status="Closed")
+                    .exclude(status__in=["Closed", "Resolved"])
                     .count()
                 )
                 closed_count += DUFortiSOARIncidentModel.objects.filter(
-                    forti_filters & Q(status="Closed")
+                    forti_filters & Q(status__in=["Closed", "Resolved"])
                 ).count()
 
             total_count = open_count + closed_count
@@ -1875,9 +1875,7 @@ class IncidentStatusSummaryAPIView(APIView):
         """Get filter for incidents that match true positive OR false positive logic"""
         base_filters = Q(**{f"{tenant_field}__in": tenant_ids})
 
-        owner_filters = Q()
-        if tenant_field == "cortex_soar_tenant":
-            owner_filters = ~Q(owner__isnull=True) & ~Q(owner__exact="")
+        owner_filters = ~Q(owner__isnull=True) & ~Q(owner__exact="")
 
         # True Positive Logic: Ready incidents with proper fields
         true_positive_filters = (
