@@ -6172,7 +6172,6 @@ class RecentIncidentsView(APIView):
                             )
             except Exception:
                 return Response({"error": "Invalid filter_type."}, status=400)
-
             # Step 6: Use ORM to get incident names efficiently with filters
             incident_names = []
             if cortex_filters is not None:
@@ -7228,39 +7227,104 @@ class SLASeverityIncidentsView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         try:
-            soar_tenants = tenant.company.soar_tenants.all()
-            if not soar_tenants:
+            cortex_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.CORTEX_SOAR,
+                status=True,
+            )
+            forti_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.FORTI_SOAR,
+                status=True,
+            )
+            if not cortex_integrations.exists() and not forti_integrations.exists():
+                return Response(
+                    {"error": "No active SOAR integration configured for tenant."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            soar_tenants = (
+                tenant.company.soar_tenants.all()
+                if cortex_integrations.exists()
+                else tenant.company.soar_tenants.none()
+            )
+            forti_soar_tenants = (
+                tenant.company.forti_soar_tenants.all()
+                if forti_integrations.exists()
+                else tenant.company.forti_soar_tenants.none()
+            )
+            if not soar_tenants.exists() and not forti_soar_tenants.exists():
                 return Response({"error": "No SOAR tenants found."}, status=404)
 
-            soar_ids = [t.id for t in soar_tenants]
+            soar_ids = list(soar_tenants.values_list("id", flat=True))
+            forti_soar_ids = list(forti_soar_tenants.values_list("id", flat=True))
 
-            true_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
-                ~Q(owner__isnull=True)
-                & ~Q(owner__exact="")
-                & Q(incident_tta__isnull=False)
-                & Q(incident_ttn__isnull=False)
-                & Q(incident_ttdn__isnull=False)
-                & Q(itsm_sync_status__isnull=False)
-                & Q(itsm_sync_status__iexact="Ready")
-                & Q(incident_priority__isnull=False)
-                & ~Q(incident_priority__exact="")
-            )
+            cortex_filters = None
+            forti_filters = None
 
-            false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
-                ~Q(owner__isnull=True)
-                & ~Q(owner__exact="")
-                & Q(incident_tta__isnull=False)
-                & Q(incident_ttn__isnull=False)
-                & Q(incident_ttdn__isnull=False)
-                & Q(itsm_sync_status__isnull=False)
-                & Q(itsm_sync_status__iexact="Done")
-                & Q(incident_priority__isnull=False)
-                & ~Q(incident_priority__exact="")
-            )
+            if soar_ids:
+                cortex_true_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Ready")
+                    & Q(incident_priority__isnull=False)
+                    & ~Q(incident_priority__exact="")
+                )
 
-            base_filters = true_positive_filters | false_positive_filters
+                cortex_false_positive_filters = Q(
+                    cortex_soar_tenant_id__in=soar_ids
+                ) & (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Done")
+                    & Q(incident_priority__isnull=False)
+                    & ~Q(incident_priority__exact="")
+                )
 
-            filters = base_filters
+                cortex_filters = (
+                    cortex_true_positive_filters | cortex_false_positive_filters
+                )
+
+            if forti_soar_ids:
+                forti_true_positive_filters = Q(
+                    forti_soar_tenant__in=forti_soar_ids
+                ) & (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Ready")
+                    & Q(incident_priority__isnull=False)
+                    & ~Q(incident_priority__exact="")
+                )
+
+                forti_false_positive_filters = Q(
+                    forti_soar_tenant__in=forti_soar_ids
+                ) & (
+                    ~Q(owner__isnull=True)
+                    & ~Q(owner__exact="")
+                    & Q(incident_tta__isnull=False)
+                    & Q(incident_ttn__isnull=False)
+                    & Q(incident_ttdn__isnull=False)
+                    & Q(itsm_sync_status__isnull=False)
+                    & Q(itsm_sync_status__iexact="Done")
+                    & Q(incident_priority__isnull=False)
+                    & ~Q(incident_priority__exact="")
+                )
+
+                forti_filters = (
+                    forti_true_positive_filters | forti_false_positive_filters
+                )
 
             # ✨ Unified date handling to match DashboardView ✨
             now = timezone.now().date()
@@ -7272,9 +7336,13 @@ class SLASeverityIncidentsView(APIView):
                 try:
                     start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
                     end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-                    filters &= Q(created__date__gte=start_date) & Q(
+                    date_filter = Q(created__date__gte=start_date) & Q(
                         created__date__lte=end_date
                     )
+                    if cortex_filters is not None:
+                        cortex_filters &= date_filter
+                    if forti_filters is not None:
+                        forti_filters &= date_filter
                 except ValueError:
                     return Response(
                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
@@ -7284,17 +7352,34 @@ class SLASeverityIncidentsView(APIView):
                 try:
                     filter_type = FilterType(int(filter_type))
                     if filter_type == FilterType.TODAY:
-                        filters &= Q(created__date=now)
+                        date_filter = Q(created__date=now)
                     elif filter_type == FilterType.WEEK:
                         start_date = now - timedelta(days=7)
-                        filters &= Q(created__date__gte=start_date)
+                        date_filter = Q(created__date__gte=start_date)
                     elif filter_type == FilterType.MONTH:
                         start_date = now - timedelta(days=30)
-                        filters &= Q(created__date__gte=start_date)
+                        date_filter = Q(created__date__gte=start_date)
+                    else:
+                        date_filter = None
+
+                    if "date_filter" in locals() and date_filter is not None:
+                        if cortex_filters is not None:
+                            cortex_filters &= date_filter
+                        if forti_filters is not None:
+                            forti_filters &= date_filter
                 except Exception:
                     return Response({"error": "Invalid filter_type."}, status=400)
 
-            incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
+            cortex_incidents = (
+                DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                if cortex_filters is not None
+                else DUCortexSOARIncidentFinalModel.objects.none()
+            )
+            forti_incidents = (
+                DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                if forti_filters is not None
+                else DUFortiSOARIncidentModel.objects.none()
+            )
 
             # SLA Metric selection remains unchanged
             if tenant.company.is_default_sla:
@@ -7325,38 +7410,42 @@ class SLASeverityIncidentsView(APIView):
                 "p4_low": {"total_incidents": 0, "completed_incidents": 0},
             }
 
-            for incident in incidents:
-                sla_level = priority_to_sla_map.get(incident.incident_priority)
-                if not sla_level:
-                    continue
+            def process_incidents(queryset):
+                for incident in queryset:
+                    sla_level = priority_to_sla_map.get(incident.incident_priority)
+                    if not sla_level:
+                        continue
 
-                sla_metric = sla_metrics_dict.get(sla_level)
-                if not sla_metric:
-                    continue
+                    sla_metric = sla_metrics_dict.get(sla_level)
+                    if not sla_metric:
+                        continue
 
-                label = sla_to_label_map[sla_level]
-                created = incident.created
-                any_breach = False
+                    label = sla_to_label_map[sla_level]
+                    created = incident.created
+                    any_breach = False
 
-                if incident.incident_tta:
-                    if (
-                        incident.incident_tta - created
-                    ).total_seconds() / 60 > sla_metric.tta_minutes:
-                        any_breach = True
-                if incident.incident_ttn:
-                    if (
-                        incident.incident_ttn - created
-                    ).total_seconds() / 60 > sla_metric.ttn_minutes:
-                        any_breach = True
-                if incident.incident_ttdn:
-                    if (
-                        incident.incident_ttdn - created
-                    ).total_seconds() / 60 > sla_metric.ttdn_minutes:
-                        any_breach = True
+                    if incident.incident_tta:
+                        if (
+                            incident.incident_tta - created
+                        ).total_seconds() / 60 > sla_metric.tta_minutes:
+                            any_breach = True
+                    if incident.incident_ttn:
+                        if (
+                            incident.incident_ttn - created
+                        ).total_seconds() / 60 > sla_metric.ttn_minutes:
+                            any_breach = True
+                    if incident.incident_ttdn:
+                        if (
+                            incident.incident_ttdn - created
+                        ).total_seconds() / 60 > sla_metric.ttdn_minutes:
+                            any_breach = True
 
-                severity_counts[label]["total_incidents"] += 1
-                if not any_breach:
-                    severity_counts[label]["completed_incidents"] += 1
+                    severity_counts[label]["total_incidents"] += 1
+                    if not any_breach:
+                        severity_counts[label]["completed_incidents"] += 1
+
+            process_incidents(cortex_incidents)
+            process_incidents(forti_incidents)
 
             return Response(severity_counts)
 
