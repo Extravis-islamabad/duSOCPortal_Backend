@@ -66,6 +66,7 @@ from tenant.models import (
     DosEventLog,
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
+    DUFortiSOARIncidentModel,
     DUFortiSOARTenants,
     DuIbmQradarTenants,
     DuITSMFinalTickets,
@@ -2214,22 +2215,37 @@ class DashboardView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
-        soar_integrations = tenant.company.integrations.filter(
+        cortex_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
         )
-        if not soar_integrations.exists():
+        forti_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.FORTI_SOAR,
+            status=True,
+        )
+        if not cortex_integrations.exists() and not forti_integrations.exists():
             return Response(
                 {"error": "No active SOAR integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        soar_tenants = tenant.company.soar_tenants.all()
-        if not soar_tenants:
+        soar_tenants = (
+            tenant.company.soar_tenants.all()
+            if cortex_integrations.exists()
+            else tenant.company.soar_tenants.none()
+        )
+        forti_soar_tenants = (
+            tenant.company.forti_soar_tenants.all()
+            if forti_integrations.exists()
+            else tenant.company.forti_soar_tenants.none()
+        )
+        if not soar_tenants.exists() and not forti_soar_tenants.exists():
             return Response({"error": "No SOAR tenants found."}, status=404)
 
-        soar_ids = [t.id for t in soar_tenants]
+        soar_ids = list(soar_tenants.values_list("id", flat=True))
+        forti_soar_ids = list(forti_soar_tenants.values_list("id", flat=True))
         filters = request.query_params.get("filters", "")
         filter_list = (
             [f.strip() for f in filters.split(",") if f.strip()] if filters else []
@@ -2382,27 +2398,106 @@ class DashboardView(APIView):
 
                 total_incidents = total_incidents_query.count()
 
+                if forti_soar_ids:
+                    forti_total_incidents_query = (
+                        DUFortiSOARIncidentModel.objects.filter(
+                            forti_soar_tenant__in=forti_soar_ids,
+                            itsm_sync_status__in=["Done", "Ready"],
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        )
+                    )
+
+                    if start_date or end_date:
+                        if start_date:
+                            if filter_type == FilterType.TODAY:
+                                forti_total_incidents_query = (
+                                    forti_total_incidents_query.filter(
+                                        created__date=start_date.date()
+                                    )
+                                )
+                            else:
+                                forti_total_incidents_query = (
+                                    forti_total_incidents_query.filter(
+                                        created__date__gte=start_date.date()
+                                        if hasattr(start_date, "date")
+                                        else start_date
+                                    )
+                                )
+                        if end_date:
+                            forti_total_incidents_query = (
+                                forti_total_incidents_query.filter(
+                                    created__date__lte=end_date.date()
+                                    if hasattr(end_date, "date")
+                                    else end_date
+                                )
+                            )
+
+                    total_incidents += forti_total_incidents_query.count()
+
                 if include_trend:
-                    # Create new query for trend calculation with the updated query structure
-                    trend_filters = Q(
-                        cortex_soar_tenant__in=soar_ids,
-                        status__in=["1", "2"],
-                        itsm_sync_status__in=["Done", "Ready"],
-                        owner__isnull=False,
-                        owner__gt="",
-                        incident_tta__isnull=False,
-                        incident_ttn__isnull=False,
-                        incident_ttdn__isnull=False,
-                        incident_priority__isnull=False,
-                        incident_priority__gt="",
-                    )
-                    (
-                        current_count,
-                        previous_count,
-                        trend_period,
-                    ) = self._calculate_trend_comparison(
-                        trend_filters, filter_type, start_date, end_date
-                    )
+                    current_count = 0
+                    previous_count = 0
+                    trend_period = "N/A"
+
+                    if soar_ids:
+                        # Create new query for trend calculation with the updated query structure
+                        trend_filters = Q(
+                            cortex_soar_tenant__in=soar_ids,
+                            status__in=["1", "2"],
+                            itsm_sync_status__in=["Done", "Ready"],
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        )
+                        (
+                            current_cortex,
+                            previous_cortex,
+                            trend_period,
+                        ) = self._calculate_trend_comparison(
+                            DUCortexSOARIncidentFinalModel,
+                            trend_filters,
+                            filter_type,
+                            start_date,
+                            end_date,
+                        )
+                        current_count += current_cortex
+                        previous_count += previous_cortex
+
+                    if forti_soar_ids:
+                        forti_trend_filters = Q(
+                            forti_soar_tenant__in=forti_soar_ids,
+                            itsm_sync_status__in=["Done", "Ready"],
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        )
+                        (
+                            current_forti,
+                            previous_forti,
+                            trend_period,
+                        ) = self._calculate_trend_comparison(
+                            DUFortiSOARIncidentModel,
+                            forti_trend_filters,
+                            filter_type,
+                            start_date,
+                            end_date,
+                        )
+                        current_count += current_forti
+                        previous_count += previous_forti
 
                     percent_change = self._calculate_percentage_change(
                         current_count, previous_count, trend_period
@@ -2424,6 +2519,20 @@ class DashboardView(APIView):
                     incident_priority__gt="",
                     created__date=today,
                 ).count()
+
+                if forti_soar_ids:
+                    new_incidents += DUFortiSOARIncidentModel.objects.filter(
+                        forti_soar_tenant__in=forti_soar_ids,
+                        itsm_sync_status__in=["Done", "Ready"],
+                        owner__isnull=False,
+                        owner__gt="",
+                        incident_tta__isnull=False,
+                        incident_ttn__isnull=False,
+                        incident_ttdn__isnull=False,
+                        incident_priority__isnull=False,
+                        incident_priority__gt="",
+                        created__date=today,
+                    ).count()
 
                 dashboard_data["total_incidents"] = {
                     "count": total_incidents,
@@ -2469,27 +2578,106 @@ class DashboardView(APIView):
 
                 open_count = open_incidents_query.count()
 
+                if forti_soar_ids:
+                    forti_open_incidents_query = (
+                        DUFortiSOARIncidentModel.objects.filter(
+                            forti_soar_tenant__in=forti_soar_ids,
+                            itsm_sync_status__in=["Done", "Ready"],
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        ).exclude(status__in=["Closed", "Resolved"])
+                    )
+
+                    if start_date or end_date:
+                        if start_date:
+                            if filter_type == FilterType.TODAY:
+                                forti_open_incidents_query = (
+                                    forti_open_incidents_query.filter(
+                                        created__date=start_date.date()
+                                    )
+                                )
+                            else:
+                                forti_open_incidents_query = (
+                                    forti_open_incidents_query.filter(
+                                        created__date__gte=start_date.date()
+                                        if hasattr(start_date, "date")
+                                        else start_date
+                                    )
+                                )
+                        if end_date:
+                            forti_open_incidents_query = (
+                                forti_open_incidents_query.filter(
+                                    created__date__lte=end_date.date()
+                                    if hasattr(end_date, "date")
+                                    else end_date
+                                )
+                            )
+
+                    open_count += forti_open_incidents_query.count()
+
                 # Calculate trend based on filter type for open incidents using the updated query structure
                 if include_trend:
-                    trend_filters = Q(
-                        cortex_soar_tenant__in=soar_ids,
-                        status="1",
-                        itsm_sync_status__in=["Done", "Ready"],
-                        owner__isnull=False,
-                        owner__gt="",
-                        incident_tta__isnull=False,
-                        incident_ttn__isnull=False,
-                        incident_ttdn__isnull=False,
-                        incident_priority__isnull=False,
-                        incident_priority__gt="",
-                    )
-                    (
-                        current_count,
-                        previous_count,
-                        trend_period,
-                    ) = self._calculate_trend_comparison(
-                        trend_filters, filter_type, start_date, end_date
-                    )
+                    current_count = 0
+                    previous_count = 0
+                    trend_period = "N/A"
+
+                    if soar_ids:
+                        trend_filters = Q(
+                            cortex_soar_tenant__in=soar_ids,
+                            status="1",
+                            itsm_sync_status__in=["Done", "Ready"],
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        )
+                        (
+                            current_cortex,
+                            previous_cortex,
+                            trend_period,
+                        ) = self._calculate_trend_comparison(
+                            DUCortexSOARIncidentFinalModel,
+                            trend_filters,
+                            filter_type,
+                            start_date,
+                            end_date,
+                        )
+                        current_count += current_cortex
+                        previous_count += previous_cortex
+
+                    if forti_soar_ids:
+                        forti_trend_filters = Q(
+                            forti_soar_tenant__in=forti_soar_ids,
+                            itsm_sync_status__in=["Done", "Ready"],
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        ) & ~Q(status__in=["Closed", "Resolved"])
+                        (
+                            current_forti,
+                            previous_forti,
+                            trend_period,
+                        ) = self._calculate_trend_comparison(
+                            DUFortiSOARIncidentModel,
+                            forti_trend_filters,
+                            filter_type,
+                            start_date,
+                            end_date,
+                        )
+                        current_count += current_forti
+                        previous_count += previous_forti
 
                     percent_change = self._calculate_percentage_change(
                         current_count, previous_count, trend_period
@@ -2537,27 +2725,108 @@ class DashboardView(APIView):
 
                 closed_count = closed_incidents_query.count()
 
+                if forti_soar_ids:
+                    forti_closed_incidents_query = (
+                        DUFortiSOARIncidentModel.objects.filter(
+                            forti_soar_tenant__in=forti_soar_ids,
+                            itsm_sync_status__in=["Done", "Ready"],
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                            status__in=["Closed", "Resolved"],
+                        )
+                    )
+
+                    if start_date or end_date:
+                        if start_date:
+                            if filter_type == FilterType.TODAY:
+                                forti_closed_incidents_query = (
+                                    forti_closed_incidents_query.filter(
+                                        created__date=start_date.date()
+                                    )
+                                )
+                            else:
+                                forti_closed_incidents_query = (
+                                    forti_closed_incidents_query.filter(
+                                        created__date__gte=start_date.date()
+                                        if hasattr(start_date, "date")
+                                        else start_date
+                                    )
+                                )
+                        if end_date:
+                            forti_closed_incidents_query = (
+                                forti_closed_incidents_query.filter(
+                                    created__date__lte=end_date.date()
+                                    if hasattr(end_date, "date")
+                                    else end_date
+                                )
+                            )
+
+                    closed_count += forti_closed_incidents_query.count()
+
                 # Calculate trend based on filter type for closed incidents using the updated query structure
                 if include_trend:
-                    trend_filters = Q(
-                        cortex_soar_tenant__in=soar_ids,
-                        status="2",
-                        itsm_sync_status__in=["Done", "Ready"],
-                        owner__isnull=False,
-                        owner__gt="",
-                        incident_tta__isnull=False,
-                        incident_ttn__isnull=False,
-                        incident_ttdn__isnull=False,
-                        incident_priority__isnull=False,
-                        incident_priority__gt="",
-                    )
-                    (
-                        current_count,
-                        previous_count,
-                        trend_period,
-                    ) = self._calculate_trend_comparison(
-                        trend_filters, filter_type, start_date, end_date
-                    )
+                    current_count = 0
+                    previous_count = 0
+                    trend_period = "N/A"
+
+                    if soar_ids:
+                        trend_filters = Q(
+                            cortex_soar_tenant__in=soar_ids,
+                            status="2",
+                            itsm_sync_status__in=["Done", "Ready"],
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        )
+                        (
+                            current_cortex,
+                            previous_cortex,
+                            trend_period,
+                        ) = self._calculate_trend_comparison(
+                            DUCortexSOARIncidentFinalModel,
+                            trend_filters,
+                            filter_type,
+                            start_date,
+                            end_date,
+                        )
+                        current_count += current_cortex
+                        previous_count += previous_cortex
+
+                    if forti_soar_ids:
+                        forti_trend_filters = Q(
+                            forti_soar_tenant__in=forti_soar_ids,
+                            itsm_sync_status__in=["Done", "Ready"],
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                            status__in=["Closed", "Resolved"],
+                        )
+                        (
+                            current_forti,
+                            previous_forti,
+                            trend_period,
+                        ) = self._calculate_trend_comparison(
+                            DUFortiSOARIncidentModel,
+                            forti_trend_filters,
+                            filter_type,
+                            start_date,
+                            end_date,
+                        )
+                        current_count += current_forti
+                        previous_count += previous_forti
 
                     percent_change = self._calculate_percentage_change(
                         current_count, previous_count, trend_period
@@ -2605,10 +2874,9 @@ class DashboardView(APIView):
 
                 fp_count = fp_query.count()
 
-                # Calculate trend based on filter type for false positives using the updated query structure
-                if include_trend:
-                    trend_filters = Q(
-                        cortex_soar_tenant__in=soar_ids,
+                if forti_soar_ids:
+                    forti_fp_query = DUFortiSOARIncidentModel.objects.filter(
+                        forti_soar_tenant__in=forti_soar_ids,
                         itsm_sync_status="Done",
                         owner__isnull=False,
                         owner__gt="",
@@ -2618,13 +2886,85 @@ class DashboardView(APIView):
                         incident_priority__isnull=False,
                         incident_priority__gt="",
                     )
-                    (
-                        current_fp,
-                        previous_fp,
-                        trend_period,
-                    ) = self._calculate_trend_comparison(
-                        trend_filters, filter_type, start_date, end_date
-                    )
+
+                    if start_date or end_date:
+                        if start_date:
+                            if filter_type == FilterType.TODAY:
+                                forti_fp_query = forti_fp_query.filter(
+                                    created__date=start_date.date()
+                                )
+                            else:
+                                forti_fp_query = forti_fp_query.filter(
+                                    created__date__gte=start_date.date()
+                                    if hasattr(start_date, "date")
+                                    else start_date
+                                )
+                        if end_date:
+                            forti_fp_query = forti_fp_query.filter(
+                                created__date__lte=end_date.date()
+                                if hasattr(end_date, "date")
+                                else end_date
+                            )
+
+                    fp_count += forti_fp_query.count()
+
+                # Calculate trend based on filter type for false positives using the updated query structure
+                if include_trend:
+                    current_fp = 0
+                    previous_fp = 0
+                    trend_period = "N/A"
+
+                    if soar_ids:
+                        trend_filters = Q(
+                            cortex_soar_tenant__in=soar_ids,
+                            itsm_sync_status="Done",
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        )
+                        (
+                            current_cortex_fp,
+                            previous_cortex_fp,
+                            trend_period,
+                        ) = self._calculate_trend_comparison(
+                            DUCortexSOARIncidentFinalModel,
+                            trend_filters,
+                            filter_type,
+                            start_date,
+                            end_date,
+                        )
+                        current_fp += current_cortex_fp
+                        previous_fp += previous_cortex_fp
+
+                    if forti_soar_ids:
+                        forti_trend_filters = Q(
+                            forti_soar_tenant__in=forti_soar_ids,
+                            itsm_sync_status="Done",
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        )
+                        (
+                            current_forti_fp,
+                            previous_forti_fp,
+                            trend_period,
+                        ) = self._calculate_trend_comparison(
+                            DUFortiSOARIncidentModel,
+                            forti_trend_filters,
+                            filter_type,
+                            start_date,
+                            end_date,
+                        )
+                        current_fp += current_forti_fp
+                        previous_fp += previous_forti_fp
 
                     percent_change = self._calculate_percentage_change(
                         current_fp, previous_fp, trend_period
@@ -2672,10 +3012,9 @@ class DashboardView(APIView):
 
                 tp_count = tp_query.count()
 
-                # Calculate trend based on filter type for true positives using the updated query structure
-                if include_trend:
-                    trend_filters = Q(
-                        cortex_soar_tenant__in=soar_ids,
+                if forti_soar_ids:
+                    forti_tp_query = DUFortiSOARIncidentModel.objects.filter(
+                        forti_soar_tenant__in=forti_soar_ids,
                         itsm_sync_status="Ready",
                         owner__isnull=False,
                         owner__gt="",
@@ -2685,13 +3024,85 @@ class DashboardView(APIView):
                         incident_priority__isnull=False,
                         incident_priority__gt="",
                     )
-                    (
-                        current_tp,
-                        previous_tp,
-                        trend_period,
-                    ) = self._calculate_trend_comparison(
-                        trend_filters, filter_type, start_date, end_date
-                    )
+
+                    if start_date or end_date:
+                        if start_date:
+                            if filter_type == FilterType.TODAY:
+                                forti_tp_query = forti_tp_query.filter(
+                                    created__date=start_date.date()
+                                )
+                            else:
+                                forti_tp_query = forti_tp_query.filter(
+                                    created__date__gte=start_date.date()
+                                    if hasattr(start_date, "date")
+                                    else start_date
+                                )
+                        if end_date:
+                            forti_tp_query = forti_tp_query.filter(
+                                created__date__lte=end_date.date()
+                                if hasattr(end_date, "date")
+                                else end_date
+                            )
+
+                    tp_count += forti_tp_query.count()
+
+                # Calculate trend based on filter type for true positives using the updated query structure
+                if include_trend:
+                    current_tp = 0
+                    previous_tp = 0
+                    trend_period = "N/A"
+
+                    if soar_ids:
+                        trend_filters = Q(
+                            cortex_soar_tenant__in=soar_ids,
+                            itsm_sync_status="Ready",
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        )
+                        (
+                            current_cortex_tp,
+                            previous_cortex_tp,
+                            trend_period,
+                        ) = self._calculate_trend_comparison(
+                            DUCortexSOARIncidentFinalModel,
+                            trend_filters,
+                            filter_type,
+                            start_date,
+                            end_date,
+                        )
+                        current_tp += current_cortex_tp
+                        previous_tp += previous_cortex_tp
+
+                    if forti_soar_ids:
+                        forti_trend_filters = Q(
+                            forti_soar_tenant__in=forti_soar_ids,
+                            itsm_sync_status="Ready",
+                            owner__isnull=False,
+                            owner__gt="",
+                            incident_tta__isnull=False,
+                            incident_ttn__isnull=False,
+                            incident_ttdn__isnull=False,
+                            incident_priority__isnull=False,
+                            incident_priority__gt="",
+                        )
+                        (
+                            current_forti_tp,
+                            previous_forti_tp,
+                            trend_period,
+                        ) = self._calculate_trend_comparison(
+                            DUFortiSOARIncidentModel,
+                            forti_trend_filters,
+                            filter_type,
+                            start_date,
+                            end_date,
+                        )
+                        current_tp += current_forti_tp
+                        previous_tp += previous_forti_tp
 
                     percent_change = self._calculate_percentage_change(
                         current_tp, previous_tp, trend_period
@@ -2733,6 +3144,33 @@ class DashboardView(APIView):
                     incomplete_filters
                 ).count()
 
+                if forti_soar_ids:
+                    forti_incomplete_filters = (
+                        Q(forti_soar_tenant__in=forti_soar_ids)
+                        & Q(itsm_sync_status__iexact="Ready")
+                        & (
+                            Q(owner__isnull=True)
+                            | Q(owner__exact="")
+                            | Q(incident_tta__isnull=True)
+                            | Q(incident_ttn__isnull=True)
+                            | Q(incident_ttdn__isnull=True)
+                            | Q(incident_priority__isnull=True)
+                            | Q(incident_priority__exact="")
+                        )
+                    )
+
+                    if start_date or end_date:
+                        date_filter = Q()
+                        if start_date:
+                            date_filter &= Q(created__date__gte=start_date)
+                        if end_date:
+                            date_filter &= Q(created__date__lte=end_date)
+                        forti_incomplete_filters &= date_filter
+
+                    incomplete_count += DUFortiSOARIncidentModel.objects.filter(
+                        forti_incomplete_filters
+                    ).count()
+
                 dashboard_data["incompleteIncidents"] = {
                     "count": incomplete_count,
                     "description": "Ready incidents with missing required fields",
@@ -2747,7 +3185,7 @@ class DashboardView(APIView):
             )
 
     def _calculate_trend_comparison(
-        self, base_filters, filter_type, start_date, end_date
+        self, model, base_filters, filter_type, start_date, end_date
     ):
         """Calculate current and previous period counts for trend comparison"""
         now = timezone.now().date()
@@ -2796,9 +3234,7 @@ class DashboardView(APIView):
             & Q(created__date__gte=current_start)
             & Q(created__date__lte=current_end)
         )
-        current_count = DUCortexSOARIncidentFinalModel.objects.filter(
-            current_filters
-        ).count()
+        current_count = model.objects.filter(current_filters).count()
 
         # Count incidents for previous period
         previous_filters = (
@@ -2806,9 +3242,7 @@ class DashboardView(APIView):
             & Q(created__date__gte=previous_start)
             & Q(created__date__lte=previous_end)
         )
-        previous_count = DUCortexSOARIncidentFinalModel.objects.filter(
-            previous_filters
-        ).count()
+        previous_count = model.objects.filter(previous_filters).count()
 
         return current_count, previous_count, period
 
