@@ -1576,6 +1576,12 @@ class DUCortexSOARIncidentSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class DUFortiSOARIncidentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DUFortiSOARIncidentModel
+        fields = "__all__"
+
+
 class IBMQradarEPSSerializer(serializers.ModelSerializer):
     log_source = serializers.CharField(source="log_source.name", read_only=True)
 
