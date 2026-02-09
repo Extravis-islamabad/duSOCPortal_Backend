@@ -1956,25 +1956,37 @@ class TypeDistributionView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
-        soar_integrations = tenant.company.integrations.filter(
+        cortex_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
         )
-        if not soar_integrations.exists():
+        forti_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.FORTI_SOAR,
+            status=True,
+        )
+        if not cortex_integrations.exists() and not forti_integrations.exists():
             return Response(
                 {"error": "No active SOAR integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        soar_tenants = tenant.company.soar_tenants.all()
-        if not soar_tenants:
+        soar_tenants = (
+            tenant.company.soar_tenants.all()
+            if cortex_integrations.exists()
+            else tenant.company.soar_tenants.none()
+        )
+        forti_soar_tenants = (
+            tenant.company.forti_soar_tenants.all()
+            if forti_integrations.exists()
+            else tenant.company.forti_soar_tenants.none()
+        )
+        if not soar_tenants.exists() and not forti_soar_tenants.exists():
             return Response({"error": "No SOAR tenants found."}, status=404)
 
-        soar_ids = [t.id for t in soar_tenants]
-
-        if not soar_ids:
-            return Response({"error": "No SOAR tenants found."}, status=404)
+        soar_ids = list(soar_tenants.values_list("id", flat=True))
+        forti_soar_ids = list(forti_soar_tenants.values_list("id", flat=True))
         filters = Q()
         try:
             # Handle date filtering
@@ -2040,22 +2052,42 @@ class TypeDistributionView(APIView):
                     )
 
             # Query type distribution using Django ORM
-            type_data = (
-                DUCortexSOARIncidentFinalModel.objects.filter(
-                    cortex_soar_tenant__in=soar_ids
+            category_counter = Counter()
+
+            if soar_ids:
+                type_data = (
+                    DUCortexSOARIncidentFinalModel.objects.filter(
+                        cortex_soar_tenant__in=soar_ids
+                    )
+                    .filter(filters)
+                    .values("qradar_category")
+                    .annotate(count=Count("id"))
+                    .exclude(qradar_category__isnull=True)
+                    .exclude(qradar_category__exact="")
                 )
-                .filter(filters)
-                .values("qradar_category")
-                .annotate(count=Count("id"))
-                .order_by("-count")
-                .exclude(qradar_category__isnull=True)
-                .exclude(qradar_category__exact="")
-            )
+                for item in type_data:
+                    category_counter[item["qradar_category"]] += item["count"]
+
+            if forti_soar_ids:
+                forti_type_data = (
+                    DUFortiSOARIncidentModel.objects.filter(
+                        forti_soar_tenant__in=forti_soar_ids
+                    )
+                    .filter(filters)
+                    .values("qradar_category")
+                    .annotate(count=Count("id"))
+                    .exclude(qradar_category__isnull=True)
+                    .exclude(qradar_category__exact="")
+                )
+                for item in forti_type_data:
+                    category_counter[item["qradar_category"]] += item["count"]
 
             # Transform data to match Flask output
             result = [
-                {"name": item["qradar_category"], "value": item["count"]}
-                for item in type_data
+                {"name": category, "value": count}
+                for category, count in sorted(
+                    category_counter.items(), key=lambda x: x[1], reverse=True
+                )
             ]
 
             return Response({"typeDistribution": result}, status=status.HTTP_200_OK)
