@@ -9621,24 +9621,39 @@ class DownloadIncidentsView(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         # Step 2: Check for active SOAR integration
-        soar_integrations = tenant.company.integrations.filter(
+        cortex_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
         )
+        forti_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.FORTI_SOAR,
+            status=True,
+        )
 
-        if not soar_integrations.exists():
+        if not cortex_integrations.exists() and not forti_integrations.exists():
             return Response(
                 {"error": "No active SOAR integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Step 3: Get SOAR tenant IDs
-        soar_tenants = tenant.company.soar_tenants.all()
-        if not soar_tenants:
+        soar_tenants = (
+            tenant.company.soar_tenants.all()
+            if cortex_integrations.exists()
+            else tenant.company.soar_tenants.none()
+        )
+        forti_soar_tenants = (
+            tenant.company.forti_soar_tenants.all()
+            if forti_integrations.exists()
+            else tenant.company.forti_soar_tenants.none()
+        )
+        if not soar_tenants.exists() and not forti_soar_tenants.exists():
             return Response({"error": "No SOAR tenants found."}, status=404)
 
-        soar_ids = [t.id for t in soar_tenants]
+        soar_ids = list(soar_tenants.values_list("id", flat=True))
+        forti_soar_ids = list(forti_soar_tenants.values_list("id", flat=True))
 
         # Step 4: Parse all query parameters (like IncidentsView)
         # All filters from IncidentsView
@@ -9667,6 +9682,9 @@ class DownloadIncidentsView(APIView):
         false_positives = (
             request.query_params.get("false_positives", "").lower() == "true"
         )
+        true_positives = (
+            request.query_params.get("true_positives", "").lower() == "true"
+        )
 
         # File type parameter
         file_type = request.query_params.get("file_type")
@@ -9694,206 +9712,293 @@ class DownloadIncidentsView(APIView):
         date_format = "%Y-%m-%d"  # Expected format for date inputs
 
         # Step 8: Build base filters (same logic as IncidentsView)
-        # Base filters for True Positives (Ready incidents with all required fields)
-        true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
-            ~Q(owner__isnull=True)
-            & ~Q(owner__exact="")
-            & Q(incident_tta__isnull=False)
-            & Q(incident_ttn__isnull=False)
-            & Q(incident_ttdn__isnull=False)
-            & Q(itsm_sync_status__isnull=False)
-            & Q(itsm_sync_status__iexact="Ready")
-            & Q(incident_priority__isnull=False)
-            & ~Q(incident_priority__exact="")
-        )
+        cortex_filters = None
+        forti_filters = None
 
-        # Base filters for False Positives (Done incidents)
-        false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
-            ~Q(owner__isnull=True)
-            & ~Q(owner__exact="")
-            & Q(incident_tta__isnull=False)
-            & Q(incident_ttn__isnull=False)
-            & Q(incident_ttdn__isnull=False)
-            & Q(itsm_sync_status__isnull=False)
-            & Q(itsm_sync_status__iexact="Done")
-            & Q(incident_priority__isnull=False)
-            & ~Q(incident_priority__exact="")
-        )
+        if soar_ids:
+            # Base filters for True Positives (Ready incidents with all required fields)
+            cortex_true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
 
-        # Handle false positives parameter
-        if false_positives:
-            # For false positives only, use false_positive_filters
-            filters = false_positive_filters
-        else:
-            # Include both true positives AND false positives (same as IncidentsView)
-            filters = true_positive_filters | false_positive_filters
+            # Base filters for False Positives (Done incidents)
+            cortex_false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Done")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
+
+            if false_positives:
+                cortex_filters = cortex_false_positive_filters
+            elif true_positives:
+                cortex_filters = cortex_true_positive_filters
+            else:
+                cortex_filters = (
+                    cortex_true_positive_filters | cortex_false_positive_filters
+                )
+
+        if forti_soar_ids:
+            forti_true_positive_filters = Q(forti_soar_tenant__in=forti_soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
+
+            forti_false_positive_filters = Q(forti_soar_tenant__in=forti_soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Done")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
+
+            if false_positives:
+                forti_filters = forti_false_positive_filters
+            elif true_positives:
+                forti_filters = forti_true_positive_filters
+            else:
+                forti_filters = (
+                    forti_true_positive_filters | forti_false_positive_filters
+                )
 
         # Step 9: Apply non-date filters (same as IncidentsView)
-        if id_filter:
-            filters &= Q(id=id_filter)
+        def apply_common_filters(base_filters, is_forti=False):
+            if id_filter:
+                base_filters &= Q(id=id_filter)
 
-        if db_id_filter:
-            try:
-                db_id_value = int(db_id_filter)
-                filters &= Q(db_id=db_id_value)
-            except ValueError:
-                return Response(
-                    {"error": "Invalid db_id format. Must be an integer."}, status=400
-                )
+            if db_id_filter:
+                try:
+                    db_id_value = int(db_id_filter)
+                    base_filters &= Q(db_id=db_id_value)
+                except ValueError:
+                    raise ValueError("Invalid db_id format. Must be an integer.")
 
-        if account_filter:
-            filters &= Q(account__icontains=account_filter)
+            if account_filter:
+                base_filters &= Q(account__icontains=account_filter)
 
-        if name_filter:
-            filters &= Q(name__icontains=name_filter)
+            if name_filter:
+                base_filters &= Q(name__icontains=name_filter)
 
-        if description_filter:
-            filters &= Q(name__icontains=description_filter)
+            if description_filter:
+                base_filters &= Q(name__icontains=description_filter)
 
-        if status_filter:
-            filters &= Q(status__iexact=status_filter)
+            if status_filter:
+                if is_forti and str(status_filter) in ["1", "2"]:
+                    if str(status_filter) == "1":
+                        base_filters &= ~Q(status__in=["Closed", "Resolved"])
+                    else:
+                        base_filters &= Q(status__in=["Closed", "Resolved"])
+                else:
+                    base_filters &= Q(status__iexact=status_filter)
 
-        if priority_filter:
-            filters &= Q(incident_priority__iexact=priority_filter)
+            if priority_filter:
+                base_filters &= Q(incident_priority__iexact=priority_filter)
 
-        if phase_filter:
-            filters &= Q(incident_phase__iexact=phase_filter)
+            if phase_filter:
+                base_filters &= Q(incident_phase__iexact=phase_filter)
 
-        if assignee_filter:
-            filters &= Q(owner__iexact=assignee_filter)
+            if assignee_filter:
+                base_filters &= Q(owner__iexact=assignee_filter)
 
-        if playbook_filter:
-            filters &= Q(playbook_id=playbook_filter)
+            if playbook_filter:
+                base_filters &= Q(playbook_id=playbook_filter)
 
-        if sla_filter:
-            try:
-                sla_value = int(sla_filter)
-                filters &= Q(sla=sla_value)
-            except ValueError:
-                return Response(
-                    {"error": "Invalid sla format. Must be an integer."}, status=400
-                )
+            if sla_filter:
+                try:
+                    sla_value = int(sla_filter)
+                    base_filters &= Q(sla=sla_value)
+                except ValueError:
+                    raise ValueError("Invalid sla format. Must be an integer.")
 
-        # Add MITRE and configuration item filters
-        if mitre_tactic_filter:
-            filters &= Q(mitre_tactic__icontains=mitre_tactic_filter)
+            # Add MITRE and configuration item filters
+            if mitre_tactic_filter:
+                base_filters &= Q(mitre_tactic__icontains=mitre_tactic_filter)
 
-        if mitre_technique_filter:
-            filters &= Q(mitre_technique__icontains=mitre_technique_filter)
+            if mitre_technique_filter:
+                base_filters &= Q(mitre_technique__icontains=mitre_technique_filter)
 
-        if config_item_filter:
-            filters &= Q(configuration_item__icontains=config_item_filter)
+            if config_item_filter:
+                base_filters &= Q(configuration_item__icontains=config_item_filter)
 
-        # Apply filter_type only if status_filter and assignee_filter are not provided
-        if filter_type != "all" and not (status_filter or assignee_filter):
-            if filter_type == "unassigned":
-                filters &= Q(owner__isnull=True)
-            elif filter_type == "pending":
-                filters &= Q(status="Pending")
-            elif filter_type == "false-positive":
-                filters &= Q(status="False Positive")
-            elif filter_type == "closed":
-                filters &= Q(status="Closed")
-            elif filter_type == "error":
-                filters &= Q(status="Error")
+            # Apply filter_type only if status_filter and assignee_filter are not provided
+            if filter_type != "all" and not (status_filter or assignee_filter):
+                if filter_type == "unassigned":
+                    base_filters &= Q(owner__isnull=True)
+                elif filter_type == "pending":
+                    base_filters &= Q(status="Pending")
+                elif filter_type == "false-positive":
+                    base_filters &= Q(status="False Positive")
+                elif filter_type == "closed":
+                    base_filters &= Q(status="Closed")
+                elif filter_type == "error":
+                    base_filters &= Q(status="Error")
+
+            return base_filters
+
+        try:
+            if cortex_filters is not None:
+                cortex_filters = apply_common_filters(cortex_filters, is_forti=False)
+            if forti_filters is not None:
+                forti_filters = apply_common_filters(forti_filters, is_forti=True)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
         # Step 10: Apply date filters with validation (same as IncidentsView)
-        start_date = None
-        end_date = None
-        occurred_start = None
-        occurred_end = None
-
-        # Handle date_filter_type (FilterType enum)
-        if date_filter_type:
-            (
-                filter_start_date,
-                filter_end_date,
-            ) = self._get_date_range_for_filter_type(date_filter_type)
-
-            if filter_start_date is not None and filter_end_date is not None:
-                # Apply the filter type date range to created field
-                filters &= Q(created__date__gte=filter_start_date)
-                filters &= Q(created__date__lte=filter_end_date)
-                start_date = filter_start_date
-                end_date = filter_end_date
-            elif date_filter_type != str(FilterType.CUSTOM_RANGE.value):
-                return Response(
-                    {
-                        "error": f"Invalid date_filter_type: {date_filter_type}. Must be 1-9."
-                    },
-                    status=400,
-                )
-
-        # Handle custom date ranges (only if not using predefined filter type or if using CUSTOM_RANGE)
-        if not date_filter_type or date_filter_type == str(
-            FilterType.CUSTOM_RANGE.value
-        ):
-            if start_date_str:
-                try:
-                    start_date = make_aware(
-                        datetime.strptime(start_date_str, date_format)
-                    ).date()
-                    filters &= Q(created__date__gte=start_date)
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid start_date format. Use YYYY-MM-DD."},
-                        status=400,
-                    )
-
-            if end_date_str:
-                try:
-                    end_date = make_aware(
-                        datetime.strptime(end_date_str, date_format)
-                    ).date()
-                    filters &= Q(created__date__lte=end_date)
-                except ValueError:
-                    return Response(
-                        {"error": "Invalid end_date format. Use YYYY-MM-DD."},
-                        status=400,
-                    )
-
-        # Handle occurred date filters (these work independently of date_filter_type)
-        if occurred_start_str:
-            try:
-                occurred_start = make_aware(
-                    datetime.strptime(occurred_start_str, date_format)
-                ).date()
-                filters &= Q(occured__date__gte=occurred_start)
-            except ValueError:
-                return Response(
-                    {"error": "Invalid occurred_start format. Use YYYY-MM-DD."},
-                    status=400,
-                )
-
-        if occurred_end_str:
-            try:
-                occurred_end = make_aware(
-                    datetime.strptime(occurred_end_str, date_format)
-                ).date()
-                filters &= Q(occured__date__lte=occurred_end)
-            except ValueError:
-                return Response(
-                    {"error": "Invalid occurred_end format. Use YYYY-MM-DD."},
-                    status=400,
-                )
-
-        # Validate date ranges
-        if start_date and end_date and start_date > end_date:
-            return Response(
-                {"error": "start_date cannot be greater than end_date."}, status=400
-            )
-
-        if occurred_start and occurred_end and occurred_start > occurred_end:
-            return Response(
-                {"error": "occurred_start cannot be greater than occurred_end."},
-                status=400,
-            )
-
-        # Step 11: Query incidents with all fields (same as IncidentsView)
         try:
-            queryset = (
-                DUCortexSOARIncidentFinalModel.objects.filter(filters)
-                .values(
+            cortex_queryset = (
+                DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                if cortex_filters is not None
+                else DUCortexSOARIncidentFinalModel.objects.none()
+            )
+            forti_queryset = (
+                DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                if forti_filters is not None
+                else DUFortiSOARIncidentModel.objects.none()
+            )
+
+            start_date = None
+            end_date = None
+            occurred_start = None
+            occurred_end = None
+
+            # Handle date_filter_type (FilterType enum)
+            if date_filter_type:
+                (
+                    filter_start_date,
+                    filter_end_date,
+                ) = self._get_date_range_for_filter_type(date_filter_type)
+
+                if filter_start_date is not None and filter_end_date is not None:
+                    cortex_queryset = cortex_queryset.filter(
+                        created__date__gte=filter_start_date,
+                        created__date__lte=filter_end_date,
+                    )
+                    forti_queryset = forti_queryset.filter(
+                        created__date__gte=filter_start_date,
+                        created__date__lte=filter_end_date,
+                    )
+                    start_date = filter_start_date
+                    end_date = filter_end_date
+                elif date_filter_type != str(FilterType.CUSTOM_RANGE.value):
+                    return Response(
+                        {
+                            "error": f"Invalid date_filter_type: {date_filter_type}. Must be 1-9."
+                        },
+                        status=400,
+                    )
+
+            # Handle custom date ranges (only if not using predefined filter type or if using CUSTOM_RANGE)
+            if not date_filter_type or date_filter_type == str(
+                FilterType.CUSTOM_RANGE.value
+            ):
+                if start_date_str:
+                    try:
+                        start_date = make_aware(
+                            datetime.strptime(start_date_str, date_format)
+                        ).date()
+                        cortex_queryset = cortex_queryset.filter(
+                            created__date__gte=start_date
+                        )
+                        forti_queryset = forti_queryset.filter(
+                            created__date__gte=start_date
+                        )
+                    except ValueError:
+                        return Response(
+                            {"error": "Invalid start_date format. Use YYYY-MM-DD."},
+                            status=400,
+                        )
+
+                if end_date_str:
+                    try:
+                        end_date = make_aware(
+                            datetime.strptime(end_date_str, date_format)
+                        ).date()
+                        cortex_queryset = cortex_queryset.filter(
+                            created__date__lte=end_date
+                        )
+                        forti_queryset = forti_queryset.filter(
+                            created__date__lte=end_date
+                        )
+                    except ValueError:
+                        return Response(
+                            {"error": "Invalid end_date format. Use YYYY-MM-DD."},
+                            status=400,
+                        )
+
+            # Handle occurred date filters (these work independently of date_filter_type)
+            if occurred_start_str:
+                try:
+                    occurred_start = make_aware(
+                        datetime.strptime(occurred_start_str, date_format)
+                    ).date()
+                    cortex_queryset = cortex_queryset.filter(
+                        occured__date__gte=occurred_start
+                    )
+                    forti_queryset = forti_queryset.filter(
+                        occured__date__gte=occurred_start
+                    )
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid occurred_start format. Use YYYY-MM-DD."},
+                        status=400,
+                    )
+
+            if occurred_end_str:
+                try:
+                    occurred_end = make_aware(
+                        datetime.strptime(occurred_end_str, date_format)
+                    ).date()
+                    cortex_queryset = cortex_queryset.filter(
+                        occured__date__lte=occurred_end
+                    )
+                    forti_queryset = forti_queryset.filter(
+                        occured__date__lte=occurred_end
+                    )
+                except ValueError:
+                    return Response(
+                        {"error": "Invalid occurred_end format. Use YYYY-MM-DD."},
+                        status=400,
+                    )
+
+            # Validate date ranges
+            if start_date and end_date and start_date > end_date:
+                return Response(
+                    {"error": "start_date cannot be greater than end_date."}, status=400
+                )
+
+            if occurred_start and occurred_end and occurred_start > occurred_end:
+                return Response(
+                    {"error": "occurred_start cannot be greater than occurred_end."},
+                    status=400,
+                )
+
+            # Step 11: Query incidents with all fields (same as IncidentsView)
+            cortex_rows = list(
+                cortex_queryset.values(
                     "id",
                     "db_id",
                     "account",
@@ -9902,25 +10007,61 @@ class DownloadIncidentsView(APIView):
                     "incident_priority",
                     "incident_phase",
                     "created",
-                    # "created_at",
                     "owner",
                     "occured",
                     "mitre_tactic",
                     "mitre_technique",
                     "configuration_item",
                 )
-                .order_by("-created")
+            )
+            forti_rows = list(
+                forti_queryset.values(
+                    "id",
+                    "db_id",
+                    "account",
+                    "name",
+                    "status",
+                    "incident_priority",
+                    "incident_phase",
+                    "created",
+                    "owner",
+                    "occured",
+                    "mitre_tactic",
+                    "mitre_technique",
+                    "configuration_item",
+                    "offense_id",
+                )
             )
 
-            # Step 12: Process incidents for offense data (enhanced to match IncidentsView)
+            # Tag rows by source
+            for row in cortex_rows:
+                row["_source"] = "cortex"
+            for row in forti_rows:
+                row["_source"] = "forti"
+
+            queryset = sorted(
+                cortex_rows + forti_rows,
+                key=lambda row: row["created"] or datetime.min,
+                reverse=True,
+            )
+
+            # Step 12: Process incidents for offense data
             incidents = []
-            offense_db_ids = {
-                int(part)
-                for row in queryset
-                if row["name"]
-                for part in [row["name"].split()[0]]
-                if part.isdigit()
-            }
+
+            # Collect all offense db_ids from both sources
+            offense_db_ids = set()
+
+            # Cortex: parse offense db_id from name prefix
+            for row in queryset:
+                if row["_source"] == "cortex" and row["name"]:
+                    parts = row["name"].split()
+                    if parts and parts[0].isdigit():
+                        offense_db_ids.add(int(parts[0]))
+
+            # FortiSOAR: offense_id field is the offense db_id
+            for row in queryset:
+                if row["_source"] == "forti" and row.get("offense_id"):
+                    offense_db_ids.add(int(row["offense_id"]))
 
             # Bulk fetch related offenses
             offenses = IBMQradarOffense.objects.filter(db_id__in=offense_db_ids)
@@ -9940,27 +10081,22 @@ class DownloadIncidentsView(APIView):
                 else:
                     occured_at_str = "N/A"
 
-                # if row["created"]:
-                #     try:
-                #         created_date = (
-                #             row["created"].isoformat() if row["created"] else "N/A"
-                #         )
-                #     except Exception:
-                #         created_date = "N/A"
-                # else:
-                #     created_date = "N/A"
-
-                # Extract offense ID from name
+                # Resolve offense ID based on source
                 name = row.get("name") or ""
-                parts = name.split()
                 offense_db_id = None
                 offense_id = None
 
-                if name and parts and parts[0].isdigit():
-                    offense_db_id = parts[0]
-                    offense_id = (
-                        offense_map.get(offense_db_id) if offense_db_id else None
-                    )
+                if row["_source"] == "cortex":
+                    # Cortex: parse offense db_id from name prefix
+                    parts = name.split()
+                    if name and parts and parts[0].isdigit():
+                        offense_db_id = parts[0]
+                        offense_id = offense_map.get(offense_db_id)
+                else:
+                    # FortiSOAR: offense_id on the model is the offense db_id
+                    if row.get("offense_id"):
+                        offense_db_id = str(row["offense_id"])
+                        offense_id = offense_map.get(offense_db_id)
 
                 # Extract description from name
                 description = (
