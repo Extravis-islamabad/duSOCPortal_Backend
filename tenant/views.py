@@ -8110,23 +8110,50 @@ class SLABreachedIncidentsView(APIView):
             )
 
         try:
-            # Step 2: Get SOAR tenants
-            soar_tenants = tenant.company.soar_tenants.all()
-            if not soar_tenants:
+            # Step 2: Get SOAR integrations and tenants
+            cortex_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.CORTEX_SOAR,
+                status=True,
+            )
+            forti_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.FORTI_SOAR,
+                status=True,
+            )
+
+            if not cortex_integrations.exists() and not forti_integrations.exists():
+                return Response(
+                    {"error": "No active SOAR integration configured for tenant."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            soar_tenants = (
+                tenant.company.soar_tenants.all()
+                if cortex_integrations.exists()
+                else tenant.company.soar_tenants.none()
+            )
+            forti_soar_tenants = (
+                tenant.company.forti_soar_tenants.all()
+                if forti_integrations.exists()
+                else tenant.company.forti_soar_tenants.none()
+            )
+
+            if not soar_tenants.exists() and not forti_soar_tenants.exists():
                 return Response(
                     {"error": "No SOAR tenants found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-            soar_ids = [t.id for t in soar_tenants]
+
+            soar_ids = list(soar_tenants.values_list("id", flat=True))
+            forti_soar_ids = list(forti_soar_tenants.values_list("id", flat=True))
 
             # Step 3: Get SLA metrics configurations
             is_default = tenant.company.is_default_sla
             if is_default:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
-                sla_metrics = SoarTenantSlaMetric.objects.filter(
-                    soar_tenant__in=soar_tenants, company=tenant.company
-                )
+                sla_metrics = SoarTenantSlaMetric.objects.filter(company=tenant.company)
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
@@ -8207,23 +8234,26 @@ class SLABreachedIncidentsView(APIView):
             date_format = "%Y-%m-%d"
 
             # Step 5: Build base query filters
-            filters = Q(cortex_soar_tenant_id__in=soar_ids)
-            filters &= (
+            tp_filters = (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
                 & Q(incident_tta__isnull=False)
                 & Q(incident_ttn__isnull=False)
                 & Q(incident_ttdn__isnull=False)
             )
+            cortex_filters = Q(cortex_soar_tenant_id__in=soar_ids) & tp_filters
+            forti_filters = Q(forti_soar_tenant_id__in=forti_soar_ids) & tp_filters
 
             # Step 6: Apply non-date filters (same as original)
+            extra_filters = Q()
+
             if id_filter:
-                filters &= Q(id=id_filter)
+                extra_filters &= Q(id=id_filter)
 
             if db_id_filter:
                 try:
                     db_id_value = int(db_id_filter)
-                    filters &= Q(db_id=db_id_value)
+                    extra_filters &= Q(db_id=db_id_value)
                 except ValueError:
                     return Response(
                         {"error": "Invalid db_id format. Must be an integer."},
@@ -8231,21 +8261,21 @@ class SLABreachedIncidentsView(APIView):
                     )
 
             if account_filter:
-                filters &= Q(account__icontains=account_filter)
+                extra_filters &= Q(account__icontains=account_filter)
 
             if name_filter:
-                filters &= Q(name__icontains=name_filter)
+                extra_filters &= Q(name__icontains=name_filter)
 
             if description_filter:
-                filters &= Q(name__icontains=description_filter)
+                extra_filters &= Q(name__icontains=description_filter)
 
             if status_filter:
-                filters &= Q(status__iexact=status_filter)
+                extra_filters &= Q(status__iexact=status_filter)
 
             if severity_filter:
                 try:
                     severity_value = int(severity_filter)
-                    filters &= Q(severity=severity_value)
+                    extra_filters &= Q(severity=severity_value)
                 except ValueError:
                     return Response(
                         {"error": "Invalid severity format. Must be an integer."},
@@ -8261,21 +8291,21 @@ class SLABreachedIncidentsView(APIView):
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                filters &= Q(incident_priority=priority_filter)
+                extra_filters &= Q(incident_priority=priority_filter)
 
             if phase_filter:
-                filters &= Q(incident_phase__iexact=phase_filter)
+                extra_filters &= Q(incident_phase__iexact=phase_filter)
 
             if assignee_filter:
-                filters &= Q(owner__iexact=assignee_filter)
+                extra_filters &= Q(owner__iexact=assignee_filter)
 
             if playbook_filter:
-                filters &= Q(playbook_id=playbook_filter)
+                extra_filters &= Q(playbook_id=playbook_filter)
 
             if sla_filter:
                 try:
                     sla_value = int(sla_filter)
-                    filters &= Q(sla=sla_value)
+                    extra_filters &= Q(sla=sla_value)
                 except ValueError:
                     return Response(
                         {"error": "Invalid sla format. Must be an integer."},
@@ -8283,26 +8313,26 @@ class SLABreachedIncidentsView(APIView):
                     )
 
             if mitre_tactic_filter:
-                filters &= Q(mitre_tactic__icontains=mitre_tactic_filter)
+                extra_filters &= Q(mitre_tactic__icontains=mitre_tactic_filter)
 
             if mitre_technique_filter:
-                filters &= Q(mitre_technique__icontains=mitre_technique_filter)
+                extra_filters &= Q(mitre_technique__icontains=mitre_technique_filter)
 
             if config_item_filter:
-                filters &= Q(configuration_item__icontains=config_item_filter)
+                extra_filters &= Q(configuration_item__icontains=config_item_filter)
 
             # Apply filter_type only if status_filter and assignee_filter are not provided
             if filter_type != "all" and not (status_filter or assignee_filter):
                 if filter_type == "unassigned":
-                    filters &= Q(owner__isnull=True)
+                    extra_filters &= Q(owner__isnull=True)
                 elif filter_type == "pending":
-                    filters &= Q(status="Pending")
+                    extra_filters &= Q(status="Pending")
                 elif filter_type == "false-positive":
-                    filters &= Q(status="False Positive")
+                    extra_filters &= Q(status="False Positive")
                 elif filter_type == "closed":
-                    filters &= Q(status="Closed")
+                    extra_filters &= Q(status="Closed")
                 elif filter_type == "error":
-                    filters &= Q(status="Error")
+                    extra_filters &= Q(status="Error")
 
             # Step 7: Apply date filters with validation
             # Apply new standardized date filtering (filter_type approach)
@@ -8312,7 +8342,7 @@ class SLABreachedIncidentsView(APIView):
                         date_filter_type, start_date_str, end_date_str
                     )
                     if date_filter:
-                        filters &= date_filter
+                        extra_filters &= date_filter
                 except ValueError as e:
                     return Response(
                         {"error": str(e)}, status=status.HTTP_400_BAD_REQUEST
@@ -8327,7 +8357,7 @@ class SLABreachedIncidentsView(APIView):
                     occurred_start = make_aware(
                         datetime.strptime(occurred_start_str, date_format)
                     ).date()
-                    filters &= Q(occured__date__gte=occurred_start)
+                    extra_filters &= Q(occured__date__gte=occurred_start)
                 except ValueError:
                     return Response(
                         {"error": "Invalid occurred_start format. Use YYYY-MM-DD."},
@@ -8339,7 +8369,7 @@ class SLABreachedIncidentsView(APIView):
                     occurred_end = make_aware(
                         datetime.strptime(occurred_end_str, date_format)
                     ).date()
-                    filters &= Q(occured__date__lte=occurred_end)
+                    extra_filters &= Q(occured__date__lte=occurred_end)
                 except ValueError:
                     return Response(
                         {"error": "Invalid occurred_end format. Use YYYY-MM-DD."},
@@ -8353,10 +8383,28 @@ class SLABreachedIncidentsView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Step 8: Get all relevant incidents
-            incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                filters
-            ).select_related()
+            # Step 8: Get all relevant incidents from both Cortex and FortiSOAR
+            cortex_incidents = (
+                list(
+                    DUCortexSOARIncidentFinalModel.objects.filter(
+                        cortex_filters & extra_filters
+                    ).select_related()
+                )
+                if soar_ids
+                else []
+            )
+
+            forti_incidents = (
+                list(
+                    DUFortiSOARIncidentModel.objects.filter(
+                        forti_filters & extra_filters
+                    ).select_related()
+                )
+                if forti_soar_ids
+                else []
+            )
+
+            incidents = cortex_incidents + forti_incidents
 
             # Step 9: Process incidents to find breached and achieved ones
             breached_incidents = []
@@ -8423,6 +8471,7 @@ class SLABreachedIncidentsView(APIView):
                 incident_data = {
                     "id": str(inc.id),
                     "db_id": inc.db_id,
+                    "integration_id": inc.integration_id,
                     "account": inc.account,
                     "name": inc.name,
                     "description": description,

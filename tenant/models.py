@@ -1126,7 +1126,7 @@ class SoarTenantSlaMetric(models.Model):
         unique_together = ("company", "sla_level")
 
     def __str__(self):
-        return f"SLA  - {self.company} - {self.soar_tenant} - {self.get_sla_level_display()}"
+        return f"SLA  - {self.company} - {self.get_sla_level_display()}"
 
 
 class TotalEvents(models.Model):
