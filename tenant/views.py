@@ -7812,21 +7812,47 @@ class SLASeverityMetricsView(APIView):
             )
 
         try:
-            soar_tenants = tenant.company.soar_tenants.all()
-            if not soar_tenants:
+            # Get SOAR integrations
+            cortex_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.CORTEX_SOAR,
+                status=True,
+            )
+            forti_integrations = tenant.company.integrations.filter(
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.FORTI_SOAR,
+                status=True,
+            )
+
+            if not cortex_integrations.exists() and not forti_integrations.exists():
+                return Response(
+                    {"error": "No active SOAR integration configured for tenant."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            soar_tenants = (
+                tenant.company.soar_tenants.all()
+                if cortex_integrations.exists()
+                else tenant.company.soar_tenants.none()
+            )
+            forti_soar_tenants = (
+                tenant.company.forti_soar_tenants.all()
+                if forti_integrations.exists()
+                else tenant.company.forti_soar_tenants.none()
+            )
+            if not soar_tenants.exists() and not forti_soar_tenants.exists():
                 return Response(
                     {"error": "No SOAR tenants found."},
                     status=status.HTTP_404_NOT_FOUND,
                 )
-            soar_ids = [t.id for t in soar_tenants]
+            soar_ids = list(soar_tenants.values_list("id", flat=True))
+            forti_soar_ids = list(forti_soar_tenants.values_list("id", flat=True))
 
             is_default = tenant.company.is_default_sla
             if is_default:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
-                sla_metrics = SoarTenantSlaMetric.objects.filter(
-                    soar_tenant__in=soar_tenants, company=tenant.company
-                )
+                sla_metrics = SoarTenantSlaMetric.objects.filter(company=tenant.company)
 
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
@@ -7835,9 +7861,8 @@ class SLASeverityMetricsView(APIView):
             start_date = request.query_params.get("start_date")
             end_date = request.query_params.get("end_date")
 
-            # Get all relevant incidents in a single query
-            filters = Q(cortex_soar_tenant_id__in=soar_ids)
-            filters &= (
+            # Common filters
+            tp_filters = (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
                 & Q(incident_tta__isnull=False)
@@ -7854,21 +7879,44 @@ class SLASeverityMetricsView(APIView):
             )
 
             # Apply date filtering
+            date_filter = None
             if filter_type or start_date or end_date:
                 try:
                     date_filter = self._get_date_filter(
                         filter_type, start_date, end_date
                     )
-                    if date_filter:
-                        filters &= date_filter
                 except ValueError as e:
                     return Response(
                         {"error": str(e)}, status=status.HTTP_400_BAD_REQUEST
                     )
 
-            incidents = DUCortexSOARIncidentFinalModel.objects.filter(
-                filters
-            ).select_related()
+            cortex_filters = Q(cortex_soar_tenant_id__in=soar_ids) & tp_filters
+            forti_filters = Q(forti_soar_tenant_id__in=forti_soar_ids) & tp_filters
+            if date_filter:
+                cortex_filters &= date_filter
+                forti_filters &= date_filter
+
+            cortex_incidents = (
+                list(
+                    DUCortexSOARIncidentFinalModel.objects.filter(
+                        cortex_filters
+                    ).select_related()
+                )
+                if soar_ids
+                else []
+            )
+
+            forti_incidents = (
+                list(
+                    DUFortiSOARIncidentModel.objects.filter(
+                        forti_filters
+                    ).select_related()
+                )
+                if forti_soar_ids
+                else []
+            )
+
+            incidents = cortex_incidents + forti_incidents
 
             # Initialize response structure
             response_data = {
