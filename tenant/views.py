@@ -10876,24 +10876,39 @@ class ConsolidatedReport(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         # Step 2: Check for active SOAR integration
-        soar_integrations = tenant.company.integrations.filter(
+        cortex_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
         )
+        forti_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.FORTI_SOAR,
+            status=True,
+        )
 
-        if not soar_integrations.exists():
+        if not cortex_integrations.exists() and not forti_integrations.exists():
             return Response(
                 {"error": "No active SOAR integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Step 3: Get SOAR tenant IDs
-        soar_tenants = tenant.company.soar_tenants.all()
-        if not soar_tenants:
+        soar_tenants = (
+            tenant.company.soar_tenants.all()
+            if cortex_integrations.exists()
+            else tenant.company.soar_tenants.none()
+        )
+        forti_soar_tenants = (
+            tenant.company.forti_soar_tenants.all()
+            if forti_integrations.exists()
+            else tenant.company.forti_soar_tenants.none()
+        )
+        if not soar_tenants.exists() and not forti_soar_tenants.exists():
             return Response({"error": "No SOAR tenants found."}, status=404)
 
-        soar_ids = [t.id for t in soar_tenants]
+        soar_ids = list(soar_tenants.values_list("id", flat=True))
+        forti_soar_ids = list(forti_soar_tenants.values_list("id", flat=True))
 
         siem_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SIEM_INTEGRATION,
@@ -10924,27 +10939,45 @@ class ConsolidatedReport(APIView):
             except ValueError:
                 return Response({"error": "Invalid filter_type."}, status=400)
 
-        # Build True Positive and False Positive filters (same as AllIncidentsView and DashboardView)
-        # Base filters for True Positives (Ready incidents with all required fields)
-        true_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
-            ~Q(owner__isnull=True)
-            & ~Q(owner__exact="")
-            & Q(incident_tta__isnull=False)
-            & Q(incident_ttn__isnull=False)
-            & Q(incident_ttdn__isnull=False)
-            & Q(itsm_sync_status__isnull=False)
-            & Q(itsm_sync_status__iexact="Ready")
-            & Q(incident_priority__isnull=False)
-            & ~Q(incident_priority__exact="")
-        )
+        # Build separate filters for Cortex and FortiSOAR
+        cortex_filters = None
+        forti_filters = None
 
-        # Base filters for False Positives (Done incidents)
-        false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & Q(
-            itsm_sync_status__iexact="Done"
-        )
+        if soar_ids:
+            cortex_true_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
+            cortex_false_positive_filters = Q(cortex_soar_tenant_id__in=soar_ids) & Q(
+                itsm_sync_status__iexact="Done"
+            )
+            cortex_filters = (
+                cortex_true_positive_filters | cortex_false_positive_filters
+            )
 
-        # Combine both True Positives and False Positives
-        filters = true_positive_filters | false_positive_filters
+        if forti_soar_ids:
+            forti_true_positive_filters = Q(forti_soar_tenant_id__in=forti_soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
+            forti_false_positive_filters = Q(
+                forti_soar_tenant_id__in=forti_soar_ids
+            ) & Q(itsm_sync_status__iexact="Done")
+            forti_filters = forti_true_positive_filters | forti_false_positive_filters
 
         now = timezone.now()
         start_date_str = request.query_params.get("start_date")
@@ -10952,9 +10985,10 @@ class ConsolidatedReport(APIView):
 
         try:
             filter_type = FilterType(int(filter_type))
+            date_filter = None
             if filter_type == FilterType.TODAY:
                 start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                filters &= Q(created__date=start_date.date())
+                date_filter = Q(created__date=start_date.date())
                 # Use Dubai timezone for TODAY filter
                 dubai_tz = pytz_timezone("Asia/Dubai")
                 dubai_now = now.astimezone(dubai_tz)
@@ -10966,12 +11000,12 @@ class ConsolidatedReport(APIView):
                 time_trunc = TruncHour("created_at")
             elif filter_type == FilterType.WEEK:
                 start_date = now - timedelta(days=7)
-                filters &= Q(created__date__gte=start_date.date())
+                date_filter = Q(created__date__gte=start_date.date())
                 start_time = now - timedelta(days=7)
                 time_trunc = TruncDay("created_at")
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
-                filters &= Q(created__date__gte=start_date.date())
+                date_filter = Q(created__date__gte=start_date.date())
                 start_time = now - timedelta(days=28)
                 time_trunc = TruncWeek("created_at")
             elif filter_type == FilterType.CUSTOM_RANGE:
@@ -10983,9 +11017,6 @@ class ConsolidatedReport(APIView):
                             start_date_str, "%Y-%m-%d"
                         ).date()
                         end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-                        filters &= Q(created__date__gte=start_date) & Q(
-                            created__date__lte=end_date
-                        )
                         if start_date > end_date:
                             return Response(
                                 {
@@ -10993,6 +11024,9 @@ class ConsolidatedReport(APIView):
                                 },
                                 status=400,
                             )
+                        date_filter = Q(created__date__gte=start_date) & Q(
+                            created__date__lte=end_date
+                        )
                     except ValueError:
                         return Response(
                             {"error": "Invalid date format. Use YYYY-MM-DD."},
@@ -11019,19 +11053,65 @@ class ConsolidatedReport(APIView):
                     },
                     status=400,
                 )
+
+            # Apply date filter to both cortex and forti filters
+            if date_filter:
+                if cortex_filters is not None:
+                    cortex_filters &= date_filter
+                if forti_filters is not None:
+                    forti_filters &= date_filter
         except Exception:
             return Response({"error": "Invalid filter_type."}, status=400)
 
-        priority_wise_counts = (
-            DUCortexSOARIncidentFinalModel.objects.filter(filters)
-            .values("incident_priority")
-            .annotate(
-                total=Count("id"),
-                open_count=Count("id", filter=Q(status="1")),  # status 1 = open
-                closed_count=Count("id", filter=Q(status="2")),  # status 2 = closed
-            )
-            .order_by("-total")
+        # Query both Cortex and FortiSOAR for priority counts
+        from collections import defaultdict
+
+        priority_counts_dict = defaultdict(
+            lambda: {"total": 0, "open_count": 0, "closed_count": 0}
         )
+
+        if cortex_filters is not None:
+            cortex_priority_counts = (
+                DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                .values("incident_priority")
+                .annotate(
+                    total=Count("id"),
+                    open_count=Count("id", filter=Q(status="1")),
+                    closed_count=Count("id", filter=Q(status="2")),
+                )
+            )
+            for row in cortex_priority_counts:
+                priority = row["incident_priority"]
+                priority_counts_dict[priority]["total"] += row["total"]
+                priority_counts_dict[priority]["open_count"] += row["open_count"]
+                priority_counts_dict[priority]["closed_count"] += row["closed_count"]
+
+        if forti_filters is not None:
+            forti_priority_counts = (
+                DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                .values("incident_priority")
+                .annotate(
+                    total=Count("id"),
+                    open_count=Count(
+                        "id", filter=~Q(status__in=["Closed", "Resolved"])
+                    ),
+                    closed_count=Count(
+                        "id", filter=Q(status__in=["Closed", "Resolved"])
+                    ),
+                )
+            )
+            for row in forti_priority_counts:
+                priority = row["incident_priority"]
+                priority_counts_dict[priority]["total"] += row["total"]
+                priority_counts_dict[priority]["open_count"] += row["open_count"]
+                priority_counts_dict[priority]["closed_count"] += row["closed_count"]
+
+        priority_wise_counts = [
+            {"incident_priority": k, **v}
+            for k, v in sorted(
+                priority_counts_dict.items(), key=lambda x: x[1]["total"], reverse=True
+            )
+        ]
 
         if not priority_wise_counts:
             return Response({"error": "No incidents found."}, status=404)
@@ -11053,15 +11133,34 @@ class ConsolidatedReport(APIView):
             for priority, total in all_severities.items()
         ]
 
-        incident_counts = DUCortexSOARIncidentFinalModel.objects.filter(
-            filters
-        ).aggregate(
-            total=Count("id"),
-            # open_count=Count("id", filter=Q(status="1")),
-            closed_count=Count("id", filter=Q(status="2")),
-        )
+        # Aggregate incident counts from both sources
+        total_incidents = 0
+        closed_count = 0
 
-        total_incidents_raised = incident_counts
+        if cortex_filters is not None:
+            cortex_agg = DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_filters
+            ).aggregate(
+                total=Count("id"),
+                closed_count=Count("id", filter=Q(status="2")),
+            )
+            total_incidents += cortex_agg["total"] or 0
+            closed_count += cortex_agg["closed_count"] or 0
+
+        if forti_filters is not None:
+            forti_agg = DUFortiSOARIncidentModel.objects.filter(
+                forti_filters
+            ).aggregate(
+                total=Count("id"),
+                closed_count=Count("id", filter=Q(status__in=["Closed", "Resolved"])),
+            )
+            total_incidents += forti_agg["total"] or 0
+            closed_count += forti_agg["closed_count"] or 0
+
+        total_incidents_raised = {
+            "total": total_incidents,
+            "closed_count": closed_count,
+        }
 
         # Existing assets query
         all_assets = IBMQradarAssests.objects.filter(
@@ -11100,33 +11199,55 @@ class ConsolidatedReport(APIView):
         from collections import Counter
 
         # Step 1: Use ORM to get incident names efficiently with filters
-        incident_names = (
-            DUCortexSOARIncidentFinalModel.objects.filter(filters)
-            .filter(name__isnull=False)
-            .exclude(name__exact="")
-            .values_list("name", flat=True)
-        )
+        incident_names = []
+        if cortex_filters is not None:
+            cortex_names = list(
+                DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                .filter(name__isnull=False)
+                .exclude(name__exact="")
+                .values_list("name", flat=True)
+            )
+            incident_names.extend(cortex_names)
+
+        if forti_filters is not None:
+            forti_names = list(
+                DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                .filter(name__isnull=False)
+                .exclude(name__exact="")
+                .values_list("name", flat=True)
+            )
+            incident_names.extend(forti_names)
 
         # Step 2: Clean incident names and count occurrences
         incident_name_counts = Counter()
         for name in incident_names:
-            cleaned_name = extract_use_case(
-                name
-            )  # <-- same function as UseCaseIncidentsView
+            cleaned_name = extract_use_case(name)
             if cleaned_name:
                 incident_name_counts[cleaned_name] += 1
 
         # Step 3: Get top N most frequent use cases (5 or 10)
-        top_use_cases = incident_name_counts.most_common(5)  # or .most_common(10)
+        top_use_cases = incident_name_counts.most_common(5)
 
         # Step 4: Build priority breakdown for each top use case
         top_use_cases_data = []
-        all_incidents_data = (
-            DUCortexSOARIncidentFinalModel.objects.filter(filters)
-            .filter(name__isnull=False)
-            .exclude(name__exact="")
-            .values("name", "incident_priority")
-        )
+        all_incidents_data = []
+        if cortex_filters is not None:
+            cortex_data = list(
+                DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                .filter(name__isnull=False)
+                .exclude(name__exact="")
+                .values("name", "incident_priority")
+            )
+            all_incidents_data.extend(cortex_data)
+
+        if forti_filters is not None:
+            forti_data = list(
+                DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                .filter(name__isnull=False)
+                .exclude(name__exact="")
+                .values("name", "incident_priority")
+            )
+            all_incidents_data.extend(forti_data)
 
         for use_case, count in top_use_cases:
             priority_breakdown = {}
@@ -11314,7 +11435,9 @@ class ConsolidatedReport(APIView):
                 }
             )
 
-        incident_closure_trends = get_incidents_trend(filter_type, filters)
+        incident_closure_trends = get_incidents_trend(
+            filter_type, cortex_filters, forti_filters
+        )
 
         data = {
             "severity_of_incidents": severity_of_incidents,
