@@ -1374,18 +1374,14 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     DuCortexSOARTenants.objects.filter(id__in=soar_ids)
                 )
                 if not is_default_sla:
-                    for soar_tenant in DuCortexSOARTenants.objects.filter(
-                        id__in=soar_ids
-                    ):
-                        for override in sla_overrides:
-                            SoarTenantSlaMetric.objects.create(
-                                company=company,
-                                soar_tenant=soar_tenant,
-                                sla_level=override["sla_level"],
-                                tta_minutes=override["tta_minutes"],
-                                ttn_minutes=override["ttn_minutes"],
-                                ttdn_minutes=override["ttdn_minutes"],
-                            )
+                    for override in sla_overrides:
+                        SoarTenantSlaMetric.objects.create(
+                            company=company,
+                            sla_level=override["sla_level"],
+                            tta_minutes=override["tta_minutes"],
+                            ttn_minutes=override["ttn_minutes"],
+                            ttdn_minutes=override["ttdn_minutes"],
+                        )
 
             if forti_soar_tenant_data:
                 forti_soar_ids = forti_soar_tenant_data
