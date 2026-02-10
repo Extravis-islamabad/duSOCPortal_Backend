@@ -1115,10 +1115,6 @@ class SoarTenantSlaMetric(models.Model):
         on_delete=models.CASCADE,
         related_name="soar_sla_metrics",
     )
-    soar_tenant = models.ForeignKey(
-        DuCortexSOARTenants, on_delete=models.CASCADE, related_name="sla_metrics"
-    )
-
     sla_level = models.IntegerField(choices=SlaLevelChoices.choices)
 
     tta_minutes = models.PositiveIntegerField(help_text="Time to Acknowledge")
@@ -1127,7 +1123,7 @@ class SoarTenantSlaMetric(models.Model):
 
     class Meta:
         db_table = "soar_tenant_sla_metrics"
-        unique_together = ("company", "soar_tenant", "sla_level")
+        unique_together = ("company", "sla_level")
 
     def __str__(self):
         return f"SLA  - {self.company} - {self.soar_tenant} - {self.get_sla_level_display()}"
@@ -1637,6 +1633,7 @@ class DUFortiSOARIncidentModel(models.Model):
     configuration_item = models.CharField(max_length=100, blank=True, null=True)
     close_notes = models.TextField(blank=True, null=True)
     analysis_notes = models.TextField(blank=True, null=True)
+    offense_id = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
