@@ -3991,12 +3991,19 @@ class IncidentDetailView(APIView):
     permission_classes = [IsTenant]
 
     @swagger_auto_schema(
-        operation_description="Retrieves detailed information for a specific SOAR incident, including SLA breach calculations and related items.",
+        operation_description="Retrieves detailed information for a specific SOAR incident (Cortex SOAR or Fortisoar), including SLA breach calculations and related items.",
         manual_parameters=[
             openapi.Parameter(
                 "incident_db_id",
                 openapi.IN_PATH,
                 description="Database ID of the SOAR incident",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+            openapi.Parameter(
+                "integration_id",
+                openapi.IN_PATH,
+                description="Integration ID to identify Cortex SOAR or Fortisoar",
                 type=openapi.TYPE_INTEGER,
                 required=True,
             ),
@@ -4019,70 +4026,130 @@ class IncidentDetailView(APIView):
         except Tenant.DoesNotExist:
             return Response({"error": "Tenant not found."}, status=404)
 
-        soar_integrations = tenant.company.integrations.filter(
-            integration_type=IntegrationTypes.SOAR_INTEGRATION,
-            soar_subtype=SoarSubTypes.CORTEX_SOAR,
-            status=True,
-        ).first()
-        if not soar_integrations:
+        # Check if integration exists and determine type (Cortex SOAR or Fortisoar)
+        try:
+            integration = Integration.objects.get(
+                id=integration_id,
+                company=tenant.company,
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                status=True,
+            )
+        except Integration.DoesNotExist:
             return Response(
-                {"error": "No active SOAR integration configured for tenant."},
+                {"error": "Integration not found or is not active."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        is_cortex_soar = integration.soar_subtype == SoarSubTypes.CORTEX_SOAR
+        is_forti_soar = integration.soar_subtype == SoarSubTypes.FORTI_SOAR
+
+        if not is_cortex_soar and not is_forti_soar:
+            return Response(
+                {"error": "Integration is not a valid SOAR type."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        soar_tenants = tenant.company.soar_tenants.all()
-        if not soar_tenants:
-            return Response({"error": "No SOAR tenants found."}, status=404)
-
-        soar_ids = [t.id for t in soar_tenants]
-
-        if not soar_ids:
-            return Response({"error": "No SOAR tenants found."}, status=404)
+        # Get appropriate SOAR tenants based on integration type
+        if is_cortex_soar:
+            soar_tenants = tenant.company.soar_tenants.all()
+            if not soar_tenants:
+                return Response({"error": "No Cortex SOAR tenants found."}, status=404)
+            soar_ids = [t.id for t in soar_tenants]
+        else:  # Fortisoar
+            soar_tenants = tenant.company.forti_soar_tenants.all()
+            if not soar_tenants:
+                return Response({"error": "No Fortisoar tenants found."}, status=404)
+            soar_ids = [t.id for t in soar_tenants]
 
         try:
-            # Fetch incident using numeric incident_id
-            incident = (
-                DUCortexSOARIncidentFinalModel.objects.filter(
-                    db_id=incident_db_id, cortex_soar_tenant__in=soar_ids
+            # Fetch incident using numeric incident_id based on integration type
+            if is_cortex_soar:
+                incident = (
+                    DUCortexSOARIncidentFinalModel.objects.filter(
+                        db_id=incident_db_id, cortex_soar_tenant__in=soar_ids
+                    )
+                    .values(
+                        "id",
+                        "db_id",
+                        "account",
+                        "name",
+                        "status",
+                        "incident_priority",
+                        "created",
+                        "modified",
+                        "owner",
+                        "playbook_id",
+                        "occured",
+                        "sla",
+                        "closed",
+                        "closing_user_id",
+                        "reason",
+                        "incident_phase",
+                        "qradar_category",
+                        "qradar_sub_category",
+                        "incident_tta",
+                        "tta_calculation",
+                        "incident_tta",
+                        "incident_ttn",
+                        "incident_ttdn",
+                        "source_ips",
+                        "log_source_type",
+                        "list_of_rules_offense",
+                        "mitre_tactic",
+                        "mitre_technique",
+                        "configuration_item",
+                        "close_notes",
+                    )
+                    .first()
                 )
-                .values(
-                    "id",
-                    "db_id",
-                    "account",
-                    "name",
-                    "status",
-                    "incident_priority",
-                    "created",
-                    "modified",
-                    "owner",
-                    "playbook_id",
-                    "occured",
-                    "sla",
-                    "closed",
-                    "closing_user_id",
-                    "reason",
-                    "incident_phase",
-                    "qradar_category",
-                    "qradar_sub_category",
-                    "incident_tta",
-                    "tta_calculation",
-                    "incident_tta",
-                    "incident_ttn",
-                    "incident_ttdn",
-                    "source_ips",
-                    "log_source_type",
-                    "list_of_rules_offense",
-                    "mitre_tactic",
-                    "mitre_technique",
-                    "configuration_item",
-                    "close_notes",
+            else:  # Fortisoar
+                incident = (
+                    DUFortiSOARIncidentModel.objects.filter(
+                        db_id=incident_db_id, forti_soar_tenant__in=soar_ids
+                    )
+                    .values(
+                        "id",
+                        "db_id",
+                        "account",
+                        "name",
+                        "status",
+                        "incident_priority",
+                        "created",
+                        "modified",
+                        "owner",
+                        "playbook_id",
+                        "occured",
+                        "sla",
+                        "closed",
+                        "closing_user_id",
+                        "reason",
+                        "incident_phase",
+                        "qradar_category",
+                        "qradar_sub_category",
+                        "incident_tta",
+                        "tta_calculation",
+                        "incident_tta",
+                        "incident_ttn",
+                        "incident_ttdn",
+                        "source_ips",
+                        "log_source_type",
+                        "list_of_rules_offense",
+                        "mitre_tactic",
+                        "mitre_technique",
+                        "configuration_item",
+                        "close_notes",
+                        "analysis_notes",
+                        "offense_id",
+                        "ticket_id",
+                    )
+                    .first()
                 )
-                .first()
-            )
 
             if not incident:
+                soar_type = "Cortex SOAR" if is_cortex_soar else "Fortisoar"
                 return Response(
-                    {"error": "Incident not found"}, status=status.HTTP_404_NOT_FOUND
+                    {"error": f"Incident not found in {soar_type}"},
+                    status=status.HTTP_404_NOT_FOUND,
                 )
 
             # Calculate SLA breach information
@@ -4123,7 +4190,7 @@ class IncidentDetailView(APIView):
                     sla_metrics = DefaultSoarSlaMetric.objects.all()
                 else:
                     sla_metrics = SoarTenantSlaMetric.objects.filter(
-                        soar_tenant__in=soar_tenants, company=tenant.company
+                        company=tenant.company
                     )
 
                 # Find matching SLA level for the incident's priority
@@ -4258,70 +4325,116 @@ class IncidentDetailView(APIView):
 
             ticket_id = None
             ticket_db_id = None
-            ticket = DuITSMFinalTickets.objects.filter(
-                soar_id=incident["db_id"], account_name=incident["account"]
-            ).first()
-            if ticket is None:
-                ticket_db_id = None
-            else:
-                ticket_id = ticket.id
-                ticket_db_id = ticket.db_id
+            if is_cortex_soar:
+                ticket = DuITSMFinalTickets.objects.filter(
+                    soar_id=incident["db_id"], account_name=incident["account"]
+                ).first()
+                if ticket is not None:
+                    ticket_id = ticket.id
+                    ticket_db_id = ticket.db_id
+            else:  # Fortisoar
+                forti_ticket_id = incident.get("ticket_id")
+                if forti_ticket_id:
+                    ticket = DuITSMFinalTickets.objects.filter(
+                        db_id=forti_ticket_id
+                    ).first()
+                    if ticket:
+                        ticket_id = ticket.id
+                        ticket_db_id = ticket.db_id
             # Format source IPs and log source types
             offense_db_id = None
             offense_id = None
-            offense_db_id = incident["name"].split()[0]
-            offenses = IBMQradarOffense.objects.filter(db_id=offense_db_id).first()
-            if offenses is None:
-                offense_db_id = None
-            else:
-                offense_id = offenses.id
+            if is_cortex_soar:
+                offense_db_id = incident["name"].split()[0]
+                offenses = IBMQradarOffense.objects.filter(db_id=offense_db_id).first()
+                if offenses is None:
+                    offense_db_id = None
+                else:
+                    offense_id = offenses.id
+            else:  # Fortisoar
+                forti_offense_id = incident.get("offense_id")
+                if forti_offense_id:
+                    offenses = IBMQradarOffense.objects.filter(
+                        db_id=forti_offense_id
+                    ).first()
+                    if offenses:
+                        offense_id = offenses.id
+                        offense_db_id = forti_offense_id
             source_ips_str = ", ".join(source_ips) if source_ips else "Unknown"
             account_name = f"acc_{incident['account']}"
-            notes = DUSoarNotes.objects.filter(
-                incident_id=incident["id"],
-                integration_id=soar_integrations.id,
-                account__iexact=account_name,
-            ).order_by("-created")
-            if not notes.exists():
-                result = IntegrationCredentials.objects.filter(
-                    integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
-                    integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
-                    credential_type=CredentialTypes.API_KEY,
-                    integration__id=soar_integrations.id,
-                ).first()
-                sync_notes_for_incident(
-                    token=result.api_key,
-                    ip_address=result.ip_address,
-                    port=result.port,
-                    integration_id=result.id,
-                    incident_id=incident["id"],
-                )
+
+            if is_cortex_soar:
+                # Cortex SOAR: fetch notes from DUSoarNotes
                 notes = DUSoarNotes.objects.filter(
                     incident_id=incident["id"],
-                    integration_id=soar_integrations.id,
+                    integration_id=integration.id,
                     account__iexact=account_name,
                 ).order_by("-created")
+                if not notes.exists():
+                    result = IntegrationCredentials.objects.filter(
+                        integration__integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                        integration__soar_subtype=SoarSubTypes.CORTEX_SOAR,
+                        credential_type=CredentialTypes.API_KEY,
+                        integration__id=integration.id,
+                    ).first()
+                    if result:
+                        sync_notes_for_incident(
+                            token=result.api_key,
+                            ip_address=result.ip_address,
+                            port=result.port,
+                            integration_id=result.id,
+                            incident_id=incident["id"],
+                        )
+                        notes = DUSoarNotes.objects.filter(
+                            incident_id=incident["id"],
+                            integration_id=integration.id,
+                            account__iexact=account_name,
+                        ).order_by("-created")
 
-            notes_by_user_dict = defaultdict(list)
-            for note in notes:
-                user = note.user or "DBot"
-                notes_by_user_dict[user].append(
-                    {
-                        "id": note.id,
-                        "db_id": note.db_id,
-                        "category": note.category or "",
-                        "content": note.content or "",
-                        "created": note.created.strftime("%Y-%m-%d %I:%M %p")
-                        if note.created
-                        else "",
-                    }
-                )
+                notes_by_user_dict = defaultdict(list)
+                for note in notes:
+                    user = note.user or "DBot"
+                    notes_by_user_dict[user].append(
+                        {
+                            "id": note.id,
+                            "db_id": note.db_id,
+                            "category": note.category or "",
+                            "content": note.content or "",
+                            "created": note.created.strftime("%Y-%m-%d %I:%M %p")
+                            if note.created
+                            else "",
+                        }
+                    )
 
-            # Convert to list of dicts
-            notes_by_user = [
-                {"user": user, "notes": notes_list}
-                for user, notes_list in notes_by_user_dict.items()
-            ]
+                # Convert to list of dicts
+                notes_by_user = [
+                    {"user": user, "notes": notes_list}
+                    for user, notes_list in notes_by_user_dict.items()
+                ]
+            else:
+                # Fortisoar: use analysis_notes field from the incident model
+                notes_by_user = []
+                if incident.get("analysis_notes"):
+                    user = incident["owner"] or "Unknown"
+                    created_str = (
+                        incident["created"].strftime("%Y-%m-%d %I:%M %p")
+                        if incident["created"]
+                        else ""
+                    )
+                    notes_by_user = [
+                        {
+                            "user": user,
+                            "notes": [
+                                {
+                                    "id": incident["id"],
+                                    "db_id": incident["db_id"],
+                                    "category": "",
+                                    "content": incident["analysis_notes"],
+                                    "created": created_str,
+                                }
+                            ],
+                        }
+                    ]
 
             # Format response
             response = {
@@ -4347,7 +4460,9 @@ class IncidentDetailView(APIView):
                     "assignee": (
                         "N/A" if incident["owner"] == " " else incident["owner"]
                     ),
-                    "description": incident["name"].strip().split(" ", 1)[1],
+                    "description": incident["name"].strip().split(" ", 1)[1]
+                    if is_cortex_soar and " " in incident["name"]
+                    else incident["name"],
                     "customFields": {
                         "phase": incident["incident_phase"] or "Detection",
                         "priority": incident["incident_priority"] or None,
