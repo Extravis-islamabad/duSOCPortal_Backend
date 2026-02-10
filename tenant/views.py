@@ -7731,9 +7731,7 @@ class SLASeverityIncidentsView(APIView):
             if tenant.company.is_default_sla:
                 sla_metrics = DefaultSoarSlaMetric.objects.all()
             else:
-                sla_metrics = SoarTenantSlaMetric.objects.filter(
-                    soar_tenant__in=soar_tenants, company=tenant.company
-                )
+                sla_metrics = SoarTenantSlaMetric.objects.filter(company=tenant.company)
             sla_metrics_dict = {metric.sla_level: metric for metric in sla_metrics}
 
             priority_to_sla_map = {
