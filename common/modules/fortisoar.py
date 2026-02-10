@@ -406,6 +406,7 @@ class FortiSOAR:
                 forti_soar_tenant_id=forti_soar_tenant_id,
                 analysis_notes=alert.get("analysisNotes"),
                 offense_id=alert.get("offenseID"),
+                ticket_id=alert.get("iTSMID"),
             )
 
             records.append(record)
@@ -488,6 +489,7 @@ class FortiSOAR:
                         "close_notes",
                         "analysis_notes",
                         "offense_id",
+                        "ticket_id",
                     ],
                     unique_fields=["account", "db_id", "integration"],
                 )
