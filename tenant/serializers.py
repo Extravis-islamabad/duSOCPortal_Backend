@@ -502,23 +502,14 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                 SoarTenantSlaMetric.objects.filter(company=company).delete()
 
                 # Create new custom SLA metrics (shared across SOAR tenants)
-                if "soar_tenants" in validated_data:
-                    target_soar_tenants = DuCortexSOARTenants.objects.filter(
-                        id__in=soar_tenants
+                for override in sla_overrides:
+                    SoarTenantSlaMetric.objects.create(
+                        company=company,
+                        sla_level=override["sla_level"],
+                        tta_minutes=override["tta_minutes"],
+                        ttn_minutes=override["ttn_minutes"],
+                        ttdn_minutes=override["ttdn_minutes"],
                     )
-                else:
-                    target_soar_tenants = company.soar_tenants.all()
-
-                for soar_tenant in target_soar_tenants:
-                    for override in sla_overrides:
-                        SoarTenantSlaMetric.objects.create(
-                            company=company,
-                            soar_tenant=soar_tenant,
-                            sla_level=override["sla_level"],
-                            tta_minutes=override["tta_minutes"],
-                            ttn_minutes=override["ttn_minutes"],
-                            ttdn_minutes=override["ttdn_minutes"],
-                        )
 
         company.save()
 
