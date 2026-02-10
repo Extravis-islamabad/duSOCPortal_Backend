@@ -10409,7 +10409,9 @@ class DownloadIncidentsView(APIView):
             )
 
 
-def get_incidents_trend(filter_type, filters, start_date=None, end_date=None):
+def get_incidents_trend(
+    filter_type, cortex_filters, forti_filters, start_date=None, end_date=None
+):
     if filter_type == FilterType.TODAY:
         time_trunc = TruncHour("occured")
     elif filter_type == FilterType.WEEK:
@@ -10422,23 +10424,60 @@ def get_incidents_trend(filter_type, filters, start_date=None, end_date=None):
         # Default to day truncation if filter type is not recognized
         time_trunc = TruncDay("occured")
 
-    # Apply additional filtering on occured field to match the grouping logic
-    trend_filters = filters
+    # Apply date filters to both
+    date_filter = Q()
     if start_date:
-        trend_filters = trend_filters & Q(occured__date__gte=start_date)
+        date_filter &= Q(occured__date__gte=start_date)
     if end_date:
-        trend_filters = trend_filters & Q(occured__date__lte=end_date)
+        date_filter &= Q(occured__date__lte=end_date)
 
-    incident_trend_qs = (
-        DUCortexSOARIncidentFinalModel.objects.filter(trend_filters)
-        .annotate(interval=time_trunc)
-        .values("interval")
-        .annotate(
-            reported=Count("id"),
-            resolved=Count("id", filter=Q(status="2")),
+    # Query Cortex
+    cortex_trends = []
+    if cortex_filters is not None:
+        cortex_trend_filters = (
+            cortex_filters & date_filter if date_filter else cortex_filters
         )
-        .order_by("interval")
-    )
+        cortex_trends = list(
+            DUCortexSOARIncidentFinalModel.objects.filter(cortex_trend_filters)
+            .annotate(interval=time_trunc)
+            .values("interval")
+            .annotate(
+                reported=Count("id"),
+                resolved=Count("id", filter=Q(status="2")),
+            )
+            .order_by("interval")
+        )
+
+    # Query FortiSOAR
+    forti_trends = []
+    if forti_filters is not None:
+        forti_trend_filters = (
+            forti_filters & date_filter if date_filter else forti_filters
+        )
+        forti_trends = list(
+            DUFortiSOARIncidentModel.objects.filter(forti_trend_filters)
+            .annotate(interval=time_trunc)
+            .values("interval")
+            .annotate(
+                reported=Count("id"),
+                resolved=Count("id", filter=Q(status__in=["Closed", "Resolved"])),
+            )
+            .order_by("interval")
+        )
+
+    # Merge trends by interval
+    from collections import defaultdict
+
+    merged = defaultdict(lambda: {"reported": 0, "resolved": 0})
+    for entry in cortex_trends + forti_trends:
+        interval = entry["interval"]
+        merged[interval]["reported"] += entry["reported"]
+        merged[interval]["resolved"] += entry["resolved"]
+
+    incident_trend_qs = [
+        {"interval": k, "reported": v["reported"], "resolved": v["resolved"]}
+        for k, v in sorted(merged.items())
+    ]
 
     incident_closure_trends = []
     skip_once_done = False
@@ -10482,24 +10521,39 @@ class DetailedIncidentReport(APIView):
             return Response({"error": "Tenant not found."}, status=404)
 
         # Step 2: Check for active SOAR integration
-        soar_integrations = tenant.company.integrations.filter(
+        cortex_integrations = tenant.company.integrations.filter(
             integration_type=IntegrationTypes.SOAR_INTEGRATION,
             soar_subtype=SoarSubTypes.CORTEX_SOAR,
             status=True,
         )
+        forti_integrations = tenant.company.integrations.filter(
+            integration_type=IntegrationTypes.SOAR_INTEGRATION,
+            soar_subtype=SoarSubTypes.FORTI_SOAR,
+            status=True,
+        )
 
-        if not soar_integrations.exists():
+        if not cortex_integrations.exists() and not forti_integrations.exists():
             return Response(
                 {"error": "No active SOAR integration configured for tenant."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Step 3: Get SOAR tenant IDs
-        soar_tenants = tenant.company.soar_tenants.all()
-        if not soar_tenants:
+        soar_tenants = (
+            tenant.company.soar_tenants.all()
+            if cortex_integrations.exists()
+            else tenant.company.soar_tenants.none()
+        )
+        forti_soar_tenants = (
+            tenant.company.forti_soar_tenants.all()
+            if forti_integrations.exists()
+            else tenant.company.forti_soar_tenants.none()
+        )
+        if not soar_tenants.exists() and not forti_soar_tenants.exists():
             return Response({"error": "No SOAR tenants found."}, status=404)
 
-        soar_ids = [t.id for t in soar_tenants]
+        soar_ids = list(soar_tenants.values_list("id", flat=True))
+        forti_soar_ids = list(forti_soar_tenants.values_list("id", flat=True))
 
         filter_type = request.query_params.get("filter_type", FilterType.WEEK.value)
         if filter_type is not None:
@@ -10508,17 +10562,35 @@ class DetailedIncidentReport(APIView):
             except ValueError:
                 return Response({"error": "Invalid filter_type."}, status=400)
 
-        filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
-            ~Q(owner__isnull=True)
-            & ~Q(owner__exact="")
-            & Q(incident_tta__isnull=False)
-            & Q(incident_ttn__isnull=False)
-            & Q(incident_ttdn__isnull=False)
-            & Q(itsm_sync_status__isnull=False)
-            & Q(itsm_sync_status__iexact="Ready")
-            & Q(incident_priority__isnull=False)
-            & ~Q(incident_priority__exact="")
-        )
+        # Build separate filters for Cortex and FortiSOAR
+        cortex_filters = None
+        forti_filters = None
+
+        if soar_ids:
+            cortex_filters = Q(cortex_soar_tenant_id__in=soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
+
+        if forti_soar_ids:
+            forti_filters = Q(forti_soar_tenant_id__in=forti_soar_ids) & (
+                ~Q(owner__isnull=True)
+                & ~Q(owner__exact="")
+                & Q(incident_tta__isnull=False)
+                & Q(incident_ttn__isnull=False)
+                & Q(incident_ttdn__isnull=False)
+                & Q(itsm_sync_status__isnull=False)
+                & Q(itsm_sync_status__iexact="Ready")
+                & Q(incident_priority__isnull=False)
+                & ~Q(incident_priority__exact="")
+            )
 
         # false_postive_filter = Q(itsm_sync_status__iexact="Done")
 
@@ -10529,12 +10601,13 @@ class DetailedIncidentReport(APIView):
 
         try:
             filter_type = FilterType(int(filter_type))
+            date_filter = None
             if filter_type == FilterType.WEEK:
                 start_date = now - timedelta(days=7)
-                filters &= Q(created__date__gte=start_date)
+                date_filter = Q(created__date__gte=start_date)
             elif filter_type == FilterType.MONTH:
                 start_date = now - timedelta(days=30)
-                filters &= Q(created__date__gte=start_date)
+                date_filter = Q(created__date__gte=start_date)
             elif filter_type == FilterType.CUSTOM_RANGE:
                 start_date_str = request.query_params.get("start_date")
                 end_date_str = request.query_params.get("end_date")
@@ -10544,9 +10617,6 @@ class DetailedIncidentReport(APIView):
                             start_date_str, "%Y-%m-%d"
                         ).date()
                         end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-                        filters &= Q(created__date__gte=start_date) & Q(
-                            created__date__lte=end_date
-                        )
                         if start_date > end_date:
                             return Response(
                                 {
@@ -10560,6 +10630,9 @@ class DetailedIncidentReport(APIView):
                                 {"error": "Custom range must be at least 7 days."},
                                 status=400,
                             )
+                        date_filter = Q(created__date__gte=start_date) & Q(
+                            created__date__lte=end_date
+                        )
                     except ValueError:
                         return Response(
                             {"error": "Invalid date format. Use YYYY-MM-DD."},
@@ -10567,19 +10640,64 @@ class DetailedIncidentReport(APIView):
                         )
             else:
                 return Response({"error": "Unsupported filter"}, status=400)
+
+            if date_filter:
+                if cortex_filters is not None:
+                    cortex_filters &= date_filter
+                if forti_filters is not None:
+                    forti_filters &= date_filter
         except Exception:
             return Response({"error": "Invalid filter_type."}, status=400)
 
-        priority_wise_counts = (
-            DUCortexSOARIncidentFinalModel.objects.filter(filters)
-            .values("incident_priority")
-            .annotate(
-                total=Count("id"),
-                open_count=Count("id", filter=Q(status="1")),  # status 1 = open
-                closed_count=Count("id", filter=Q(status="2")),  # status 2 = closed
-            )
-            .order_by("-total")
+        # Query both Cortex and FortiSOAR
+        from collections import defaultdict
+
+        priority_counts_dict = defaultdict(
+            lambda: {"total": 0, "open_count": 0, "closed_count": 0}
         )
+
+        if cortex_filters is not None:
+            cortex_priority_counts = (
+                DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                .values("incident_priority")
+                .annotate(
+                    total=Count("id"),
+                    open_count=Count("id", filter=Q(status="1")),
+                    closed_count=Count("id", filter=Q(status="2")),
+                )
+            )
+            for row in cortex_priority_counts:
+                priority = row["incident_priority"]
+                priority_counts_dict[priority]["total"] += row["total"]
+                priority_counts_dict[priority]["open_count"] += row["open_count"]
+                priority_counts_dict[priority]["closed_count"] += row["closed_count"]
+
+        if forti_filters is not None:
+            forti_priority_counts = (
+                DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                .values("incident_priority")
+                .annotate(
+                    total=Count("id"),
+                    open_count=Count(
+                        "id", filter=~Q(status__in=["Closed", "Resolved"])
+                    ),
+                    closed_count=Count(
+                        "id", filter=Q(status__in=["Closed", "Resolved"])
+                    ),
+                )
+            )
+            for row in forti_priority_counts:
+                priority = row["incident_priority"]
+                priority_counts_dict[priority]["total"] += row["total"]
+                priority_counts_dict[priority]["open_count"] += row["open_count"]
+                priority_counts_dict[priority]["closed_count"] += row["closed_count"]
+
+        priority_wise_counts = [
+            {"incident_priority": k, **v}
+            for k, v in sorted(
+                priority_counts_dict.items(), key=lambda x: x[1]["total"], reverse=True
+            )
+        ]
 
         if not priority_wise_counts:
             return Response({"error": "No incidents found."}, status=404)
@@ -10601,26 +10719,57 @@ class DetailedIncidentReport(APIView):
             for priority, total in all_severities.items()
         ]
 
-        incident_counts = DUCortexSOARIncidentFinalModel.objects.filter(
-            filters
-        ).aggregate(
-            total=Count("id"),
-            # open_count=Count("id", filter=Q(status="1")),
-            closed_count=Count("id", filter=Q(status="2")),
-        )
+        # Aggregate total incidents from both sources
+        total_incidents = 0
+        closed_count = 0
 
-        total_incidents_raised = incident_counts
+        if cortex_filters is not None:
+            cortex_agg = DUCortexSOARIncidentFinalModel.objects.filter(
+                cortex_filters
+            ).aggregate(
+                total=Count("id"),
+                closed_count=Count("id", filter=Q(status="2")),
+            )
+            total_incidents += cortex_agg["total"] or 0
+            closed_count += cortex_agg["closed_count"] or 0
+
+        if forti_filters is not None:
+            forti_agg = DUFortiSOARIncidentModel.objects.filter(
+                forti_filters
+            ).aggregate(
+                total=Count("id"),
+                closed_count=Count("id", filter=Q(status__in=["Closed", "Resolved"])),
+            )
+            total_incidents += forti_agg["total"] or 0
+            closed_count += forti_agg["closed_count"] or 0
+
+        total_incidents_raised = {
+            "total": total_incidents,
+            "closed_count": closed_count,
+        }
 
         # Use case logic using extract_use_case (same as updated ConsolidatedReport)
         from collections import Counter
 
         # Step 1: Use ORM to get incident names efficiently with filters
-        incident_names = (
-            DUCortexSOARIncidentFinalModel.objects.filter(filters)
-            .filter(name__isnull=False)
-            .exclude(name__exact="")
-            .values_list("name", flat=True)
-        )
+        incident_names = []
+        if cortex_filters is not None:
+            cortex_names = list(
+                DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                .filter(name__isnull=False)
+                .exclude(name__exact="")
+                .values_list("name", flat=True)
+            )
+            incident_names.extend(cortex_names)
+
+        if forti_filters is not None:
+            forti_names = list(
+                DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                .filter(name__isnull=False)
+                .exclude(name__exact="")
+                .values_list("name", flat=True)
+            )
+            incident_names.extend(forti_names)
 
         # Step 2: Clean incident names and count occurrences
         incident_name_counts = Counter()
@@ -10636,12 +10785,24 @@ class DetailedIncidentReport(APIView):
 
         # Step 4: Build priority breakdown for each top use case
         top_5_use_cases_data = []
-        all_incidents_data = (
-            DUCortexSOARIncidentFinalModel.objects.filter(filters)
-            .filter(name__isnull=False)
-            .exclude(name__exact="")
-            .values("name", "incident_priority")
-        )
+        all_incidents_data = []
+        if cortex_filters is not None:
+            cortex_data = list(
+                DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                .filter(name__isnull=False)
+                .exclude(name__exact="")
+                .values("name", "incident_priority")
+            )
+            all_incidents_data.extend(cortex_data)
+
+        if forti_filters is not None:
+            forti_data = list(
+                DUFortiSOARIncidentModel.objects.filter(forti_filters)
+                .filter(name__isnull=False)
+                .exclude(name__exact="")
+                .values("name", "incident_priority")
+            )
+            all_incidents_data.extend(forti_data)
 
         for use_case, count in top_use_cases:
             priority_breakdown = {}
@@ -10685,7 +10846,7 @@ class DetailedIncidentReport(APIView):
             trend_start_date = (now - timedelta(days=30)).date()
 
         incident_closure_trends = get_incidents_trend(
-            filter_type, filters, trend_start_date, trend_end_date
+            filter_type, cortex_filters, forti_filters, trend_start_date, trend_end_date
         )
 
         data = {
