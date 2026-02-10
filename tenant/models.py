@@ -1115,10 +1115,6 @@ class SoarTenantSlaMetric(models.Model):
         on_delete=models.CASCADE,
         related_name="soar_sla_metrics",
     )
-    # soar_tenant = models.ForeignKey(
-    #     DuCortexSOARTenants, on_delete=models.CASCADE, related_name="sla_metrics"
-    # )
-
     sla_level = models.IntegerField(choices=SlaLevelChoices.choices)
 
     tta_minutes = models.PositiveIntegerField(help_text="Time to Acknowledge")
