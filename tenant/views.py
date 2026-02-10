@@ -51,7 +51,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.forti_soar_tasks import sync_forti_soar_data
+from tenant.ibm_qradar_tasks import sync_ibm_tenant_daily_eps
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -535,7 +535,7 @@ class TestView(APIView):
         #         continue
 
         # data = a._get_alerts(tenant_name="CDC-Mey-DW")
-        sync_forti_soar_data()
+        sync_ibm_tenant_daily_eps()
 
         return Response({"data": "gffh"}, status=status.HTTP_200_OK)
 
@@ -1472,101 +1472,6 @@ class DownloadTenantAssetsExcel(APIView):
             return Response(
                 {"error": "Failed to generate Excel file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-
-class GetTenantAssetsStats(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsTenant]
-
-    @swagger_auto_schema(
-        operation_description="Returns statistical summary of tenant's QRadar assets.",
-        responses={
-            200: openapi.Response(
-                description="Asset statistics retrieved successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        "total_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
-                        "success_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
-                        "error_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
-                        "disabled_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
-                        "na_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
-                        "warning_assets": openapi.Schema(type=openapi.TYPE_INTEGER),
-                    },
-                ),
-            ),
-            400: openapi.Response(description="No active SIEM integration configured"),
-            404: openapi.Response(
-                description="Tenant not found or no Event Collectors mapped"
-            ),
-            500: openapi.Response(description="Internal server error"),
-        },
-        tags=["QRadar Assets"],
-    )
-    def get(self, request):
-        """
-        Return asset statistics:
-        - total_assets
-        - success_assets
-        - error_assets
-        """
-        try:
-            tenant = Tenant.objects.select_related("tenant").get(tenant=request.user)
-        except Tenant.DoesNotExist:
-            return Response(
-                {"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND
-            )
-
-        try:
-            siem_integrations = tenant.company.integrations.filter(
-                integration_type=IntegrationTypes.SIEM_INTEGRATION,
-                siem_subtype=SiemSubTypes.IBM_QRADAR,
-                status=True,
-            )
-            if not siem_integrations.exists():
-                return Response(
-                    {"error": "No active SIEM integration configured for tenant."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            collector_ids = (
-                TenantQradarMapping.objects.filter(company=tenant.company)
-                .prefetch_related("event_collectors")
-                .values_list("event_collectors__id", flat=True)
-            )
-            if not collector_ids:
-                return Response(
-                    {"detail": "No Event Collectors mapped to this tenant."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-
-            base_queryset = IBMQradarAssests.objects.filter(
-                event_collector_id__in=collector_ids
-            )
-
-            total_assets = base_queryset.count()
-            success_assets = base_queryset.filter(status__iexact="success").count()
-            error_assets = base_queryset.filter(status__iexact="error").count()
-            na_assets = base_queryset.filter(status__iexact="na").count()
-            disabled_assets = base_queryset.filter(status__iexact="disabled").count()
-            warning_assets = base_queryset.filter(status__iexact="warn").count()
-            return Response(
-                {
-                    "total_assets": total_assets,
-                    "success_assets": success_assets,
-                    "error_assets": error_assets,
-                    "disabled_assets": disabled_assets,
-                    "na_assets": na_assets,
-                    "warning_assets": warning_assets,
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        except Exception as e:
-            logger.error(f"Error in GetTenantAssetsStats: {str(e)}")
-            return Response(
-                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
@@ -9690,16 +9595,6 @@ class IncidentReportView(APIView):
         except Exception as e:
             logger.error(f"Error in IncidentReportView: {str(e)}")
             return Response({"error": str(e)}, status=500)
-
-
-# class SourceIPGeoLocationListView(APIView):
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsTenant]
-
-#     def get(self, request):
-#         records = SourceIPGeoLocation.objects.all().order_by("-created_at")[:50]
-#         serializer = SourceIPGeoLocationSerializer(records, many=True)
-#         return Response(serializer.data)
 
 
 class FileTypeChoicesView(APIView):
