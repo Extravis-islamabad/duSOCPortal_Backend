@@ -15,7 +15,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 
-from .models import (  # SoarTenantSlaMetric,
+from .models import (
     Alert,
     Company,
     CywareAlertDetails,
@@ -513,6 +513,31 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
 
         company.save()
 
+        if qradar_data is not None:
+            requested_qradar_ids = [qt["qradar_tenant_id"] for qt in qradar_data]
+
+            TenantQradarMapping.objects.filter(company=company).exclude(
+                qradar_tenant_id__in=requested_qradar_ids
+            ).delete()
+
+            for qt in qradar_data:
+                qradar_tenant = DuIbmQradarTenants.objects.get(
+                    id=qt["qradar_tenant_id"]
+                )
+                mapping, _ = TenantQradarMapping.objects.get_or_create(
+                    company=company, qradar_tenant=qradar_tenant
+                )
+                mapping.event_collectors.set(
+                    IBMQradarEventCollector.objects.filter(
+                        id__in=qt.get("event_collector_ids", [])
+                    )
+                )
+                if "contracted_volume_type" in qt:
+                    mapping.contracted_volume_type = qt["contracted_volume_type"]
+                if "contracted_volume" in qt:
+                    mapping.contracted_volume = qt["contracted_volume"]
+                mapping.save()
+
         for tenant in tenants:
             if permissions is not None:
                 existing_role = TenantRole.objects.filter(tenant=tenant).first()
@@ -530,25 +555,6 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                 TenantRolePermissions.objects.filter(role=role).delete()
                 for perm in permissions:
                     TenantRolePermissions.objects.create(role=role, permission=perm)
-
-            if qradar_data is not None:
-                for qt in qradar_data:
-                    qradar_tenant = DuIbmQradarTenants.objects.get(
-                        id=qt["qradar_tenant_id"]
-                    )
-                    mapping, _ = TenantQradarMapping.objects.get_or_create(
-                        company=company, qradar_tenant=qradar_tenant
-                    )
-                    mapping.event_collectors.set(
-                        IBMQradarEventCollector.objects.filter(
-                            id__in=qt.get("event_collector_ids", [])
-                        )
-                    )
-                    if "contracted_volume_type" in qt:
-                        mapping.contracted_volume_type = qt["contracted_volume_type"]
-                    if "contracted_volume" in qt:
-                        mapping.contracted_volume = qt["contracted_volume"]
-                    mapping.save()
 
             if is_defualt_threat_intel is False and validated_data.get("base_url"):
                 with Cyware(
@@ -585,16 +591,13 @@ class TenantRolePermissionsSerializer(serializers.ModelSerializer):
 class AllTenantDetailSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="tenant.username", read_only=True)
     email = serializers.EmailField(source="tenant.email", read_only=True)
-    user_id = serializers.IntegerField(source="tenant.id", read_only=True)  # ✅ Add this
-    is_active = serializers.BooleanField(
-        source="tenant.is_active", read_only=True
-    )  # Add is_active status
+    user_id = serializers.IntegerField(source="tenant.id", read_only=True)
+    is_active = serializers.BooleanField(source="tenant.is_active", read_only=True)
     permissions = serializers.SerializerMethodField()
     tenant_admin = serializers.SerializerMethodField()
     created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
     role = serializers.SerializerMethodField()
 
-    # ✅ Fields from Company
     company_name = serializers.SerializerMethodField()
     phone_number = serializers.SerializerMethodField()
     industry = serializers.SerializerMethodField()
@@ -608,7 +611,7 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
             "user_id",
             "username",
             "email",
-            "is_active",  # Add to fields list
+            "is_active",
             "company_name",
             "phone_number",
             "industry",
@@ -1087,11 +1090,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 {"ldap_users": "Each user must have a non-empty ldap_group."}
             )
 
-        # if not any(user.get("is_admin") for user in ldap_users):
-        #     raise serializers.ValidationError(
-        #         {"ldap_users": "At least one user must be marked as is_admin=True"}
-        #     )
-
         integration_ids = data.get("integration_ids", [])
         integrations = Integration.objects.none()
         if integration_ids:
@@ -1327,17 +1325,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     **validated_data,
                 )
 
-                # role_type = (
-                #     TenantRole.TenantRoleChoices.TENANT_ADMIN
-                #     if user_data.get("is_admin")
-                #     else TenantRole.TenantRoleChoices.TENANT_USER
-                # )
-                # role = TenantRole.objects.create(
-                #     tenant=tenant,
-                #     name="Tenant Admin" if role_type == 1 else "Tenant User",
-                #     role_type=role_type,
-                # )
-
                 role = TenantRole.objects.create(
                     tenant=tenant,
                     name=TenantRole.TenantRoleChoices.TENANT_USER.label,
@@ -1424,31 +1411,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     )
 
         return company
-
-
-# class CustomerEPSSerializer(serializers.ModelSerializer):
-#     qradar_tenant_name = serializers.CharField(
-#         source="qradar_tenant.name", read_only=True
-#     )
-#     qradar_tenant_id = serializers.IntegerField(
-#         source="qradar_tenant.id", read_only=True
-#     )
-#     qradar_tenant_db_id = serializers.IntegerField(
-#         source="qradar_tenant.db_id", read_only=True
-#     )
-#     eps = serializers.SerializerMethodField()
-
-#     class Meta:
-#         model = CustomerEPS
-#         fields = [
-#             "eps",
-#             "qradar_tenant_id",
-#             "qradar_tenant_db_id",
-#             "qradar_tenant_name",
-#         ]
-
-#     def get_eps(self, obj):
-#         return round(obj.eps, 2) if obj.eps is not None else None
 
 
 class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
@@ -1756,7 +1718,6 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
     total_incidents = serializers.SerializerMethodField()
     active_incidents = serializers.SerializerMethodField()
     tickets_count = serializers.SerializerMethodField()
-    # sla = serializers.SerializerMethodField()
     asset_count = serializers.SerializerMethodField()
     active_integrations = serializers.SerializerMethodField()
     integrated_tools = serializers.SerializerMethodField()
@@ -1774,7 +1735,6 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
             "total_incidents",
             "active_incidents",
             "tickets_count",
-            # "sla",
             "asset_count",
             "active_integrations",
             "integrated_tools",
@@ -1854,18 +1814,6 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
         return DuITSMFinalTickets.objects.filter(
             itsm_tenant__in=obj.itsm_tenants.all()
         ).count()
-
-    # def get_sla(self, obj):
-    #     if obj.is_default_sla:
-    #         return [
-    #             {
-    #                 "sla_level": sla.get_sla_level_display(),
-    #                 "tta": sla.tta_minutes,
-    #                 "ttn": sla.ttn_minutes,
-    #                 "ttdn": sla.ttdn_minutes,
-    #             }
-    #             for sla in obj.soar_sla_metrics.all()
-    #         ]
 
     def get_asset_count(self, obj):
         try:
@@ -2002,9 +1950,3 @@ class NonActiveCompanySerializer(serializers.ModelSerializer):
 
     def get_active_integrations(self, obj):
         return obj.integrations.count()
-
-
-# class SourceIPGeoLocationSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = SourceIPGeoLocation
-#         fields = "__all__"
