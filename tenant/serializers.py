@@ -513,6 +513,31 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
 
         company.save()
 
+        if qradar_data is not None:
+            requested_qradar_ids = [qt["qradar_tenant_id"] for qt in qradar_data]
+
+            TenantQradarMapping.objects.filter(company=company).exclude(
+                qradar_tenant_id__in=requested_qradar_ids
+            ).delete()
+
+            for qt in qradar_data:
+                qradar_tenant = DuIbmQradarTenants.objects.get(
+                    id=qt["qradar_tenant_id"]
+                )
+                mapping, _ = TenantQradarMapping.objects.get_or_create(
+                    company=company, qradar_tenant=qradar_tenant
+                )
+                mapping.event_collectors.set(
+                    IBMQradarEventCollector.objects.filter(
+                        id__in=qt.get("event_collector_ids", [])
+                    )
+                )
+                if "contracted_volume_type" in qt:
+                    mapping.contracted_volume_type = qt["contracted_volume_type"]
+                if "contracted_volume" in qt:
+                    mapping.contracted_volume = qt["contracted_volume"]
+                mapping.save()
+
         for tenant in tenants:
             if permissions is not None:
                 existing_role = TenantRole.objects.filter(tenant=tenant).first()
@@ -530,25 +555,6 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                 TenantRolePermissions.objects.filter(role=role).delete()
                 for perm in permissions:
                     TenantRolePermissions.objects.create(role=role, permission=perm)
-
-            if qradar_data is not None:
-                for qt in qradar_data:
-                    qradar_tenant = DuIbmQradarTenants.objects.get(
-                        id=qt["qradar_tenant_id"]
-                    )
-                    mapping, _ = TenantQradarMapping.objects.get_or_create(
-                        company=company, qradar_tenant=qradar_tenant
-                    )
-                    mapping.event_collectors.set(
-                        IBMQradarEventCollector.objects.filter(
-                            id__in=qt.get("event_collector_ids", [])
-                        )
-                    )
-                    if "contracted_volume_type" in qt:
-                        mapping.contracted_volume_type = qt["contracted_volume_type"]
-                    if "contracted_volume" in qt:
-                        mapping.contracted_volume = qt["contracted_volume"]
-                    mapping.save()
 
             if is_defualt_threat_intel is False and validated_data.get("base_url"):
                 with Cyware(
