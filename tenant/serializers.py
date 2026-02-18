@@ -1492,8 +1492,8 @@ class DuITSMTicketsSerializer(serializers.ModelSerializer):
 
     def get_soar_owner(self, obj):
         """
-        Return the `owner` from DUCortexSOARIncidentFinalModel that
-        matches this ticket's `soar_id` **and** belongs to the current tenant's SOAR accounts.
+        Return the incident owner for this ticket's `soar_id` from either
+        Cortex SOAR or FortiSOAR, scoped to the authenticated tenant's SOAR accounts.
         """
         if not obj.soar_id:
             return None
@@ -1508,15 +1508,24 @@ class DuITSMTicketsSerializer(serializers.ModelSerializer):
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
             return None
+        cortex_soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
+        forti_soar_ids = tenant.company.forti_soar_tenants.values_list("id", flat=True)
 
-        soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
-
-        # Fetch the first matching incident inside those SOAR tenants
-        incident = DUCortexSOARIncidentFinalModel.objects.filter(
-            db_id=obj.soar_id, cortex_soar_tenant_id__in=soar_ids
+        # Prefer Cortex SOAR owner when available
+        cortex_incident = DUCortexSOARIncidentFinalModel.objects.filter(
+            db_id=obj.soar_id, cortex_soar_tenant_id__in=cortex_soar_ids
         ).first()
+        if cortex_incident and cortex_incident.owner:
+            return cortex_incident.owner
 
-        return incident.owner if incident else None
+        # Fallback to FortiSOAR incident owner for the same SOAR ID
+        forti_incident = DUFortiSOARIncidentModel.objects.filter(
+            db_id=obj.soar_id, forti_soar_tenant_id__in=forti_soar_ids
+        ).first()
+        if forti_incident:
+            return forti_incident.owner
+
+        return cortex_incident.owner if cortex_incident else None
 
 
 class DUCortexSOARIncidentSerializer(serializers.ModelSerializer):
