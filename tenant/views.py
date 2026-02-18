@@ -116,6 +116,18 @@ from tenant.serializers import (
     TenantRoleSerializer,
 )
 
+FORTI_SOAR_TIME_OFFSET = timedelta(hours=4)
+
+
+def shift_datetime_for_forti_soar(value):
+    if not isinstance(value, datetime):
+        return value
+    return value - FORTI_SOAR_TIME_OFFSET
+
+
+def is_closed_status(status_value):
+    return str(status_value or "").strip().lower() in ["2", "closed", "resolved"]
+
 
 class PermissionChoicesAPIView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -3696,10 +3708,12 @@ class IncidentsView(APIView):
                     "incident_priority",
                     "incident_phase",
                     "created",
+                    "modified",
                     "created_at",
                     "owner",
                     "playbook_id",
                     "occured",
+                    "closed",
                     "sla",
                     "integration_id",
                     "mitre_tactic",
@@ -3717,10 +3731,12 @@ class IncidentsView(APIView):
                     "incident_priority",
                     "incident_phase",
                     "created",
+                    "modified",
                     "created_at",
                     "owner",
                     "playbook_id",
                     "occured",
+                    "closed",
                     "sla",
                     "integration_id",
                     "mitre_tactic",
@@ -3771,11 +3787,32 @@ class IncidentsView(APIView):
                     offense_id = None
 
                 # Use isoformat() for consistent datetime formatting
+                is_forti_source = row.get("_source") == "forti"
+                occurred_datetime = (
+                    shift_datetime_for_forti_soar(row.get("occured"))
+                    if is_forti_source
+                    else row.get("occured")
+                )
+                modified_datetime = (
+                    shift_datetime_for_forti_soar(row.get("modified"))
+                    if is_forti_source
+                    else row.get("modified")
+                )
+                closed_datetime = (
+                    shift_datetime_for_forti_soar(row.get("closed"))
+                    if is_forti_source
+                    else row.get("closed")
+                )
                 created_date = row["created"].isoformat() if row["created"] else "N/A"
                 created_at_date = (
                     row["created_at"].isoformat() if row.get("created_at") else "N/A"
                 )
-                occurred_date = row["occured"].isoformat() if row["occured"] else "N/A"
+                occurred_date = (
+                    occurred_datetime.isoformat() if occurred_datetime else "N/A"
+                )
+                modified_date = (
+                    modified_datetime.isoformat() if modified_datetime else "N/A"
+                )
 
                 description = (
                     row["name"].strip().split(" ", 1)[1]
@@ -3783,11 +3820,16 @@ class IncidentsView(APIView):
                     else row["name"]
                 )
                 status_value = row["status"]
-                if row.get("_source") == "forti":
+                if is_forti_source:
                     normalized_status = str(row.get("status") or "").strip().lower()
                     status_value = (
                         "2" if normalized_status in ["2", "closed", "resolved"] else "1"
                     )
+                closure_time = (
+                    closed_datetime.isoformat()
+                    if is_closed_status(status_value) and closed_datetime
+                    else None
+                )
                 incidents.append(
                     {
                         "id": f"{row['id']}",
@@ -3800,6 +3842,8 @@ class IncidentsView(APIView):
                         "phase": row["incident_phase"],
                         "created": created_date,
                         "created_at": created_at_date,
+                        "modified": modified_date,
+                        "closure_time": closure_time,
                         "assignee": row["owner"],
                         "playbook": row["playbook_id"],
                         "occurred": occurred_date,
@@ -4080,6 +4124,19 @@ class IncidentDetailView(APIView):
             incident["incident_ttdn"] = self._normalize_datetime_value(
                 incident.get("incident_ttdn")
             )
+            incident_display_modified = incident["modified"]
+            incident_display_occurred = incident["occured"]
+            incident_display_closed = incident["closed"]
+            if is_forti_soar:
+                incident_display_modified = shift_datetime_for_forti_soar(
+                    incident_display_modified
+                )
+                incident_display_occurred = shift_datetime_for_forti_soar(
+                    incident_display_occurred
+                )
+                incident_display_closed = shift_datetime_for_forti_soar(
+                    incident_display_closed
+                )
 
             # Calculate SLA breach information
             sla_breach_info = {
@@ -4224,7 +4281,7 @@ class IncidentDetailView(APIView):
                     {
                         "icon": "person",
                         "title": "Assigned",
-                        "time": incident["modified"],
+                        "time": incident_display_modified,
                         "description": f"Incident assigned to {incident['owner']}",
                         "detail": "Action: Changed assignee from Unassigned",
                     }
@@ -4372,8 +4429,7 @@ class IncidentDetailView(APIView):
                         }
                     ]
 
-            normalized_status = str(incident.get("status") or "").strip().lower()
-            is_closed_incident = normalized_status in ["2", "closed", "resolved"]
+            is_closed_incident = is_closed_status(incident.get("status"))
 
             # Format response
             response = {
@@ -4389,11 +4445,13 @@ class IncidentDetailView(APIView):
                     #     else "Unknown"
                     # ),
                     "modified": (
-                        incident["modified"] if incident["modified"] else "Unknown"
+                        incident_display_modified
+                        if incident_display_modified
+                        else "Unknown"
                     ),
                     "closure_time": (
-                        incident["closed"]
-                        if is_closed_incident and incident["closed"]
+                        incident_display_closed
+                        if is_closed_incident and incident_display_closed
                         else None
                     ),
                     "assignee": (
@@ -4419,7 +4477,9 @@ class IncidentDetailView(APIView):
                     "sla": incident["sla"],
                     "playbook": incident["playbook_id"],
                     "occurred": (
-                        incident["occured"] if incident["occured"] else "Unknown"
+                        incident_display_occurred
+                        if incident_display_occurred
+                        else "Unknown"
                     ),
                     "offense_id": offense_id,
                     "offense_db_id": offense_db_id,
