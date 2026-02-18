@@ -51,7 +51,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.itsm_tasks import sync_itsm_tickets_soar_ids_from_fortisoar
+from tenant.forti_soar_tasks import sync_forti_soar_alerts
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -534,7 +534,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        sync_itsm_tickets_soar_ids_from_fortisoar()
+        sync_forti_soar_alerts()
         return Response({"data": "data"}, status=status.HTTP_200_OK)
 
 
@@ -1843,29 +1843,33 @@ class TypeDistributionView(APIView):
         try:
             # Handle date filtering
             filter_type = request.query_params.get("filter_type")
-            start_date = request.query_params.get("start_date")
-            end_date = request.query_params.get("end_date")
+            start_date_param = request.query_params.get("start_date")
+            end_date_param = request.query_params.get("end_date")
             db_timezone = timezone.get_fixed_timezone(240)
             now = timezone.now().astimezone(db_timezone)
-            if start_date and end_date:
+            if start_date_param and end_date_param:
                 try:
-                    if not isinstance(start_date, str) or not isinstance(end_date, str):
+                    if not isinstance(start_date_param, str) or not isinstance(
+                        end_date_param, str
+                    ):
                         return Response(
                             {
                                 "error": "start_date and end_date must be strings in YYYY-MM-DD format."
                             },
                             status=400,
                         )
+                    start_date = datetime.strptime(start_date_param, "%Y-%m-%d").date()
+                    end_date = datetime.strptime(end_date_param, "%Y-%m-%d").date()
 
-                    start_date = timezone.make_aware(
-                        datetime.strptime(start_date, "%Y-%m-%d"), timezone=db_timezone
-                    ).replace(hour=0, minute=0, second=0, microsecond=0)
+                    if start_date > end_date:
+                        return Response(
+                            {"error": "start_date cannot be greater than end_date."},
+                            status=400,
+                        )
 
-                    end_date = timezone.make_aware(
-                        datetime.strptime(end_date, "%Y-%m-%d"), timezone=db_timezone
-                    ).replace(hour=23, minute=59, second=59, microsecond=999999)
-
-                    filters &= Q(occured__gte=start_date) & Q(occured__lte=end_date)
+                    filters &= Q(created__date__gte=start_date) & Q(
+                        created__date__lte=end_date
+                    )
                 except ValueError:
                     return Response(
                         {"error": "Invalid date format. Use YYYY-MM-DD."}, status=400
@@ -1875,28 +1879,17 @@ class TypeDistributionView(APIView):
                 try:
                     filter_type = FilterType(int(filter_type))
                     if filter_type == FilterType.TODAY:
-                        start_date = now.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
+                        start_date = now.date()
+                        end_date = now.date()
                     elif filter_type == FilterType.WEEK:
-                        start_date = now - timedelta(days=now.weekday())
-                        start_date = start_date.replace(
-                            hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
+                        start_date = (now - timedelta(days=now.weekday())).date()
+                        end_date = now.date()
                     elif filter_type == FilterType.MONTH:
-                        start_date = now.replace(
-                            day=1, hour=0, minute=0, second=0, microsecond=0
-                        )
-                        end_date = now.replace(
-                            hour=23, minute=59, second=59, microsecond=999999
-                        )
-                    filters &= Q(occured__gte=start_date) & Q(occured__lte=end_date)
+                        start_date = now.replace(day=1).date()
+                        end_date = now.date()
+                    filters &= Q(created__date__gte=start_date) & Q(
+                        created__date__lte=end_date
+                    )
 
                 except Exception as e:
                     return Response(
@@ -5103,29 +5096,41 @@ class OffenseCategoriesAPIView(APIView):
                     )
 
             # Step 4: Query incidents with qradar_category field and group by category
+            # Handles:
+            # - Cortex SOAR: single category value
+            # - FortiSOAR: comma-separated category values
             category_counter = Counter()
 
-            if cortex_filters is not None:
-                category_counts = (
-                    DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
-                    .exclude(qradar_category__isnull=True)
+            def normalize_qradar_categories(raw_category):
+                categories = [
+                    category.strip()
+                    for category in str(raw_category).split(",")
+                    if category and category.strip()
+                ]
+                return list(dict.fromkeys(categories))
+
+            def add_category_counts(queryset):
+                grouped_categories = (
+                    queryset.exclude(qradar_category__isnull=True)
                     .exclude(qradar_category__exact="")
                     .values("qradar_category")
                     .annotate(count=Count("id"))
                 )
-                for item in category_counts:
-                    category_counter[item["qradar_category"]] += item["count"]
+                for item in grouped_categories:
+                    for category in normalize_qradar_categories(
+                        item["qradar_category"]
+                    ):
+                        category_counter[category] += item["count"]
+
+            if cortex_filters is not None:
+                add_category_counts(
+                    DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)
+                )
 
             if forti_filters is not None:
-                forti_category_counts = (
+                add_category_counts(
                     DUFortiSOARIncidentModel.objects.filter(forti_filters)
-                    .exclude(qradar_category__isnull=True)
-                    .exclude(qradar_category__exact="")
-                    .values("qradar_category")
-                    .annotate(count=Count("id"))
                 )
-                for item in forti_category_counts:
-                    category_counter[item["qradar_category"]] += item["count"]
 
             # Step 5: Format the response for graphing
             response_data = [
