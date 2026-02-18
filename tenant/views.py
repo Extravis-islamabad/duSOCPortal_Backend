@@ -4465,7 +4465,11 @@ class IncidentDetailView(APIView):
                     if is_cortex_soar and " " in incident["name"]
                     else incident["name"],
                     "customFields": {
-                        "phase": incident["incident_phase"] or "Detection",
+                        "phase": (
+                            incident["status"]
+                            if is_forti_soar
+                            else (incident["incident_phase"] or None)
+                        ),
                         "priority": incident["incident_priority"] or None,
                         # "severity": incident["severity"],
                         "sourceIPs": source_ips_str,
