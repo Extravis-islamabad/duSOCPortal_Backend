@@ -51,7 +51,6 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 from tenant.cortex_soar_tasks import sync_notes_for_incident
-from tenant.ibm_qradar_tasks import sync_ibm_tenant_daily_eps
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -522,76 +521,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
-        # a = FortiSOAR(
-        #     token="c06a7a718b2fd1e323700fc2d2b20e031d99093bfa2085c071b9d0eace507e11",
-        #     ip_address="10.160.188.245",
-        #     port=443,
-        # )
-        # tenants = DUFortiSOARTenants.objects.all()
-        # count=0
-        # for tenant in tenants:
-        #     if count == 0:
-        #         count+=1
-        #         continue
-
-        # data = a._get_alerts(tenant_name="CDC-Mey-DW")
-        sync_ibm_tenant_daily_eps()
-
-        return Response({"data": "gffh"}, status=status.HTTP_200_OK)
-
-
-# with IBMQradarToken(
-#     ip_address="10.225.148.146",
-#     port=443,
-#     api_key="4d4b7dab-755f-43c9-a43d-fe7c31168362",
-# ) as ibm:
-#     # data = ibm.test_integration()
-#     data = ibm._get_offenses()
-#     print(data)
-# sync_threat_alert_details()
-# sync_ibm_tenant_daily_eps()
-# sync_ibm_admin_eps.delay()
-# sync_successful_logons.delay()
-# sync_dos_event_counts()
-# sync_requests_for_soar()
-# sync_correlated_events_data(
-#     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
-# )
-
-# sync_aep_entra_failures_data(
-#     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
-# )
-
-# sync_allowed_outbound_data(
-#     "svc.soc.portal", "SeonRx##0@55555", "10.225.148.146", 443, 3
-# )
-# This will delete the tenants and cascade delete related incidents
-# sync_notes()
-# sync_ibm.delay()
-# sync_itsm_tickets_soar_ids.delay()
-# sync_daily_closure_reason_counts.delay()
-# sync_dos_event_counts.delay()
-# sync_suspicious_event_counts.delay()
-# sync_destination_address_counts.delay()
-# sync_total_traffic.delay()
-# sync_weekly_correlated_event_counts.delay()
-# sync_correlated_event_counts.delay()
-# sync_recon_event_counts.delay()
-# sync_ibm_event_counts.delay()
-# sync_threat_intel.delay()
-# sync_threat_intel_for_tenants.delay()
-# sync_threat_alert_details.delay()
-# with Cyware(
-#     base_url="https://du.cyware.com",
-#     access_key="c54d63c9-8c08-4921-adee-8a83a2112104",
-#     secret_key="24303184-4d71-4935-9608-24ffba93c8e0",
-# ) as cyware:
-#     data = cyware.get_list_groups()
-#     print(data)
-# sync_requests_for_soar.delay()
-# sync_itsm_tenants_tickets.delay()
-# sync_event_log_sources.delay()
-# return Response({"message": "Hello, world!"})
+        return Response({"data": "data"}, status=status.HTTP_200_OK)
 
 
 class DateTimeStorageView(APIView):
@@ -3759,7 +3689,6 @@ class IncidentsView(APIView):
                     "account",
                     "name",
                     "status",
-                    # "severity",
                     "incident_priority",
                     "incident_phase",
                     "created",
@@ -3781,7 +3710,6 @@ class IncidentsView(APIView):
                     "account",
                     "name",
                     "status",
-                    # "severity",
                     "incident_priority",
                     "incident_phase",
                     "created",
@@ -3796,6 +3724,10 @@ class IncidentsView(APIView):
                     "configuration_item",
                 )
             )
+            for row in cortex_rows:
+                row["_source"] = "cortex"
+            for row in forti_rows:
+                row["_source"] = "forti"
             queryset = sorted(
                 cortex_rows + forti_rows,
                 key=lambda row: row["created"] or datetime.min,
@@ -3846,7 +3778,12 @@ class IncidentsView(APIView):
                     if len(row["name"].strip().split(" ", 1)) > 1
                     else row["name"]
                 )
-
+                status_value = row["status"]
+                if row.get("_source") == "forti":
+                    normalized_status = str(row.get("status") or "").strip().lower()
+                    status_value = (
+                        2 if normalized_status in ["2", "closed", "resolved"] else 1
+                    )
                 incidents.append(
                     {
                         "id": f"{row['id']}",
@@ -3854,8 +3791,7 @@ class IncidentsView(APIView):
                         "account": row["account"],
                         "name": row["name"],
                         "description": description,
-                        "status": row["status"],
-                        # "severity": row["severity"],
+                        "status": status_value,
                         "priority": row["incident_priority"],
                         "phase": row["incident_phase"],
                         "created": created_date,
