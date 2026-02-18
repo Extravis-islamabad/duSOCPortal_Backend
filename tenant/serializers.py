@@ -1461,6 +1461,7 @@ class IBMQradarAssestsSerializer(serializers.ModelSerializer):
 
 class DuITSMTicketsSerializer(serializers.ModelSerializer):
     itsm_tenant = serializers.SerializerMethodField()
+    integration_id = serializers.SerializerMethodField()
     integration = serializers.SerializerMethodField()
     soar_owner = serializers.SerializerMethodField()
 
@@ -1481,6 +1482,7 @@ class DuITSMTicketsSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "itsm_tenant",
+            "integration_id",
             "integration",
         ]
 
@@ -1490,38 +1492,64 @@ class DuITSMTicketsSerializer(serializers.ModelSerializer):
     def get_integration(self, obj):
         return obj.integration.instance_name if obj.integration else None
 
+    def _get_scoped_soar_incidents(self, obj):
+        """
+        Resolve Cortex/Forti incidents for a ticket `soar_id` within the authenticated tenant scope.
+        Returns tuple: (cortex_incident, forti_incident)
+        """
+        if not obj.soar_id:
+            return None, None
+
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return None, None
+
+        cache_key = f"{request.user.id}:{obj.soar_id}"
+        if not hasattr(self, "_soar_incidents_cache"):
+            self._soar_incidents_cache = {}
+        if cache_key in self._soar_incidents_cache:
+            return self._soar_incidents_cache[cache_key]
+
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            self._soar_incidents_cache[cache_key] = (None, None)
+            return None, None
+
+        cortex_soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
+        forti_soar_ids = tenant.company.forti_soar_tenants.values_list("id", flat=True)
+
+        cortex_incident = DUCortexSOARIncidentFinalModel.objects.filter(
+            db_id=obj.soar_id, cortex_soar_tenant_id__in=cortex_soar_ids
+        ).first()
+        forti_incident = DUFortiSOARIncidentModel.objects.filter(
+            db_id=obj.soar_id, forti_soar_tenant_id__in=forti_soar_ids
+        ).first()
+
+        self._soar_incidents_cache[cache_key] = (cortex_incident, forti_incident)
+        return cortex_incident, forti_incident
+
+    def get_integration_id(self, obj):
+        cortex_incident, forti_incident = self._get_scoped_soar_incidents(obj)
+
+        if cortex_incident and cortex_incident.integration_id:
+            return cortex_incident.integration_id
+        if forti_incident and forti_incident.integration_id:
+            return forti_incident.integration_id
+        return None
+
     def get_soar_owner(self, obj):
         """
         Return the incident owner for this ticket's `soar_id` from either
         Cortex SOAR or FortiSOAR, scoped to the authenticated tenant's SOAR accounts.
         """
-        if not obj.soar_id:
-            return None
-
-        # The serializer receives the request via context in the view.
-        request = self.context.get("request")
-        if request is None or not request.user.is_authenticated:
-            return None
-
-        # Identify the tenant of the current user
-        try:
-            tenant = Tenant.objects.get(tenant=request.user)
-        except Tenant.DoesNotExist:
-            return None
-        cortex_soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
-        forti_soar_ids = tenant.company.forti_soar_tenants.values_list("id", flat=True)
+        cortex_incident, forti_incident = self._get_scoped_soar_incidents(obj)
 
         # Prefer Cortex SOAR owner when available
-        cortex_incident = DUCortexSOARIncidentFinalModel.objects.filter(
-            db_id=obj.soar_id, cortex_soar_tenant_id__in=cortex_soar_ids
-        ).first()
         if cortex_incident and cortex_incident.owner:
             return cortex_incident.owner
 
         # Fallback to FortiSOAR incident owner for the same SOAR ID
-        forti_incident = DUFortiSOARIncidentModel.objects.filter(
-            db_id=obj.soar_id, forti_soar_tenant_id__in=forti_soar_ids
-        ).first()
         if forti_incident:
             return forti_incident.owner
 
