@@ -4513,6 +4513,58 @@ class IncidentDetailView(APIView):
             )
 
 
+class FortiSOARIncidentDetailView(IncidentDetailView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsTenant]
+
+    @swagger_auto_schema(
+        operation_description="Retrieves detailed information for a specific Fortisoar incident without requiring integration ID.",
+        manual_parameters=[
+            openapi.Parameter(
+                "incident_db_id",
+                openapi.IN_PATH,
+                description="Database ID of the Fortisoar incident",
+                type=openapi.TYPE_INTEGER,
+                required=True,
+            ),
+        ],
+        responses={
+            200: openapi.Response(
+                description="Fortisoar incident details retrieved successfully"
+            ),
+            400: openapi.Response(
+                description="No active Fortisoar integration configured"
+            ),
+            404: openapi.Response(description="Tenant or incident not found"),
+            500: openapi.Response(description="Internal server error"),
+        },
+        tags=["SOAR Incidents"],
+    )
+    def get(self, request, incident_db_id):
+        try:
+            tenant = Tenant.objects.get(tenant=request.user)
+        except Tenant.DoesNotExist:
+            return Response({"error": "Tenant not found."}, status=404)
+
+        forti_integration = (
+            Integration.objects.filter(
+                company=tenant.company,
+                integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                soar_subtype=SoarSubTypes.FORTI_SOAR,
+                status=True,
+            )
+            .order_by("-id")
+            .first()
+        )
+        if not forti_integration:
+            return Response(
+                {"error": "No active Fortisoar integration configured."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return super().get(request, incident_db_id, forti_integration.id)
+
+
 class OffenseDetailsWithFlowsAndAssetsAPIView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
