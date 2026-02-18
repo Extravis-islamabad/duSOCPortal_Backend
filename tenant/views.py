@@ -51,6 +51,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 from tenant.cortex_soar_tasks import sync_notes_for_incident
+from tenant.itsm_tasks import sync_itsm_tickets_soar_ids_from_fortisoar
 from tenant.models import (
     Alert,
     CorrelatedEventLog,
@@ -521,6 +522,7 @@ class TestView(APIView):
     # permission_classes = [IsAdminUser]
 
     def get(self, request):
+        sync_itsm_tickets_soar_ids_from_fortisoar()
         return Response({"data": "data"}, status=status.HTTP_200_OK)
 
 
@@ -1636,7 +1638,9 @@ class TenantITSMTicketsView(APIView):
             paginated_tickets = paginator.paginate_queryset(tickets, request)
 
             # Step 6: Serialize and return response
-            serializer = DuITSMTicketsSerializer(paginated_tickets, many=True)
+            serializer = DuITSMTicketsSerializer(
+                paginated_tickets, many=True, context={"request": request}
+            )
             return paginator.get_paginated_response(serializer.data)
 
         except Exception as e:
@@ -3831,6 +3835,70 @@ class IncidentDetailView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsTenant]
 
+    def _normalize_datetime_value(self, value):
+        if value in ("", " ", None):
+            return None
+
+        parsed_value = None
+        if isinstance(value, datetime):
+            parsed_value = value
+        elif isinstance(value, str):
+            raw_value = value.strip()
+            if not raw_value:
+                return None
+
+            parsed_value = parse_datetime(raw_value)
+            if parsed_value is None and raw_value.endswith("Z"):
+                parsed_value = parse_datetime(raw_value.replace("Z", "+00:00"))
+
+            if parsed_value is None:
+                formats = [
+                    "%Y-%m-%d %H:%M:%S%z",
+                    "%Y-%m-%d %H:%M:%S.%f%z",
+                    "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%d %H:%M:%S.%f",
+                ]
+                for fmt in formats:
+                    try:
+                        parsed_value = datetime.strptime(raw_value, fmt)
+                        break
+                    except ValueError:
+                        continue
+        else:
+            return None
+
+        if parsed_value is None:
+            return None
+
+        current_tz = timezone.get_current_timezone()
+        if timezone.is_naive(parsed_value):
+            return make_aware(parsed_value, current_tz)
+        return parsed_value.astimezone(current_tz)
+
+    def _resolve_sla_reference_datetime(self, incident, is_forti_soar=False):
+        occured = self._normalize_datetime_value(incident.get("occured"))
+        created = self._normalize_datetime_value(incident.get("created"))
+        milestones = [
+            self._normalize_datetime_value(incident.get("incident_tta")),
+            self._normalize_datetime_value(incident.get("incident_ttn")),
+            self._normalize_datetime_value(incident.get("incident_ttdn")),
+        ]
+        milestones = [dt for dt in milestones if dt]
+
+        reference_datetime = occured or created
+
+        # FortiSOAR can provide mixed formats/timezones; if occured is later than
+        # SLA milestones, fallback to created/earliest milestone to avoid negative durations.
+        if is_forti_soar and milestones:
+            earliest_milestone = min(milestones)
+            if reference_datetime is None or reference_datetime > earliest_milestone:
+                if created and created <= earliest_milestone:
+                    reference_datetime = created
+                else:
+                    reference_datetime = earliest_milestone
+
+        return reference_datetime
+
     @swagger_auto_schema(
         operation_description="Retrieves detailed information for a specific SOAR incident (Cortex SOAR or Fortisoar), including SLA breach calculations and related items.",
         manual_parameters=[
@@ -3993,6 +4061,26 @@ class IncidentDetailView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
+            incident["created"] = self._normalize_datetime_value(
+                incident.get("created")
+            )
+            incident["modified"] = self._normalize_datetime_value(
+                incident.get("modified")
+            )
+            incident["occured"] = self._normalize_datetime_value(
+                incident.get("occured")
+            )
+            incident["closed"] = self._normalize_datetime_value(incident.get("closed"))
+            incident["incident_tta"] = self._normalize_datetime_value(
+                incident.get("incident_tta")
+            )
+            incident["incident_ttn"] = self._normalize_datetime_value(
+                incident.get("incident_ttn")
+            )
+            incident["incident_ttdn"] = self._normalize_datetime_value(
+                incident.get("incident_ttdn")
+            )
+
             # Calculate SLA breach information
             sla_breach_info = {
                 "tta": {
@@ -4017,11 +4105,14 @@ class IncidentDetailView(APIView):
                     "actual_datetime": None,
                 },
             }
+            reference_datetime = self._resolve_sla_reference_datetime(
+                incident, is_forti_soar=is_forti_soar
+            )
 
             # Get SLA metrics for the incident's priority level
             if (
                 incident["incident_priority"]
-                and incident["occured"]
+                and reference_datetime
                 and incident["incident_tta"]
                 and incident["incident_ttn"]
                 and incident["incident_ttdn"]
@@ -4043,23 +4134,23 @@ class IncidentDetailView(APIView):
                         break
 
                 if sla_metric:
-                    occured = incident["occured"]
-
                     # Calculate TTA breach
                     if incident["incident_tta"]:
-                        tta_delta_minutes = (
-                            incident["incident_tta"] - occured
-                        ).total_seconds() / 60
-
-                        # Calculate actual datetime using your logic: B = occured + a
-                        a = incident["incident_tta"] - occured
-                        B_tta = occured + a  # This gives us the actual datetime
+                        tta_delta_minutes = max(
+                            0,
+                            (
+                                incident["incident_tta"] - reference_datetime
+                            ).total_seconds()
+                            / 60,
+                        )
 
                         sla_breach_info["tta"]["sla_minutes"] = sla_metric.tta_minutes
                         sla_breach_info["tta"]["actual_minutes"] = round(
                             tta_delta_minutes
                         )
-                        sla_breach_info["tta"]["actual_datetime"] = B_tta
+                        sla_breach_info["tta"]["actual_datetime"] = incident[
+                            "incident_tta"
+                        ]
 
                         if tta_delta_minutes > sla_metric.tta_minutes:
                             sla_breach_info["tta"]["is_breached"] = True
@@ -4069,19 +4160,21 @@ class IncidentDetailView(APIView):
 
                     # Calculate TTN breach
                     if incident["incident_ttn"]:
-                        ttn_delta_minutes = (
-                            incident["incident_ttn"] - occured
-                        ).total_seconds() / 60
-
-                        # Calculate actual datetime using your logic: B = occured + a
-                        a = incident["incident_ttn"] - occured
-                        B_ttn = occured + a  # This gives us the actual datetime
+                        ttn_delta_minutes = max(
+                            0,
+                            (
+                                incident["incident_ttn"] - reference_datetime
+                            ).total_seconds()
+                            / 60,
+                        )
 
                         sla_breach_info["ttn"]["sla_minutes"] = sla_metric.ttn_minutes
                         sla_breach_info["ttn"]["actual_minutes"] = round(
                             ttn_delta_minutes
                         )
-                        sla_breach_info["ttn"]["actual_datetime"] = B_ttn
+                        sla_breach_info["ttn"]["actual_datetime"] = incident[
+                            "incident_ttn"
+                        ]
 
                         if ttn_delta_minutes > sla_metric.ttn_minutes:
                             sla_breach_info["ttn"]["is_breached"] = True
@@ -4091,19 +4184,21 @@ class IncidentDetailView(APIView):
 
                     # Calculate TTDN breach
                     if incident["incident_ttdn"]:
-                        ttdn_delta_minutes = (
-                            incident["incident_ttdn"] - occured
-                        ).total_seconds() / 60
-
-                        # Calculate actual datetime using your logic: B = occured + a
-                        a = incident["incident_ttdn"] - occured
-                        B_ttdn = occured + a  # This gives us the actual datetime
+                        ttdn_delta_minutes = max(
+                            0,
+                            (
+                                incident["incident_ttdn"] - reference_datetime
+                            ).total_seconds()
+                            / 60,
+                        )
 
                         sla_breach_info["ttdn"]["sla_minutes"] = sla_metric.ttdn_minutes
                         sla_breach_info["ttdn"]["actual_minutes"] = round(
                             ttdn_delta_minutes
                         )
-                        sla_breach_info["ttdn"]["actual_datetime"] = B_ttdn
+                        sla_breach_info["ttdn"]["actual_datetime"] = incident[
+                            "incident_ttdn"
+                        ]
 
                         if ttdn_delta_minutes > sla_metric.ttdn_minutes:
                             sla_breach_info["ttdn"]["is_breached"] = True
@@ -4277,6 +4372,9 @@ class IncidentDetailView(APIView):
                         }
                     ]
 
+            normalized_status = str(incident.get("status") or "").strip().lower()
+            is_closed_incident = normalized_status in ["2", "closed", "resolved"]
+
             # Format response
             response = {
                 "incident": {
@@ -4295,7 +4393,7 @@ class IncidentDetailView(APIView):
                     ),
                     "closure_time": (
                         incident["closed"]
-                        if incident["status"] == "2" and incident["closed"]
+                        if is_closed_incident and incident["closed"]
                         else None
                     ),
                     "assignee": (
