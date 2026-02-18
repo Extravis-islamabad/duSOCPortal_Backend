@@ -1897,35 +1897,46 @@ class TypeDistributionView(APIView):
                     )
 
             # Query type distribution using Django ORM
+            # Handles:
+            # - Cortex SOAR: single category value
+            # - FortiSOAR: comma-separated category values
             category_counter = Counter()
 
+            def normalize_qradar_categories(raw_category):
+                categories = [
+                    category.strip()
+                    for category in str(raw_category).split(",")
+                    if category and category.strip()
+                ]
+                return list(dict.fromkeys(categories))
+
+            def add_category_counts(queryset):
+                grouped_categories = (
+                    queryset.filter(filters)
+                    .exclude(qradar_category__isnull=True)
+                    .exclude(qradar_category__exact="")
+                    .values("qradar_category")
+                    .annotate(count=Count("id"))
+                )
+                for item in grouped_categories:
+                    for category in normalize_qradar_categories(
+                        item["qradar_category"]
+                    ):
+                        category_counter[category] += item["count"]
+
             if soar_ids:
-                type_data = (
+                add_category_counts(
                     DUCortexSOARIncidentFinalModel.objects.filter(
                         cortex_soar_tenant__in=soar_ids
                     )
-                    .filter(filters)
-                    .values("qradar_category")
-                    .annotate(count=Count("id"))
-                    .exclude(qradar_category__isnull=True)
-                    .exclude(qradar_category__exact="")
                 )
-                for item in type_data:
-                    category_counter[item["qradar_category"]] += item["count"]
 
             if forti_soar_ids:
-                forti_type_data = (
+                add_category_counts(
                     DUFortiSOARIncidentModel.objects.filter(
                         forti_soar_tenant__in=forti_soar_ids
                     )
-                    .filter(filters)
-                    .values("qradar_category")
-                    .annotate(count=Count("id"))
-                    .exclude(qradar_category__isnull=True)
-                    .exclude(qradar_category__exact="")
                 )
-                for item in forti_type_data:
-                    category_counter[item["qradar_category"]] += item["count"]
 
             # Transform data to match Flask output
             result = [
