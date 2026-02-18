@@ -1532,10 +1532,10 @@ class DuITSMTicketsSerializer(serializers.ModelSerializer):
     def get_integration_id(self, obj):
         cortex_incident, forti_incident = self._get_scoped_soar_incidents(obj)
 
-        if cortex_incident and cortex_incident.integration_id:
-            return cortex_incident.integration_id
         if forti_incident and forti_incident.integration_id:
             return forti_incident.integration_id
+        if cortex_incident and cortex_incident.integration_id:
+            return cortex_incident.integration_id
         return None
 
     def get_soar_owner(self, obj):
