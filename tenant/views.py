@@ -3782,7 +3782,7 @@ class IncidentsView(APIView):
                 if row.get("_source") == "forti":
                     normalized_status = str(row.get("status") or "").strip().lower()
                     status_value = (
-                        2 if normalized_status in ["2", "closed", "resolved"] else 1
+                        "2" if normalized_status in ["2", "closed", "resolved"] else "1"
                     )
                 incidents.append(
                     {
