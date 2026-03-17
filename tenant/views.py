@@ -4414,7 +4414,9 @@ class IncidentDetailView(APIView):
                 if incident.get("analysis_notes"):
                     user = incident["owner"] or "Unknown"
                     created_str = (
-                        incident["created"].strftime("%Y-%m-%d %I:%M %p")
+                        (incident["created"] + timedelta(hours=4)).strftime(
+                            "%Y-%m-%d %I:%M %p"
+                        )
                         if incident["created"]
                         else ""
                     )
