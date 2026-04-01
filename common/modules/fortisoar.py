@@ -135,6 +135,31 @@ class FortiSOAR:
 
         return None
 
+    def safe_parse_int(self, value):
+        """
+        Safely parses integer-like values into an int.
+
+        Returns None for blank, whitespace-only, or invalid values.
+        """
+        if value in ("", " ", None):
+            return None
+
+        if isinstance(value, bool):
+            return int(value)
+
+        if isinstance(value, (int, float)):
+            return int(value)
+
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
     def _get_tenants(self, timeout=SSLConstants.TIMEOUT):
         """
         Fetches the list of tenants from the FortiSOAR endpoint.
@@ -368,7 +393,7 @@ class FortiSOAR:
             mapped_priority = priority_map.get(priority_value, priority_value)
 
             record = DUFortiSOARIncidentModel(
-                db_id=alert.get("id"),
+                db_id=self.safe_parse_int(alert.get("id")),
                 created=self.safe_parse_datetime(alert.get("createDate")),
                 modified=self.safe_parse_datetime(alert.get("modifyDate")),
                 account=name,
@@ -406,8 +431,8 @@ class FortiSOAR:
                 integration_id=integration_id,
                 forti_soar_tenant_id=forti_soar_tenant_id,
                 analysis_notes=alert.get("analysisNotes"),
-                offense_id=alert.get("offenseID"),
-                ticket_id=alert.get("iTSMID"),
+                offense_id=self.safe_parse_int(alert.get("offenseID")),
+                ticket_id=self.safe_parse_int(alert.get("iTSMID")),
             )
 
             records.append(record)
