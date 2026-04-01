@@ -207,11 +207,12 @@ class FortiSOAR:
         logger.info(f"FortiSOAR._get_alerts() started : {start}")
         base_endpoint = f"{self.base_url}/{FortiSOARConstants.ALERTS_ENDPOINT}"
         page = 1
+        limit = FortiSOARConstants.LIMIT
         last_page = None
         all_alerts = []
 
         while True:
-            params = {"tenant__name": tenant_name, "$page": page}
+            params = {"tenant__name": tenant_name, "$page": page, "$limit": limit}
             try:
                 if EnvConstants.LOCAL:
                     proxies = {

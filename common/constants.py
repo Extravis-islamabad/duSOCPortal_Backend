@@ -46,7 +46,7 @@ class SSLConstants:
         VERIFY = True
     else:
         VERIFY = False
-    TIMEOUT = 40
+    TIMEOUT = 200
 
 
 class AllowedOriginsConstants:
@@ -360,6 +360,7 @@ class CortexSOARConstants:
 class FortiSOARConstants:
     TENANT_ENDPOINT = "api/3/tenants"
     ALERTS_ENDPOINT = "api/3/alerts"
+    LIMIT = 1000
 
 
 class AdminWebsocketConstants:
