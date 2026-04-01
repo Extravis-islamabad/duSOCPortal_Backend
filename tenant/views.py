@@ -4132,16 +4132,18 @@ class IncidentDetailView(APIView):
             incident_display_occurred = incident["occured"]
             incident_display_closed = incident["closed"]
             if is_forti_soar:
-                if isinstance(incident_display_modified, datetime):
-                    incident_display_modified = incident_display_modified - timedelta(
-                        hours=5
-                    )
-                if isinstance(incident_display_closed, datetime):
-                    incident_display_closed = incident_display_closed - timedelta(
-                        hours=5
-                    )
+                incident_display_modified = (
+                    incident_display_modified + FORTI_SOAR_TIME_OFFSET
+                    if isinstance(incident_display_modified, datetime)
+                    else incident_display_modified
+                )
                 incident_display_occurred = shift_datetime_for_forti_soar(
                     incident_display_occurred
+                )
+                incident_display_closed = (
+                    incident_display_closed + FORTI_SOAR_TIME_OFFSET
+                    if isinstance(incident_display_closed, datetime)
+                    else incident_display_closed
                 )
 
             # Calculate SLA breach information
