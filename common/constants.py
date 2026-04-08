@@ -469,7 +469,7 @@ SEVERITY_LABELS = {0: "Unknown", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"
 
 
 class APIConstants:
-    API_VERSION = "v1.0.0"
+    API_VERSION = "v1.0.1"
     API_NAME = "duSOC Portal Backend API"
     API_DESCRIPTION = "Backend API for duSOC Portal application"
 
