@@ -378,8 +378,13 @@ class FortiSOAR:
             owner_obj = alert.get("assignedTo")
             owner_fist_name = owner_obj.get("firstname") if owner_obj else None
             owner_last_name = owner_obj.get("lastname") if owner_obj else None
+
             if owner_fist_name and owner_last_name:
                 owner = owner_fist_name + " " + owner_last_name
+            elif owner_fist_name:
+                owner = owner_fist_name
+            elif owner_last_name:
+                owner = owner_last_name
             else:
                 owner = None
 
