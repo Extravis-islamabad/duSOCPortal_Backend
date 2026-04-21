@@ -26,6 +26,7 @@ from common.constants import (
     SoarPriorityConstants,
 )
 from tenant.cortex_soar_tasks import sync_soar_data
+from tenant.forti_soar_tasks import sync_forti_soar_alerts
 from tenant.ibm_qradar_tasks import sync_ibm_qradar_data, sync_ibm_qradar_data_token
 from tenant.itsm_tasks import sync_itsm
 from tenant.models import (
@@ -987,6 +988,7 @@ class SyncCortexSOARDataAPIView(APIView):
     )
     def get(self, request):
         sync_soar_data.delay()
+        sync_forti_soar_alerts.delay()
         return Response({"message": "Sync process for Cotex SOAR data started."})
 
 
