@@ -15,7 +15,7 @@ from integration.models import (
     ThreatIntelligenceSubTypes,
 )
 
-from .models import (  # SoarTenantSlaMetric,
+from .models import (
     Alert,
     Company,
     CywareAlertDetails,
@@ -31,6 +31,7 @@ from .models import (  # SoarTenantSlaMetric,
     DefaultSoarSlaMetric,
     DUCortexSOARIncidentFinalModel,
     DuCortexSOARTenants,
+    DUFortiSOARIncidentModel,
     DUFortiSOARTenants,
     DuIbmQradarTenants,
     DuITSMFinalTickets,
@@ -340,6 +341,44 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
         soar_tenants = validated_data.get("soar_tenants", [])
         forti_soar_tenants = validated_data.get("forti_soar_tenants", [])
         sla_overrides = validated_data.get("sla_overrides", [])
+        # Clear integration-specific data when integrations are removed
+        if "integration_ids" in validated_data:
+            existing_integration_ids = set(
+                company.integrations.values_list("id", flat=True)
+            )
+            new_integration_ids = set(integration_ids or [])
+            removed_integration_ids = existing_integration_ids - new_integration_ids
+
+            if removed_integration_ids:
+                removed_integrations = Integration.objects.filter(
+                    id__in=removed_integration_ids
+                )
+                # Clear IBM QRadar mappings/event collectors if QRadar integration removed
+                if removed_integrations.filter(
+                    integration_type=IntegrationTypes.SIEM_INTEGRATION,
+                    siem_subtype=SiemSubTypes.IBM_QRADAR,
+                ).exists():
+                    TenantQradarMapping.objects.filter(company=company).delete()
+                    company.qradar_tenant.clear()
+                    company.event_collectors.clear()
+                # Clear Forti SOAR tenants if Forti SOAR integration removed
+                if removed_integrations.filter(
+                    integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                    soar_subtype=SoarSubTypes.FORTI_SOAR,
+                ).exists():
+                    company.forti_soar_tenants.clear()
+                # Clear Cortex SOAR tenants and SLA metrics if Cortex SOAR integration removed
+                if removed_integrations.filter(
+                    integration_type=IntegrationTypes.SOAR_INTEGRATION,
+                    soar_subtype=SoarSubTypes.CORTEX_SOAR,
+                ).exists():
+                    company.soar_tenants.clear()
+                    SoarTenantSlaMetric.objects.filter(company=company).delete()
+                # Clear ITSM tenants if ITSM integration removed
+                if removed_integrations.filter(
+                    integration_type=IntegrationTypes.ITSM_INTEGRATION
+                ).exists():
+                    company.itsm_tenants.clear()
 
         # Handle LDAP user onboarding - only add new users
         if ldap_users:
@@ -463,25 +502,41 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                 SoarTenantSlaMetric.objects.filter(company=company).delete()
 
                 # Create new custom SLA metrics (shared across SOAR tenants)
-                if "soar_tenants" in validated_data:
-                    target_soar_tenants = DuCortexSOARTenants.objects.filter(
-                        id__in=soar_tenants
+                for override in sla_overrides:
+                    SoarTenantSlaMetric.objects.create(
+                        company=company,
+                        sla_level=override["sla_level"],
+                        tta_minutes=override["tta_minutes"],
+                        ttn_minutes=override["ttn_minutes"],
+                        ttdn_minutes=override["ttdn_minutes"],
                     )
-                else:
-                    target_soar_tenants = company.soar_tenants.all()
-
-                for soar_tenant in target_soar_tenants:
-                    for override in sla_overrides:
-                        SoarTenantSlaMetric.objects.create(
-                            company=company,
-                            soar_tenant=soar_tenant,
-                            sla_level=override["sla_level"],
-                            tta_minutes=override["tta_minutes"],
-                            ttn_minutes=override["ttn_minutes"],
-                            ttdn_minutes=override["ttdn_minutes"],
-                        )
 
         company.save()
+
+        if qradar_data is not None:
+            requested_qradar_ids = [qt["qradar_tenant_id"] for qt in qradar_data]
+
+            TenantQradarMapping.objects.filter(company=company).exclude(
+                qradar_tenant_id__in=requested_qradar_ids
+            ).delete()
+
+            for qt in qradar_data:
+                qradar_tenant = DuIbmQradarTenants.objects.get(
+                    id=qt["qradar_tenant_id"]
+                )
+                mapping, _ = TenantQradarMapping.objects.get_or_create(
+                    company=company, qradar_tenant=qradar_tenant
+                )
+                mapping.event_collectors.set(
+                    IBMQradarEventCollector.objects.filter(
+                        id__in=qt.get("event_collector_ids", [])
+                    )
+                )
+                if "contracted_volume_type" in qt:
+                    mapping.contracted_volume_type = qt["contracted_volume_type"]
+                if "contracted_volume" in qt:
+                    mapping.contracted_volume = qt["contracted_volume"]
+                mapping.save()
 
         for tenant in tenants:
             if permissions is not None:
@@ -500,25 +555,6 @@ class CompanyTenantUpdateSerializer(serializers.Serializer):
                 TenantRolePermissions.objects.filter(role=role).delete()
                 for perm in permissions:
                     TenantRolePermissions.objects.create(role=role, permission=perm)
-
-            if qradar_data is not None:
-                for qt in qradar_data:
-                    qradar_tenant = DuIbmQradarTenants.objects.get(
-                        id=qt["qradar_tenant_id"]
-                    )
-                    mapping, _ = TenantQradarMapping.objects.get_or_create(
-                        company=company, qradar_tenant=qradar_tenant
-                    )
-                    mapping.event_collectors.set(
-                        IBMQradarEventCollector.objects.filter(
-                            id__in=qt.get("event_collector_ids", [])
-                        )
-                    )
-                    if "contracted_volume_type" in qt:
-                        mapping.contracted_volume_type = qt["contracted_volume_type"]
-                    if "contracted_volume" in qt:
-                        mapping.contracted_volume = qt["contracted_volume"]
-                    mapping.save()
 
             if is_defualt_threat_intel is False and validated_data.get("base_url"):
                 with Cyware(
@@ -555,16 +591,13 @@ class TenantRolePermissionsSerializer(serializers.ModelSerializer):
 class AllTenantDetailSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="tenant.username", read_only=True)
     email = serializers.EmailField(source="tenant.email", read_only=True)
-    user_id = serializers.IntegerField(source="tenant.id", read_only=True)  # ✅ Add this
-    is_active = serializers.BooleanField(
-        source="tenant.is_active", read_only=True
-    )  # Add is_active status
+    user_id = serializers.IntegerField(source="tenant.id", read_only=True)
+    is_active = serializers.BooleanField(source="tenant.is_active", read_only=True)
     permissions = serializers.SerializerMethodField()
     tenant_admin = serializers.SerializerMethodField()
     created_by_id = serializers.IntegerField(source="created_by.id", read_only=True)
     role = serializers.SerializerMethodField()
 
-    # ✅ Fields from Company
     company_name = serializers.SerializerMethodField()
     phone_number = serializers.SerializerMethodField()
     industry = serializers.SerializerMethodField()
@@ -578,7 +611,7 @@ class AllTenantDetailSerializer(serializers.ModelSerializer):
             "user_id",
             "username",
             "email",
-            "is_active",  # Add to fields list
+            "is_active",
             "company_name",
             "phone_number",
             "industry",
@@ -1057,11 +1090,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                 {"ldap_users": "Each user must have a non-empty ldap_group."}
             )
 
-        # if not any(user.get("is_admin") for user in ldap_users):
-        #     raise serializers.ValidationError(
-        #         {"ldap_users": "At least one user must be marked as is_admin=True"}
-        #     )
-
         integration_ids = data.get("integration_ids", [])
         integrations = Integration.objects.none()
         if integration_ids:
@@ -1297,17 +1325,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     **validated_data,
                 )
 
-                # role_type = (
-                #     TenantRole.TenantRoleChoices.TENANT_ADMIN
-                #     if user_data.get("is_admin")
-                #     else TenantRole.TenantRoleChoices.TENANT_USER
-                # )
-                # role = TenantRole.objects.create(
-                #     tenant=tenant,
-                #     name="Tenant Admin" if role_type == 1 else "Tenant User",
-                #     role_type=role_type,
-                # )
-
                 role = TenantRole.objects.create(
                     tenant=tenant,
                     name=TenantRole.TenantRoleChoices.TENANT_USER.label,
@@ -1335,18 +1352,14 @@ class TenantCreateSerializer(serializers.ModelSerializer):
                     DuCortexSOARTenants.objects.filter(id__in=soar_ids)
                 )
                 if not is_default_sla:
-                    for soar_tenant in DuCortexSOARTenants.objects.filter(
-                        id__in=soar_ids
-                    ):
-                        for override in sla_overrides:
-                            SoarTenantSlaMetric.objects.create(
-                                company=company,
-                                soar_tenant=soar_tenant,
-                                sla_level=override["sla_level"],
-                                tta_minutes=override["tta_minutes"],
-                                ttn_minutes=override["ttn_minutes"],
-                                ttdn_minutes=override["ttdn_minutes"],
-                            )
+                    for override in sla_overrides:
+                        SoarTenantSlaMetric.objects.create(
+                            company=company,
+                            sla_level=override["sla_level"],
+                            tta_minutes=override["tta_minutes"],
+                            ttn_minutes=override["ttn_minutes"],
+                            ttdn_minutes=override["ttdn_minutes"],
+                        )
 
             if forti_soar_tenant_data:
                 forti_soar_ids = forti_soar_tenant_data
@@ -1400,31 +1413,6 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         return company
 
 
-# class CustomerEPSSerializer(serializers.ModelSerializer):
-#     qradar_tenant_name = serializers.CharField(
-#         source="qradar_tenant.name", read_only=True
-#     )
-#     qradar_tenant_id = serializers.IntegerField(
-#         source="qradar_tenant.id", read_only=True
-#     )
-#     qradar_tenant_db_id = serializers.IntegerField(
-#         source="qradar_tenant.db_id", read_only=True
-#     )
-#     eps = serializers.SerializerMethodField()
-
-#     class Meta:
-#         model = CustomerEPS
-#         fields = [
-#             "eps",
-#             "qradar_tenant_id",
-#             "qradar_tenant_db_id",
-#             "qradar_tenant_name",
-#         ]
-
-#     def get_eps(self, obj):
-#         return round(obj.eps, 2) if obj.eps is not None else None
-
-
 class DuIbmQradarTenantsSerializer(serializers.ModelSerializer):
     class Meta:
         model = DuIbmQradarTenants
@@ -1473,6 +1461,7 @@ class IBMQradarAssestsSerializer(serializers.ModelSerializer):
 
 class DuITSMTicketsSerializer(serializers.ModelSerializer):
     itsm_tenant = serializers.SerializerMethodField()
+    integration_id = serializers.SerializerMethodField()
     integration = serializers.SerializerMethodField()
     soar_owner = serializers.SerializerMethodField()
 
@@ -1493,6 +1482,7 @@ class DuITSMTicketsSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "itsm_tenant",
+            "integration_id",
             "integration",
         ]
 
@@ -1502,38 +1492,79 @@ class DuITSMTicketsSerializer(serializers.ModelSerializer):
     def get_integration(self, obj):
         return obj.integration.instance_name if obj.integration else None
 
-    def get_soar_owner(self, obj):
+    def _get_scoped_soar_incidents(self, obj):
         """
-        Return the `owner` from DUCortexSOARIncidentFinalModel that
-        matches this ticket's `soar_id` **and** belongs to the current tenant's SOAR accounts.
+        Resolve Cortex/Forti incidents for a ticket `soar_id` within the authenticated tenant scope.
+        Returns tuple: (cortex_incident, forti_incident)
         """
         if not obj.soar_id:
-            return None
+            return None, None
 
-        # The serializer receives the request via context in the view.
         request = self.context.get("request")
         if request is None or not request.user.is_authenticated:
-            return None
+            return None, None
 
-        # Identify the tenant of the current user
+        cache_key = f"{request.user.id}:{obj.soar_id}"
+        if not hasattr(self, "_soar_incidents_cache"):
+            self._soar_incidents_cache = {}
+        if cache_key in self._soar_incidents_cache:
+            return self._soar_incidents_cache[cache_key]
+
         try:
             tenant = Tenant.objects.get(tenant=request.user)
         except Tenant.DoesNotExist:
-            return None
+            self._soar_incidents_cache[cache_key] = (None, None)
+            return None, None
 
-        soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
+        cortex_soar_ids = tenant.company.soar_tenants.values_list("id", flat=True)
+        forti_soar_ids = tenant.company.forti_soar_tenants.values_list("id", flat=True)
 
-        # Fetch the first matching incident inside those SOAR tenants
-        incident = DUCortexSOARIncidentFinalModel.objects.filter(
-            db_id=obj.soar_id, cortex_soar_tenant_id__in=soar_ids
+        cortex_incident = DUCortexSOARIncidentFinalModel.objects.filter(
+            db_id=obj.soar_id, cortex_soar_tenant_id__in=cortex_soar_ids
+        ).first()
+        forti_incident = DUFortiSOARIncidentModel.objects.filter(
+            db_id=obj.soar_id, forti_soar_tenant_id__in=forti_soar_ids
         ).first()
 
-        return incident.owner if incident else None
+        self._soar_incidents_cache[cache_key] = (cortex_incident, forti_incident)
+        return cortex_incident, forti_incident
+
+    def get_integration_id(self, obj):
+        cortex_incident, forti_incident = self._get_scoped_soar_incidents(obj)
+
+        if forti_incident and forti_incident.integration_id:
+            return forti_incident.integration_id
+        if cortex_incident and cortex_incident.integration_id:
+            return cortex_incident.integration_id
+        return None
+
+    def get_soar_owner(self, obj):
+        """
+        Return the incident owner for this ticket's `soar_id` from either
+        Cortex SOAR or FortiSOAR, scoped to the authenticated tenant's SOAR accounts.
+        """
+        cortex_incident, forti_incident = self._get_scoped_soar_incidents(obj)
+
+        # Prefer Cortex SOAR owner when available
+        if cortex_incident and cortex_incident.owner:
+            return cortex_incident.owner
+
+        # Fallback to FortiSOAR incident owner for the same SOAR ID
+        if forti_incident:
+            return forti_incident.owner
+
+        return cortex_incident.owner if cortex_incident else None
 
 
 class DUCortexSOARIncidentSerializer(serializers.ModelSerializer):
     class Meta:
         model = DUCortexSOARIncidentFinalModel
+        fields = "__all__"
+
+
+class DUFortiSOARIncidentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DUFortiSOARIncidentModel
         fields = "__all__"
 
 
@@ -1562,6 +1593,12 @@ class AlertSerializer(serializers.ModelSerializer):
 class RecentIncidentsSerializer(serializers.ModelSerializer):
     class Meta:
         model = DUCortexSOARIncidentFinalModel
+        exclude = ["created_at"]
+
+
+class RecentFortiIncidentsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DUFortiSOARIncidentModel
         exclude = ["created_at"]
 
 
@@ -1718,7 +1755,6 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
     total_incidents = serializers.SerializerMethodField()
     active_incidents = serializers.SerializerMethodField()
     tickets_count = serializers.SerializerMethodField()
-    # sla = serializers.SerializerMethodField()
     asset_count = serializers.SerializerMethodField()
     active_integrations = serializers.SerializerMethodField()
     integrated_tools = serializers.SerializerMethodField()
@@ -1736,7 +1772,6 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
             "total_incidents",
             "active_incidents",
             "tickets_count",
-            # "sla",
             "asset_count",
             "active_integrations",
             "integrated_tools",
@@ -1816,18 +1851,6 @@ class DistinctCompanySerializer(serializers.ModelSerializer):
         return DuITSMFinalTickets.objects.filter(
             itsm_tenant__in=obj.itsm_tenants.all()
         ).count()
-
-    # def get_sla(self, obj):
-    #     if obj.is_default_sla:
-    #         return [
-    #             {
-    #                 "sla_level": sla.get_sla_level_display(),
-    #                 "tta": sla.tta_minutes,
-    #                 "ttn": sla.ttn_minutes,
-    #                 "ttdn": sla.ttdn_minutes,
-    #             }
-    #             for sla in obj.soar_sla_metrics.all()
-    #         ]
 
     def get_asset_count(self, obj):
         try:
@@ -1964,9 +1987,3 @@ class NonActiveCompanySerializer(serializers.ModelSerializer):
 
     def get_active_integrations(self, obj):
         return obj.integrations.count()
-
-
-# class SourceIPGeoLocationSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = SourceIPGeoLocation
-#         fields = "__all__"

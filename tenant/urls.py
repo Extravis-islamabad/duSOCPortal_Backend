@@ -20,6 +20,7 @@ from tenant.views import (
     EPSGraphAPIView,
     EventCollectorsListAPIView,
     FileTypeChoicesView,
+    FortiSOARIncidentDetailView,
     GetTenantAssetsList,
     IncidentDetailView,
     IncidentReportView,
@@ -89,7 +90,6 @@ urlpatterns = [
         "api/datetime-storage/", DateTimeStorageView.as_view(), name="datetime-storage"
     ),
     path("api/asset-report/", AssetReportView.as_view(), name="asset-report"),
-    # path("assets/stats/", GetTenantAssetsStats.as_view(), name="tenant-assets-stats"),
     path("get_itsm_tickets/", TenantITSMTicketsView.as_view(), name="get-itsm-tickets"),
     path("itsm/tickets/<int:db_id>/", TenantITSMTicketDetailView.as_view()),
     path(
@@ -97,21 +97,11 @@ urlpatterns = [
         TenantCortexSOARIncidentsAPIView.as_view(),
         name="get-cortex-soar-incidents",
     ),
-    # path(
-    #     "api/dashboard/severity-distribution/",
-    #     SeverityDistributionView.as_view(),
-    #     name="severity-distribution",
-    # ),
     path(
         "api/dashboard/type-distribution/",
         TypeDistributionView.as_view(),
         name="type-distribution",
     ),
-    # path(
-    #     "api/dashboard/sla-status/",
-    #     SLAStatusView.as_view(),
-    #     name="sla-status",
-    # ),
     path(
         "api/dashboard/owner-distribution/",
         OwnerDistributionView.as_view(),
@@ -121,15 +111,14 @@ urlpatterns = [
     path("api/incidents/", IncidentsView.as_view(), name="incidents"),
     path(
         "api/incidents/<int:incident_db_id>/",
+        FortiSOARIncidentDetailView.as_view(),
+        name="fortisoar-incident-detail",
+    ),
+    path(
+        "api/incidents/<int:incident_db_id>/<int:integration_id>/",
         IncidentDetailView.as_view(),
         name="incident-detail",
     ),
-    # path("api/offense-stats/", OffenseStatsAPIView.as_view(), name="offense-stats"),
-    # path(
-    #     "api/offenses-by-tenant-details/",
-    #     OffenseDetailsByTenantAPIView.as_view(),
-    #     name="offense-details-by-tenant",
-    # ),
     path(
         "api/offense-details/<int:offense_id>/",
         OffenseDetailsWithFlowsAndAssetsAPIView.as_view(),
@@ -158,7 +147,6 @@ urlpatterns = [
         TotalTicketsByTenantAPIView.as_view(),
         name="total-tickets-by-tenant",
     ),
-    # path("api/eps/", EPSCountValuesByDomainAPIView.as_view(), name="tenant"),
     path("api/eps-graph/", EPSGraphAPIView.as_view(), name="eps-graph"),
     path(
         "get_threat_intelligence/",
@@ -218,11 +206,6 @@ urlpatterns = [
         name="sla-overview-cards",
     ),
     path("api/incident-report/", IncidentReportView.as_view(), name="incident-report"),
-    # path(
-    #     "source-ip-geolocations/",
-    #     SourceIPGeoLocationListView.as_view(),
-    #     name="source-ip-geolocations",
-    # ),
     path("file-type-choices/", FileTypeChoicesView.as_view(), name="file-type-choices"),
     path(
         "incidents/download/",

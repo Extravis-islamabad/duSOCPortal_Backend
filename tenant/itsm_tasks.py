@@ -2,6 +2,7 @@ import re
 import time
 
 from celery import shared_task
+from django.db.models import OuterRef, Subquery
 from loguru import logger
 
 from common.modules.itsm import ITSM
@@ -11,7 +12,7 @@ from integration.models import (
     IntegrationTypes,
     ItsmSubTypes,
 )
-from tenant.models import DuITSMTenants
+from tenant.models import DUFortiSOARIncidentModel, DuITSMFinalTickets, DuITSMTenants
 
 
 @shared_task
@@ -132,6 +133,46 @@ def sync_itsm_tickets_soar_ids():
 
 
 @shared_task
+def sync_itsm_tickets_soar_ids_from_fortisoar():
+    """
+    Set DuITSMFinalTickets.soar_id from DUFortiSOARIncidentModel.db_id where:
+    - DUFortiSOARIncidentModel.ticket_id == DuITSMFinalTickets.db_id
+    - DuITSMFinalTickets.soar_id IS NULL
+    """
+    start = time.time()
+    logger.info("Running ITSMTasks.sync_itsm_tickets_soar_ids_from_fortisoar() task")
+    matching_ticket_ids = DUFortiSOARIncidentModel.objects.filter(
+        ticket_id__isnull=False, db_id__isnull=False
+    ).values_list("ticket_id", flat=True)
+
+    if not matching_ticket_ids.exists():
+        logger.info("No FortiSOAR incidents found with both ticket_id and db_id")
+        return
+
+    latest_soar_id_subquery = (
+        DUFortiSOARIncidentModel.objects.filter(
+            ticket_id=OuterRef("db_id"), db_id__isnull=False
+        )
+        .order_by("-updated_at", "-id")
+        .values("db_id")[:1]
+    )
+
+    updated_count = DuITSMFinalTickets.objects.filter(
+        soar_id__isnull=True,
+        db_id__in=matching_ticket_ids,
+    ).update(soar_id=Subquery(latest_soar_id_subquery))
+
+    if updated_count:
+        logger.info(f"Updated {updated_count} ITSM tickets from FortiSOAR mappings")
+    else:
+        logger.info("No ITSM tickets matched for SOAR ID updates")
+
+    logger.info(
+        f"ITSMTasks.sync_itsm_tickets_soar_ids_from_fortisoar() task took {time.time() - start} seconds"
+    )
+
+
+@shared_task
 def sync_itsm():
     logger.info("Running ITSMTasks.sync_itsm() task")
     logger.info("Running sync_itsm_tenants_cron() task")
@@ -140,3 +181,5 @@ def sync_itsm():
     sync_itsm_tenants_tickets.delay()
     logger.info("Running sync_itsm_tickets_soar_ids() task")
     sync_itsm_tickets_soar_ids.delay()
+    logger.info("Running sync_itsm_tickets_soar_ids_from_fortisoar() task")
+    sync_itsm_tickets_soar_ids_from_fortisoar.delay()

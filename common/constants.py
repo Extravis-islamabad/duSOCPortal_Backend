@@ -46,7 +46,7 @@ class SSLConstants:
         VERIFY = True
     else:
         VERIFY = False
-    TIMEOUT = 40
+    TIMEOUT = 200
 
 
 class AllowedOriginsConstants:
@@ -138,6 +138,7 @@ class IBMQradarConstants:
     START PARSEDATETIME('{start_time}')
     STOP PARSEDATETIME('{end_time}')
     """
+
     AQL_QUERY_FOR_DOS_EVENTS = """
     SELECT COUNT(*) AS total_dos_events
     FROM events
@@ -359,6 +360,7 @@ class CortexSOARConstants:
 class FortiSOARConstants:
     TENANT_ENDPOINT = "api/3/tenants"
     ALERTS_ENDPOINT = "api/3/alerts"
+    LIMIT = 1000
 
 
 class AdminWebsocketConstants:
@@ -436,6 +438,14 @@ class CywareConstants:
     ALERT_DETAIL_ENDPOINT = "api/csap/v1/get_alert_detail/"
 
 
+class SoarPriorityConstants:
+    P1 = "P1"
+    P2 = "P2"
+    P3 = "P3"
+    P4 = "P4"
+    VALUES = [P1, P2, P3, P4]
+
+
 class EncryptedKeyConstants:
     ENCRYPTED_KEY = os.getenv("ENCRYPTED_KEY", None)
     if ENCRYPTED_KEY is None:
@@ -459,7 +469,7 @@ SEVERITY_LABELS = {0: "Unknown", 1: "Low", 2: "Medium", 3: "High", 4: "Critical"
 
 
 class APIConstants:
-    API_VERSION = "v1.0.0"
+    API_VERSION = "v1.0.1"
     API_NAME = "duSOC Portal Backend API"
     API_DESCRIPTION = "Backend API for duSOC Portal application"
 

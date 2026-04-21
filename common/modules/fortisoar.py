@@ -1,5 +1,6 @@
 import time
 from datetime import datetime
+from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 import requests
@@ -79,6 +80,86 @@ class FortiSOAR:
         except Exception:
             return None
 
+    def safe_parse_event_time(self, value):
+        """
+        Safely parses FortiSOAR eventTime values into a normalized string.
+
+        Supports multiple input formats (12h/24h, optional seconds, optional AM/PM).
+        Returns a string formatted as "%Y-%m-%d %H:%M:%S" or None if parsing fails.
+        """
+        if value in ("", " ", None):
+            return None
+
+        if isinstance(value, (int, float)):
+            try:
+                dt = datetime.fromtimestamp(value)
+                return dt.replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                return None
+
+        if isinstance(value, datetime):
+            return value.replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+
+        if not isinstance(value, str):
+            return None
+
+        raw = value.strip()
+        if not raw:
+            return None
+
+        candidates = [raw]
+        parts = raw.split()
+        if len(parts) >= 2 and parts[-1].upper() in ("AM", "PM"):
+            candidates.append(" ".join(parts[:-1]))
+
+        formats = [
+            "%m/%d/%Y %I:%M %p",
+            "%m/%d/%Y %I:%M:%S %p",
+            "%m/%d/%Y %H:%M %p",
+            "%m/%d/%Y %H:%M:%S %p",
+            "%m/%d/%Y %H:%M",
+            "%m/%d/%Y %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+        ]
+
+        for candidate in candidates:
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(candidate, fmt)
+                    return dt.replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    continue
+
+        return None
+
+    def safe_parse_int(self, value):
+        """
+        Safely parses integer-like values into an int.
+
+        Returns None for blank, whitespace-only, or invalid values.
+        """
+        if value in ("", " ", None):
+            return None
+
+        if isinstance(value, bool):
+            return int(value)
+
+        if isinstance(value, (int, float)):
+            return int(value)
+
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
     def _get_tenants(self, timeout=SSLConstants.TIMEOUT):
         """
         Fetches the list of tenants from the FortiSOAR endpoint.
@@ -149,40 +230,85 @@ class FortiSOAR:
         """
         start = time.time()
         logger.info(f"FortiSOAR._get_alerts() started : {start}")
-        endpoint = f"{self.base_url}/{FortiSOARConstants.ALERTS_ENDPOINT}?tenant__name={tenant_name}"
-        try:
-            if EnvConstants.LOCAL:
-                proxies = {
-                    "http": "http://127.0.0.1:8080",
-                    "https": "http://127.0.0.1:8080",
-                }
-                response = requests.get(
-                    endpoint,
-                    headers=self.headers,
-                    verify=SSLConstants.VERIFY,
-                    proxies=proxies,
-                    timeout=timeout,
+        base_endpoint = f"{self.base_url}/{FortiSOARConstants.ALERTS_ENDPOINT}"
+        page = 1
+        limit = FortiSOARConstants.LIMIT
+        last_page = None
+        all_alerts = []
+
+        while True:
+            params = {"tenant__name": tenant_name, "$page": page, "$limit": limit}
+            try:
+                if EnvConstants.LOCAL:
+                    proxies = {
+                        "http": "http://127.0.0.1:8080",
+                        "https": "http://127.0.0.1:8080",
+                    }
+                    response = requests.get(
+                        base_endpoint,
+                        params=params,
+                        headers=self.headers,
+                        verify=SSLConstants.VERIFY,
+                        proxies=proxies,
+                        timeout=timeout,
+                    )
+                else:
+                    response = requests.get(
+                        base_endpoint,
+                        params=params,
+                        headers=self.headers,
+                        verify=SSLConstants.VERIFY,
+                        timeout=timeout,
+                    )
+            except Exception as e:
+                logger.error(
+                    f"FortiSOAR._get_alerts() failed with exception : {str(e)} on page {page}"
                 )
-            else:
-                response = requests.get(
-                    endpoint,
-                    headers=self.headers,
-                    verify=SSLConstants.VERIFY,
-                    timeout=timeout,
+                raise Exception(
+                    f"FortiSOAR._get_alerts() failed with exception : {str(e)}"
                 )
-        except Exception as e:
-            logger.error(f"FortiSOAR._get_alerts() failed with exception : {str(e)}")
-            raise Exception(f"FortiSOAR._get_alerts() failed with exception : {str(e)}")
-        if response.status_code != 200:
-            logger.warning(
-                f"FortiSOAR._get_alerts() return the status code {response.status_code}"
-            )
-            raise Exception(
-                f"FortiSOAR._get_alerts() return the status code {response.status_code}"
+
+            if response.status_code != 200:
+                logger.warning(
+                    f"FortiSOAR._get_alerts() returned status code {response.status_code} on page {page}"
+                )
+                raise Exception(
+                    f"FortiSOAR._get_alerts() return the status code {response.status_code}"
+                )
+
+            data = response.json()
+            page_alerts = data.get("hydra:member", [])
+            all_alerts.extend(page_alerts)
+
+            # Determine last page from hydra:view metadata if available
+            view = data.get("hydra:view") or {}
+            if last_page is None and view.get("hydra:last"):
+                parsed = urlparse(view.get("hydra:last"))
+                qs = parse_qs(parsed.query)
+                last_page_param = qs.get("$page") or qs.get("%24page")
+                if last_page_param:
+                    try:
+                        last_page = int(last_page_param[0])
+                    except (TypeError, ValueError):
+                        last_page = None
+
+            logger.debug(
+                f"FortiSOAR._get_alerts() fetched page {page} with {len(page_alerts)} alerts"
             )
 
-        data = response.json()
-        return data
+            if last_page is not None and page >= last_page:
+                break
+            if not page_alerts:
+                break
+
+            page += 1
+
+        logger.info(
+            f"FortiSOAR._get_alerts() collected {len(all_alerts)} alerts across {page} pages for {tenant_name}"
+        )
+
+        # Return in the same structure expected by downstream consumers
+        return all_alerts
 
     def transform_tenants(self, data, integration_id):
         """
@@ -215,8 +341,7 @@ class FortiSOAR:
         :return: A list of dictionaries containing the transformed alert information.
         """
 
-        alerts_data = data.get("hydra:member", [])
-
+        alerts_data = data
         if not alerts_data:
             logger.warning("No alerts found in FortiSOAR API response")
             return []
@@ -250,9 +375,30 @@ class FortiSOAR:
                 else None
             )
             event_time = alert.get("eventTime")
+            owner_obj = alert.get("assignedTo")
+            owner_fist_name = owner_obj.get("firstname") if owner_obj else None
+            owner_last_name = owner_obj.get("lastname") if owner_obj else None
+
+            if owner_fist_name and owner_last_name:
+                owner = owner_fist_name + " " + owner_last_name
+            elif owner_fist_name:
+                owner = owner_fist_name
+            elif owner_last_name:
+                owner = owner_last_name
+            else:
+                owner = None
+
+            priority_value = priority_obj.get("itemValue") if priority_obj else None
+            priority_map = {
+                "P1": "P1 Critical",
+                "P2": "P2 High",
+                "P3": "P3 Medium",
+                "P4": "P4 Low",
+            }
+            mapped_priority = priority_map.get(priority_value, priority_value)
 
             record = DUFortiSOARIncidentModel(
-                db_id=alert.get("id"),
+                db_id=self.safe_parse_int(alert.get("id")),
                 created=self.safe_parse_datetime(alert.get("createDate")),
                 modified=self.safe_parse_datetime(alert.get("modifyDate")),
                 account=name,
@@ -260,21 +406,13 @@ class FortiSOAR:
                 status=status_obj.get("itemValue") if status_obj else None,
                 # record["status_value"] = status_obj.get("orderIndex") if status_obj else None
                 reason=alert.get("qradarCloseReason"),
-                occured=(
-                    datetime.strptime(event_time, "%m/%d/%Y %I:%M %p").strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    )
-                    if event_time
-                    else None
-                ),
+                occured=self.safe_parse_event_time(event_time),
                 closed=self.safe_parse_datetime(alert.get("resolveddate")),
-                owner=alert.get("assignedTo"),
+                owner=owner,
                 severity=severity_obj.get("orderIndex") if severity_obj else None,
                 # record["severity_text"] = severity_obj.get("itemValue") if severity_obj else None
                 tta_calculation=alert.get("tTACalculation"),
-                incident_priority=priority_obj.get("itemValue")
-                if priority_obj
-                else None,
+                incident_priority=mapped_priority,
                 incident_phase=phase_obj.get("itemValue") if phase_obj else None,
                 source_ips=alert.get("sourceIp"),
                 incident_tta=incident_tta,
@@ -289,15 +427,17 @@ class FortiSOAR:
                 list_of_rules_offense=alert.get("listOfRulesOffense"),
                 configuration_item=alert.get("logSourceName"),
                 log_source_type=alert.get("logSourceType"),
-                qradar_category=alert.get("qradarCategory"),
-                qradar_sub_category=alert.get("qradarSubCategory"),
+                qradar_category=alert.get("qRadarCategory"),
+                qradar_sub_category=alert.get("qRadarSubCategory"),
                 itsm_sync_status=itsmsyncstatus,
                 mitre_tactic=alert.get("mitreTactic"),
                 mitre_technique=alert.get("mitreTechnique"),
                 close_notes=alert.get("closureNotes"),
-                integration=integration_id,
-                forti_soar_tenant=forti_soar_tenant_id,
+                integration_id=integration_id,
+                forti_soar_tenant_id=forti_soar_tenant_id,
                 analysis_notes=alert.get("analysisNotes"),
+                offense_id=self.safe_parse_int(alert.get("offenseID")),
+                ticket_id=self.safe_parse_int(alert.get("iTSMID")),
             )
 
             records.append(record)
@@ -379,8 +519,10 @@ class FortiSOAR:
                         "configuration_item",
                         "close_notes",
                         "analysis_notes",
+                        "offense_id",
+                        "ticket_id",
                     ],
-                    unique_fields=["account", "db_id"],
+                    unique_fields=["account", "db_id", "integration"],
                 )
                 logger.info(f"Inserted the incident records: {len(records)}")
                 logger.success(

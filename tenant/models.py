@@ -422,22 +422,6 @@ class IBMQradarDailyEPS(models.Model):
         db_table = "du_ibm_qradar_daily_eps"
 
 
-# class CustomerEPS(models.Model):
-#     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
-#     qradar_tenant = models.ForeignKey(DuIbmQradarTenants, on_delete=models.CASCADE)
-#     customer = models.CharField(max_length=255, unique=True)
-#     eps = models.FloatField()
-
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-
-#     class Meta:
-#         db_table = "customer_eps"
-
-#     def __str__(self):
-#         return f"{self.customer} - EPS: {self.eps}"
-
-
 class IBMQradarOffense(models.Model):
     id = models.AutoField(primary_key=True)
     db_id = models.IntegerField(unique=True)  # Maps to 'id' in JSON
@@ -594,6 +578,7 @@ class DuCortexSOARTenants(models.Model):
 
     class Meta:
         db_table = "du_cortex_soar_tenants"
+        unique_together = ("db_id", "integration")
 
     def __str__(self):
         return self.name
@@ -659,7 +644,7 @@ class DUCortexSOARIncidentFinalModel(models.Model):
         db_table = "du_cortex_soar_final_incidents"
         constraints = [
             models.UniqueConstraint(
-                fields=["account", "db_id"], name="unique_account_db_id"
+                fields=["account", "db_id", "integration"], name="unique_account_db_id"
             )
         ]
 
@@ -1114,10 +1099,6 @@ class SoarTenantSlaMetric(models.Model):
         on_delete=models.CASCADE,
         related_name="soar_sla_metrics",
     )
-    soar_tenant = models.ForeignKey(
-        DuCortexSOARTenants, on_delete=models.CASCADE, related_name="sla_metrics"
-    )
-
     sla_level = models.IntegerField(choices=SlaLevelChoices.choices)
 
     tta_minutes = models.PositiveIntegerField(help_text="Time to Acknowledge")
@@ -1126,10 +1107,10 @@ class SoarTenantSlaMetric(models.Model):
 
     class Meta:
         db_table = "soar_tenant_sla_metrics"
-        unique_together = ("company", "soar_tenant", "sla_level")
+        unique_together = ("company", "sla_level")
 
     def __str__(self):
-        return f"SLA  - {self.company} - {self.soar_tenant} - {self.get_sla_level_display()}"
+        return f"SLA  - {self.company} - {self.get_sla_level_display()}"
 
 
 class TotalEvents(models.Model):
@@ -1449,23 +1430,6 @@ class RemoteUsersCount(models.Model):
         return f"{self.qradar_tenant} - {self.full_date}: {self.total_remote_users}"
 
 
-# class SourceIPGeoLocation(models.Model):
-#     integration = models.ForeignKey(Integration, on_delete=models.CASCADE)
-#     source_ip = models.GenericIPAddressField()
-#     latitude = models.FloatField(null=True, blank=True)
-#     longitude = models.FloatField(null=True, blank=True)
-#     geo_type = models.CharField(max_length=50, null=True, blank=True)
-
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-
-#     class Meta:
-#         db_table = "source_ip_geolocations"
-
-#     def __str__(self):
-#         return f"{self.source_ip} - ({self.latitude}, {self.longitude})"
-
-
 class DUSoarNotes(models.Model):
     db_id = models.CharField(unique=True)
     category = models.CharField(max_length=255, null=True, blank=True)
@@ -1576,6 +1540,7 @@ class DUFortiSOARTenants(models.Model):
 
     class Meta:
         db_table = "du_forti_soar_tenants"
+        unique_together = ("db_id", "integration")
 
     def __str__(self):
         return self.name
@@ -1635,6 +1600,8 @@ class DUFortiSOARIncidentModel(models.Model):
     configuration_item = models.CharField(max_length=100, blank=True, null=True)
     close_notes = models.TextField(blank=True, null=True)
     analysis_notes = models.TextField(blank=True, null=True)
+    offense_id = models.IntegerField(null=True, blank=True)
+    ticket_id = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1642,7 +1609,8 @@ class DUFortiSOARIncidentModel(models.Model):
         db_table = "du_forti_soar_incidents"
         constraints = [
             models.UniqueConstraint(
-                fields=["account", "db_id"], name="forti_soar_unique_account_db_id"
+                fields=["account", "db_id", "integration"],
+                name="forti_soar_unique_account_db_id",
             )
         ]
 

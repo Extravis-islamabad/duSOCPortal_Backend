@@ -318,7 +318,11 @@ class GetIntegrationSerializer(serializers.ModelSerializer):
         if obj.integration_type == IntegrationTypes.SIEM_INTEGRATION:
             return obj.du_ibm_qradar_tenants.count()
         elif obj.integration_type == IntegrationTypes.SOAR_INTEGRATION:
-            return obj.du_cortex_soar_tenants.count()
+            if obj.soar_subtype == SoarSubTypes.CORTEX_SOAR:
+                return obj.du_cortex_soar_tenants.count()
+            elif obj.soar_subtype == SoarSubTypes.FORTI_SOAR:
+                return obj.du_forti_soar_tenants.count()
+            return 0
         elif obj.integration_type == IntegrationTypes.ITSM_INTEGRATION:
             return obj.du_itsm_tenants.count()
         return 0
