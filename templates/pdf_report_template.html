@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  {% load static %}
+  <head>
+    <meta charset="UTF-8" />
+    <title>All Incidents Report</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background-color: #f9f9f9;
+        color: #333;
+      }
+
+      .report-header {
+        background-image: url("{{ header_bg_path }}");
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: center;
+        color: black;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 40px 50px;
+        min-height: 153px;
+      }
+
+      .report-header h1 {
+        font-size: 18px;
+        font-weight: 800;
+        margin: 0;
+      }
+
+      .logo {
+        height: 60px;
+      }
+
+      .report-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 30px 0px;
+      }
+        .report-table-container{
+        padding:0 50px;
+        }
+      .report-table th,
+
+      .report-table td {
+        border: 1px solid #ddd;
+        padding: 12px;
+        font-size: 18px;
+        text-align: left;
+        word-wrap: break-word;
+        white-space: normal;
+      }
+
+      .report-table {
+        table-layout: fixed;
+        width: 100%;
+        font-size: 18px;
+    }
+    .report-table-container {
+    padding: 0 20px;
+    }
+
+    @page {
+        size: A4;
+        margin: 20mm;
+    }
+
+    </style>
+  </head>
+  <body>
+    <div class="report-header">
+      <img src="{{ logo_path }}" alt="Logo" class="logo" />
+    </div>
+<div class="report-table-container">
+    <table class="report-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>ACCOUNT</th>
+          <th>NAME</th>
+          <th>INCIDENT_PRIORITY</th>
+          <th>MITRE_TACTIC</th>
+          <th>MITRE_TECHNIQUE</th>
+          <th>OCCURED_AT</th>
+          <th>STATUS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for incident in incidents %}
+        <tr>
+          <td>{{ incident.ID }}</td>
+          <td>{{ incident.ACCOUNT }}</td>
+          <td>{{ incident.NAME }}</td>
+          <td>{{ incident.INCIDENT_PRIORITY }}</td>
+          <td>{{ incident.MITRE_TACTIC }}</td>
+          <td>{{ incident.MITRE_TECHNIQUE }}</td>
+          <td>{{ incident.OCCURED_AT }}</td>
+          <td>{{ incident.STATUS }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8">No incidents found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </body>
+</html>

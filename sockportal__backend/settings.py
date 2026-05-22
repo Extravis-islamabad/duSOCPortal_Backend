@@ -34,7 +34,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = DjangoConstants.SECRET_KEY
-
+TIME_ZONE = "Asia/Dubai"
+USE_TZ = True
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
@@ -55,6 +56,8 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "channels",
+    "rest_framework_swagger",  # Swagger
+    "drf_yasg",  # adding api documentation
 ]
 
 INSTALLED_APPS += [
@@ -63,6 +66,7 @@ INSTALLED_APPS += [
     "tenantadmin",
     "integration",
 ]
+
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
@@ -82,13 +86,31 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     "access-control-allow-origin",
 ]
 
+SWAGGER_SETTINGS = {
+    "USE_SESSION_AUTH": False,  # Disable session authentication to remove Django Login link
+    "SECURITY_DEFINITIONS": {
+        "Bearer": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "description": "JWT Authorization header using the Bearer scheme. **IMPORTANT**: Enter 'Bearer ' followed by your token (with space after Bearer). Example: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+        }
+    },
+    "LOGIN_URL": None,  # Remove login URL
+    "LOGOUT_URL": None,  # Remove logout URL
+    "PERSIST_AUTH": True,  # Keep authorization between page refreshes
+    "REFETCH_SCHEMA_WITH_AUTH": True,  # Refetch schema with auth credentials
+    "REFETCH_SCHEMA_ON_LOGOUT": True,  # Refetch schema on logout
+    "DEFAULT_MODEL_RENDERING": "model",  # Default model rendering
+    "DOC_EXPANSION": "none",  # API documentation expansion - 'none', 'list', or 'full'
+}
 
 ROOT_URLCONF = "sockportal__backend.urls"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -99,7 +121,12 @@ TEMPLATES = [
         },
     },
 ]
-
+# REST_FRAMEWORK = {
+#     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+#     "PAGE_SIZE": 10,  # Fixed page size, clients cannot override
+#     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema', #adding for the api documentation
+#
+# }
 WSGI_APPLICATION = "sockportal__backend.wsgi.application"
 
 # ASGI_APPLICATION = "sockportal__backend.asgi.application"
@@ -171,10 +198,10 @@ REST_FRAMEWORK = {
 
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-    "ROTATE_REFRESH_TOKENS": False,
-    "BLACKLIST_AFTER_ROTATION": False,
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),  # TODO : change this to one hour
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=4),  # TODO : change this to 2 hour
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": False,
     "ALGORITHM": "HS256",
     "SIGNING_KEY": SECRET_KEY,
@@ -187,6 +214,8 @@ SIMPLE_JWT = {
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
+    "TOKEN_BLACKLIST_ENABLED": True,  # Ensure Blacklisting is enabled
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
     # "USER_AUTHENTICATION_RULE": "rest_framework_simplejwt.authentication.default_user_authentication_rule",
 }
 
@@ -224,3 +253,8 @@ CACHES = {
         },
     }
 }
+
+STATIC_ROOT = os.path.join(BASE_DIR, "static")
+STATIC_URL = "/static/"
+MEDIA_ROOT = os.path.join(BASE_DIR, "media/")
+MEDIA_URL = "/media/"

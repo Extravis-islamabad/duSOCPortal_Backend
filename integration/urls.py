@@ -2,11 +2,13 @@ from django.urls import path
 
 from integration.views import (
     CredentialTypesListAPIView,
+    DecryptCredentialsAPIView,
     GetAllIntegrationsAPIView,
     GetIntegrationInstanceListView,
     IntegrationCreateAPIView,
     IntegrationTypesView,
-    TestIntegrationView,
+    TestIntegrationAPIView,
+    TestIntegrationConnectionAPIView,
     UpdateCredentialView,
 )
 
@@ -31,6 +33,7 @@ urlpatterns = [
         GetAllIntegrationsAPIView.as_view(),
         name="get-all-integrations",
     ),
+    path("decrypt/", DecryptCredentialsAPIView.as_view(), name="decrypt-credentials"),
     path(
         "credentials/<int:pk>/update/",
         UpdateCredentialView.as_view(),
@@ -38,8 +41,13 @@ urlpatterns = [
     ),
     path(
         "test_integration/",
-        TestIntegrationView.as_view(),
+        TestIntegrationAPIView.as_view(),
         name="test-integration",
+    ),
+    path(
+        "test_connection/<int:integration_id>/",
+        TestIntegrationConnectionAPIView.as_view(),
+        name="test-integration-connection",
     ),
     path("get_integration_instances/", GetIntegrationInstanceListView.as_view()),
 ]

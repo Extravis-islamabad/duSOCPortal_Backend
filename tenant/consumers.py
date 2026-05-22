@@ -10,6 +10,8 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from authentication.models import User
 from common.constants import AdminWebsocketConstants
+from integration.models import Integration
+from tenant.models import Tenant
 
 
 class SystemMetricsConsumer(AsyncWebsocketConsumer):
@@ -39,7 +41,11 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
         params = self.get_query_params()
         token = params.get("token")
         self.user = await self.get_user_from_token(token)
-        if not self.user or not self.user.is_admin:
+        if (not self.user or not self.user.is_active or self.user.is_deleted) and (
+            not self.user.is_super_admin
+            or not self.user.is_admin
+            or not self.user.is_read_only
+        ):
             await self.close()
             return
 
@@ -49,18 +55,24 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
         # Send initial tenant count on connection
-        tenant_count = cache.get("tenant_count", 0)
+        integration_count = await database_sync_to_async(
+            lambda: Integration.objects.count()
+        )()
+        tenanat_count = await database_sync_to_async(
+            lambda: Tenant.objects.filter(created_by=self.user).count()
+        )()
+
         await self.send(
             text_data=json.dumps(
                 {
                     "action": "send_data",
-                    "tenant_count": tenant_count,
+                    "tenant_count": tenanat_count,
                     "cpu_usage": psutil.cpu_percent(interval=1),
                     "memory_usage": psutil.virtual_memory().percent,
                     "active_chats": 0,
                     "pending_resolutions": 0,
-                    "total_interactions": 0,
-                    "active_integrations": 0,
+                    "total_integractions": integration_count,
+                    "active_integrations": integration_count,
                     "instance_alarm": 0,
                 }
             )
@@ -112,20 +124,25 @@ class SystemMetricsConsumer(AsyncWebsocketConsumer):
                 # Fetch CPU and memory usage
                 cpu_usage = psutil.cpu_percent(interval=1)
                 memory_usage = psutil.virtual_memory().percent
-                tenant_count = cache.get("tenant_count", 0)
-
+                cache.get("tenant_count", 0)
+                integration_count = await database_sync_to_async(
+                    lambda: Integration.objects.count()
+                )()
+                tenanat_count = await database_sync_to_async(
+                    lambda: Tenant.objects.filter(created_by=self.user).count()
+                )()
                 # Send metrics to client
                 await self.send(
                     text_data=json.dumps(
                         {
                             "action": "send_data",
-                            "tenant_count": tenant_count,
+                            "tenant_count": tenanat_count,
                             "cpu_usage": cpu_usage,
                             "memory_usage": memory_usage,
                             "active_chats": 0,
                             "pending_resolutions": 0,
-                            "total_interactions": 0,
-                            "active_integrations": 0,
+                            "total_integractions": integration_count,
+                            "active_integrations": integration_count,
                             "instance_alarm": 0,
                         }
                     )
