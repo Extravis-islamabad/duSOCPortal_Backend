@@ -2481,7 +2481,9 @@ class IncidentCompletionStatusAPIView(APIView):
 
             # Get all SOAR tenant IDs for this company
             soar_ids = company.soar_tenants.values_list("id", flat=True)
-            if not soar_ids:
+            forti_soar_ids = company.forti_soar_tenants.values_list("id", flat=True)
+
+            if not soar_ids and not forti_soar_ids:
                 return Response(
                     {
                         "message": "No SOAR tenants found for this company.",
@@ -2490,40 +2492,31 @@ class IncidentCompletionStatusAPIView(APIView):
                     status=status.HTTP_200_OK,
                 )
 
-            # Build base filter for true positive and false positive incidents
-            true_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
+            common_filters = (
                 ~Q(owner__isnull=True)
                 & ~Q(owner__exact="")
                 & Q(incident_tta__isnull=False)
                 & Q(incident_ttn__isnull=False)
                 & Q(incident_ttdn__isnull=False)
                 & Q(itsm_sync_status__isnull=False)
-                & Q(itsm_sync_status__iexact="Ready")
                 & Q(incident_priority__isnull=False)
                 & ~Q(incident_priority__exact="")
             )
+            status_filters = Q(itsm_sync_status__iexact="Ready") | Q(itsm_sync_status__iexact="Done")
 
-            false_positive_filters = Q(cortex_soar_tenant__in=soar_ids) & (
-                ~Q(owner__isnull=True)
-                & ~Q(owner__exact="")
-                & Q(incident_tta__isnull=False)
-                & Q(incident_ttn__isnull=False)
-                & Q(incident_ttdn__isnull=False)
-                & Q(itsm_sync_status__isnull=False)
-                & Q(itsm_sync_status__iexact="Done")
-                & Q(incident_priority__isnull=False)
-                & ~Q(incident_priority__exact="")
-            )
+            # Build Cortex filters
+            cortex_base = Q(cortex_soar_tenant__in=soar_ids) & common_filters & status_filters
+            cortex_filters = self._apply_date_filters(request, cortex_base)
 
-            base_filters = true_positive_filters | false_positive_filters
+            # Build FortiSOAR filters
+            forti_base = Q(forti_soar_tenant__in=forti_soar_ids) & common_filters & status_filters
+            forti_filters = self._apply_date_filters(request, forti_base)
 
-            # Apply additional date filters if provided
-            filters = self._apply_date_filters(request, base_filters)
+            # Get incidents from both sources and merge
+            cortex_incidents = list(DUCortexSOARIncidentFinalModel.objects.filter(cortex_filters)) if soar_ids else []
+            forti_incidents = list(DUFortiSOARIncidentModel.objects.filter(forti_filters)) if forti_soar_ids else []
+            incidents = cortex_incidents + forti_incidents
 
-            # Get incidents
-            incidents = DUCortexSOARIncidentFinalModel.objects.filter(filters)
-
-            # Get SLA metrics for the company
             completion_status = self._calculate_completion_status(company, incidents)
 
             logger.success(
