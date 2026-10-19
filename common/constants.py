@@ -479,3 +479,84 @@ class RedirectionURLConstant:
     if PUBLIC_DOMAIN is None:
         logger.warning("Public domain is not set...")
         raise ValueError("Public domain is not set...")
+
+
+class SAMLConstants:
+    """
+    SAML 2.0 Service Provider configuration.
+
+    Unlike the other constant classes in this module, this one must NOT raise
+    when its values are absent. SSO is an opt-in feature: deployments that do
+    not use it have none of these variables set, and raising here would stop
+    them from booting. Validation is therefore gated on SAML_ENABLED.
+    """
+
+    SAML_ENABLED = os.getenv("SAML_ENABLED", "false").strip().lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
+    # Identity Provider (FortiAuthenticator) - taken from its metadata export
+    IDP_ENTITY_ID = os.getenv("SAML_IDP_ENTITY_ID", None)
+    IDP_SSO_URL = os.getenv("SAML_IDP_SSO_URL", None)
+    IDP_X509_CERT = os.getenv("SAML_IDP_X509_CERT", None)
+
+    # Service Provider (this portal)
+    SP_ENTITY_ID = os.getenv("SAML_SP_ENTITY_ID", None)
+    SP_ACS_URL = os.getenv("SAML_SP_ACS_URL", None)
+    SP_X509_CERT = os.getenv("SAML_SP_X509_CERT", None)
+    SP_PRIVATE_KEY = os.getenv("SAML_SP_PRIVATE_KEY", None)
+
+    # Where the ACS sends the browser once a JWT pair has been issued
+    # The portal ships as one codebase deployed twice (admin and tenant), on
+    # separate origins. SSO can start from either, so the ACS must return the
+    # browser to the origin it came from. These are an allow-list keyed by the
+    # portal hint - never a URL taken from the request, which would make the
+    # login endpoint an open redirect that leaks tokens.
+    ADMIN_FRONTEND_CALLBACK_URL = os.getenv("SAML_ADMIN_FRONTEND_CALLBACK_URL", None)
+    CLIENT_FRONTEND_CALLBACK_URL = os.getenv("SAML_CLIENT_FRONTEND_CALLBACK_URL", None)
+
+    # Used when the portal hint is absent or unrecognised.
+    DEFAULT_PORTAL = os.getenv("SAML_DEFAULT_PORTAL", "client").strip().lower()
+
+    # Assertion attribute carrying the value that matches User.username.
+    # FortiAuthenticator asserts this in sAMAccountName format.
+    USERNAME_ATTRIBUTE = os.getenv("SAML_USERNAME_ATTRIBUTE", "username")
+    EMAIL_ATTRIBUTE = os.getenv("SAML_EMAIL_ATTRIBUTE", "mail")
+    FIRST_NAME_ATTRIBUTE = os.getenv("SAML_FIRST_NAME_ATTRIBUTE", "givenName")
+    LAST_NAME_ATTRIBUTE = os.getenv("SAML_LAST_NAME_ATTRIBUTE", "sn")
+
+    # Assertions are encrypted by the IdP, so a keypair is mandatory.
+    # Request signing is driven by the IdP's WantAuthnRequestsSigned flag.
+    AUTHN_REQUESTS_SIGNED = os.getenv(
+        "SAML_AUTHN_REQUESTS_SIGNED", "false"
+    ).strip().lower() in ("true", "1", "yes")
+    WANT_ASSERTIONS_ENCRYPTED = os.getenv(
+        "SAML_WANT_ASSERTIONS_ENCRYPTED", "true"
+    ).strip().lower() in ("true", "1", "yes")
+
+    _REQUIRED_WHEN_ENABLED = (
+        "SAML_IDP_ENTITY_ID",
+        "SAML_IDP_SSO_URL",
+        "SAML_IDP_X509_CERT",
+        "SAML_SP_ENTITY_ID",
+        "SAML_SP_ACS_URL",
+        "SAML_ADMIN_FRONTEND_CALLBACK_URL",
+        "SAML_CLIENT_FRONTEND_CALLBACK_URL",
+    )
+
+    if SAML_ENABLED:
+        _missing = [name for name in _REQUIRED_WHEN_ENABLED if not os.getenv(name)]
+        if WANT_ASSERTIONS_ENCRYPTED or AUTHN_REQUESTS_SIGNED:
+            # Decrypting assertions and signing requests both need the keypair
+            _missing += [
+                name
+                for name in ("SAML_SP_X509_CERT", "SAML_SP_PRIVATE_KEY")
+                if not os.getenv(name)
+            ]
+        if _missing:
+            logger.warning(f"SAML is enabled but not configured: {_missing}")
+            raise ValueError(
+                f"SAML_ENABLED is true but these variables are not set: {_missing}"
+            )
