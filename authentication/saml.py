@@ -216,7 +216,9 @@ def get_sp_metadata() -> str:
     FortiAuthenticator. It carries our public encryption certificate; the
     private key never leaves this deployment.
     """
-    settings = OneLogin_Saml2_Settings(build_saml_settings(), validate_only=True)
+    settings = OneLogin_Saml2_Settings(
+        build_saml_settings(), sp_validation_only=True
+    )
     metadata = settings.get_sp_metadata()
     errors = settings.validate_metadata(metadata)
     if errors:
