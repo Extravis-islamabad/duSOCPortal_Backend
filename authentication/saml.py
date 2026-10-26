@@ -84,11 +84,16 @@ def user_allowed_in_portal(user, portal: str) -> bool:
     from the admin portal would receive a valid admin-portal token pair.
 
     Mirrors the role derivation in UserDetailSerializer, which the frontend
-    reads to pick a dashboard.
+    reads to pick a dashboard: any admin flag wins over is_tenant. A user
+    carrying both must therefore be refused the client portal, or the backend
+    would mint a token pair that the frontend then rejects - tokens issued to
+    someone who cannot use them is exactly the split this check exists to
+    prevent.
     """
+    is_staff = bool(user.is_admin or user.is_super_admin or user.is_read_only)
     if portal == PORTAL_ADMIN:
-        return bool(user.is_admin or user.is_super_admin or user.is_read_only)
-    return bool(user.is_tenant)
+        return is_staff
+    return bool(user.is_tenant) and not is_staff
 
 
 def _strip_cert(cert: str) -> str:
