@@ -110,4 +110,9 @@ def sync_forti_soar_data():
             port=result.port,
             integration_id=result.integration.id,
         )
-        sync_forti_soar_alerts()
+
+    # Called once, after the loop. sync_forti_soar_alerts() already iterates
+    # over every credential and every tenant underneath it, so calling it per
+    # credential dispatched the whole sweep N times - N^2 * tenants requests
+    # to FortiSOAR per run instead of N * tenants.
+    sync_forti_soar_alerts()
