@@ -367,18 +367,26 @@ class FortiSOARConstants:
     # parameter name is kept here because it is the one thing in this change
     # that depends on the remote API's filter syntax - if FortiSOAR expects a
     # different spelling, this is the only line that needs to change.
-    # Set to the accepted parameter name to enable incremental collection.
-    # While it is None, _get_alerts() keeps requesting the full history: the
-    # remaining safeguards (overlap lock, page ceiling, batch deduplication)
-    # all still apply. FortiSOAR rejects an unknown filter field with HTTP 400,
-    # which _get_alerts() raises on, so a guessed name here would break every
-    # sweep outright rather than degrade. Confirmed against the API first:
-    # "modifyDate[gt]" is rejected with
-    #   Field:modifyDate[gt] does not exist in module definition
-    ALERT_MODIFIED_AFTER_PARAM = None
+    # Incremental collection goes through the structured query endpoint, not
+    # the GET collection endpoint. Every GET operator spelling was tried
+    # against the live API and none works: "modifyDate[gt]" and "gt[modifyDate]"
+    # are rejected as unknown fields, "modifyDate__gt" and "modifyDate.gt"
+    # return 500, and "modifyDate[$gt]" and "$filter[modifyDate][gt]" return
+    # 200 while silently ignoring the filter - the worst outcome, since it
+    # looks like it worked. Plain "modifyDate=<value>" filters on equality, so
+    # the field itself is filterable; only operators need the query endpoint.
+    #
+    # Verified on CDC-Mey-AEP: 25,418 alerts unfiltered, 352 with a modifyDate
+    # filter of 2026-10-27T00:00:00Z.
+    ALERTS_QUERY_ENDPOINT = "api/query/alerts"
+    INCREMENTAL_ENABLED = True
 
-    # "$orderby[modifyDate]=desc" is accepted by the API (verified, HTTP 200).
-    ALERT_SORT_PARAM = "$orderby[modifyDate]"
+    # Field names and operator as the query endpoint accepts them. The tenant
+    # filter MUST travel in the request body: passed as a query parameter it is
+    # silently dropped and the response covers every tenant.
+    QUERY_TENANT_FIELD = "tenant__name"
+    QUERY_MODIFIED_FIELD = "modifyDate"
+    QUERY_GREATER_THAN = "gt"
 
     # Overlap between the window we request and what we already hold, so an
     # alert modified while a sweep was in flight cannot fall between two runs.

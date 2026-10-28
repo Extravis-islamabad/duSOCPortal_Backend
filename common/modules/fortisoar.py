@@ -239,36 +239,63 @@ class FortiSOAR:
         """
         start = time.time()
         logger.info(f"FortiSOAR._get_alerts() started : {start}")
-        base_endpoint = f"{self.base_url}/{FortiSOARConstants.ALERTS_ENDPOINT}"
         page = 1
         limit = FortiSOARConstants.LIMIT
         last_page = None
         all_alerts = []
 
-        # Newest first, so that once we reach alerts older than our high-water
-        # mark there is nothing further back worth asking for.
-        base_params = {
-            "tenant__name": tenant_name,
-            "$limit": limit,
-            FortiSOARConstants.ALERT_SORT_PARAM: "desc",
-        }
         incremental = (
-            modified_after is not None
-            and FortiSOARConstants.ALERT_MODIFIED_AFTER_PARAM is not None
+            modified_after is not None and FortiSOARConstants.INCREMENTAL_ENABLED
         )
+
         if incremental:
-            base_params[FortiSOARConstants.ALERT_MODIFIED_AFTER_PARAM] = (
-                modified_after.isoformat()
+            # The structured query endpoint, because the GET collection
+            # endpoint has no working "greater than" operator. Both filters
+            # travel in the body - the tenant filter is silently dropped if
+            # passed as a query parameter, which would return every tenant's
+            # alerts under one tenant's name.
+            base_endpoint = (
+                f"{self.base_url}/{FortiSOARConstants.ALERTS_QUERY_ENDPOINT}"
             )
+            base_params = {"$limit": limit}
+            query_body = {
+                "logic": "AND",
+                "filters": [
+                    {
+                        "field": FortiSOARConstants.QUERY_TENANT_FIELD,
+                        "operator": "eq",
+                        "value": tenant_name,
+                    },
+                    {
+                        "field": FortiSOARConstants.QUERY_MODIFIED_FIELD,
+                        "operator": FortiSOARConstants.QUERY_GREATER_THAN,
+                        "value": modified_after.isoformat(),
+                    },
+                ],
+                # Newest first, so that once we reach alerts older than the
+                # high-water mark there is nothing further back worth asking
+                # for. The early exit below still verifies the ordering from
+                # the response rather than assuming this was honoured.
+                "sort": [
+                    {
+                        "field": FortiSOARConstants.QUERY_MODIFIED_FIELD,
+                        "direction": "DESC",
+                    }
+                ],
+            }
             logger.info(
                 f"FortiSOAR._get_alerts() requesting only alerts modified after "
                 f"{modified_after.isoformat()} for {tenant_name}"
             )
-        elif modified_after is not None:
-            logger.info(
-                f"FortiSOAR._get_alerts() incremental filter is not configured; "
-                f"fetching full history for {tenant_name}"
-            )
+        else:
+            base_endpoint = f"{self.base_url}/{FortiSOARConstants.ALERTS_ENDPOINT}"
+            base_params = {"tenant__name": tenant_name, "$limit": limit}
+            query_body = None
+            if modified_after is not None:
+                logger.info(
+                    f"FortiSOAR._get_alerts() incremental collection is disabled; "
+                    f"fetching full history for {tenant_name}"
+                )
 
         # Only trust the early exit once we have seen that the response really
         # is newest-first. If FortiSOAR ignores the sort parameter and returns
@@ -278,28 +305,24 @@ class FortiSOAR:
 
         while True:
             params = dict(base_params, **{"$page": page})
+            request_kwargs = {
+                "params": params,
+                "headers": self.headers,
+                "verify": SSLConstants.VERIFY,
+                "timeout": timeout,
+            }
+            if EnvConstants.LOCAL:
+                request_kwargs["proxies"] = {
+                    "http": "http://127.0.0.1:8080",
+                    "https": "http://127.0.0.1:8080",
+                }
             try:
-                if EnvConstants.LOCAL:
-                    proxies = {
-                        "http": "http://127.0.0.1:8080",
-                        "https": "http://127.0.0.1:8080",
-                    }
-                    response = requests.get(
-                        base_endpoint,
-                        params=params,
-                        headers=self.headers,
-                        verify=SSLConstants.VERIFY,
-                        proxies=proxies,
-                        timeout=timeout,
+                if query_body is not None:
+                    response = requests.post(
+                        base_endpoint, json=query_body, **request_kwargs
                     )
                 else:
-                    response = requests.get(
-                        base_endpoint,
-                        params=params,
-                        headers=self.headers,
-                        verify=SSLConstants.VERIFY,
-                        timeout=timeout,
-                    )
+                    response = requests.get(base_endpoint, **request_kwargs)
             except Exception as e:
                 logger.error(
                     f"FortiSOAR._get_alerts() failed with exception : {str(e)} on page {page}"
