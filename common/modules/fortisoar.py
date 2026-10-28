@@ -252,13 +252,22 @@ class FortiSOAR:
             "$limit": limit,
             FortiSOARConstants.ALERT_SORT_PARAM: "desc",
         }
-        if modified_after is not None:
+        incremental = (
+            modified_after is not None
+            and FortiSOARConstants.ALERT_MODIFIED_AFTER_PARAM is not None
+        )
+        if incremental:
             base_params[FortiSOARConstants.ALERT_MODIFIED_AFTER_PARAM] = (
                 modified_after.isoformat()
             )
             logger.info(
                 f"FortiSOAR._get_alerts() requesting only alerts modified after "
                 f"{modified_after.isoformat()} for {tenant_name}"
+            )
+        elif modified_after is not None:
+            logger.info(
+                f"FortiSOAR._get_alerts() incremental filter is not configured; "
+                f"fetching full history for {tenant_name}"
             )
 
         # Only trust the early exit once we have seen that the response really
@@ -345,7 +354,7 @@ class FortiSOAR:
 
             # Newest-first and this whole page predates our high-water mark:
             # everything beyond it is older still.
-            if descending_confirmed and modified_after is not None:
+            if descending_confirmed and incremental:
                 newest_on_page = self.safe_parse_datetime(
                     page_alerts[0].get("modifyDate")
                 )

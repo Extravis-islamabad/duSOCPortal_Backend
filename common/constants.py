@@ -367,7 +367,17 @@ class FortiSOARConstants:
     # parameter name is kept here because it is the one thing in this change
     # that depends on the remote API's filter syntax - if FortiSOAR expects a
     # different spelling, this is the only line that needs to change.
-    ALERT_MODIFIED_AFTER_PARAM = "modifyDate[gt]"
+    # Set to the accepted parameter name to enable incremental collection.
+    # While it is None, _get_alerts() keeps requesting the full history: the
+    # remaining safeguards (overlap lock, page ceiling, batch deduplication)
+    # all still apply. FortiSOAR rejects an unknown filter field with HTTP 400,
+    # which _get_alerts() raises on, so a guessed name here would break every
+    # sweep outright rather than degrade. Confirmed against the API first:
+    # "modifyDate[gt]" is rejected with
+    #   Field:modifyDate[gt] does not exist in module definition
+    ALERT_MODIFIED_AFTER_PARAM = None
+
+    # "$orderby[modifyDate]=desc" is accepted by the API (verified, HTTP 200).
     ALERT_SORT_PARAM = "$orderby[modifyDate]"
 
     # Overlap between the window we request and what we already hold, so an
