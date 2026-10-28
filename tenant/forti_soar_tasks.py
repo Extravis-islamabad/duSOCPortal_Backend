@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from celery import shared_task
 from django.core.cache import cache
-from django.db.models import Max
+from django.db.models import Max, Q
 from loguru import logger
 
 from common.constants import FortiSOARConstants
@@ -97,8 +97,44 @@ def sync_forti_soar_alert_for_tenant(
                 f"Transformed {len(transformed_data)} alerts for tenant {forti_soar_tenant_name}"
             )
             fsoar._insert_alerts(transformed_data)
+            record_tenant_watermark(
+                forti_soar_tenant_id=forti_soar_tenant_id,
+                tenant_name=forti_soar_tenant_name,
+                alerts=data,
+                parse=fsoar.safe_parse_datetime,
+            )
     finally:
         cache.delete(lock_key)
+
+
+def record_tenant_watermark(forti_soar_tenant_id, tenant_name, alerts, parse):
+    """
+    Store the newest modifyDate seen in this response for the tenant.
+
+    Taken from what FortiSOAR returned rather than from what was stored, so
+    that alerts discarded by transform_alerts() still move the mark forward.
+    Only ever moves forward, so a response that happens to arrive out of order
+    cannot rewind it and cause alerts to be skipped.
+    """
+    seen = [parse(alert.get("modifyDate")) for alert in alerts]
+    newest = max((value for value in seen if value is not None), default=None)
+    if newest is None:
+        logger.warning(
+            f"No usable modifyDate in the response for tenant {tenant_name}; "
+            f"leaving the high-water mark unchanged"
+        )
+        return
+
+    updated = DUFortiSOARTenants.objects.filter(
+        id=forti_soar_tenant_id
+    ).filter(
+        Q(alerts_synced_until__lt=newest) | Q(alerts_synced_until__isnull=True)
+    ).update(alerts_synced_until=newest)
+
+    if updated:
+        logger.info(
+            f"Tenant {tenant_name} high-water mark advanced to {newest.isoformat()}"
+        )
 
 
 def get_tenant_watermark(forti_soar_tenant_id, integration_id, tenant_name):
@@ -111,10 +147,21 @@ def get_tenant_watermark(forti_soar_tenant_id, integration_id, tenant_name):
     when we hold nothing for the tenant yet, which requests the full history -
     the one case where that is the correct thing to do.
     """
-    newest = DUFortiSOARIncidentModel.objects.filter(
-        forti_soar_tenant_id=forti_soar_tenant_id,
-        integration_id=integration_id,
-    ).aggregate(newest=Max("modified"))["newest"]
+    newest = (
+        DUFortiSOARTenants.objects.filter(id=forti_soar_tenant_id)
+        .values_list("alerts_synced_until", flat=True)
+        .first()
+    )
+
+    if newest is None:
+        # Nothing recorded yet. Seed from the newest stored alert so the first
+        # run after deployment is not a full-history fetch for every tenant at
+        # once; it is only ever used until the first successful sync writes the
+        # real mark.
+        newest = DUFortiSOARIncidentModel.objects.filter(
+            forti_soar_tenant_id=forti_soar_tenant_id,
+            integration_id=integration_id,
+        ).aggregate(newest=Max("modified"))["newest"]
 
     if newest is None:
         logger.info(

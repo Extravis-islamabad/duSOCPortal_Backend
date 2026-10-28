@@ -1537,6 +1537,14 @@ class DUFortiSOARTenants(models.Model):
         null=True,
         blank=True,
     )
+    # High-water mark for incremental alert collection: the newest modifyDate
+    # seen in FortiSOAR's response for this tenant, whether or not that alert
+    # was stored. It cannot be derived from the stored alerts, because
+    # transform_alerts() discards every alert with a null incidentTTA/TTN/TTDN
+    # - around 91% of them - so the newest stored alert can lag far behind the
+    # newest alert that exists, and the requested window would creep back
+    # towards full history.
+    alerts_synced_until = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "du_forti_soar_tenants"
