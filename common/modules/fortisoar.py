@@ -391,6 +391,11 @@ class FortiSOAR:
                 break
             if not page_alerts:
                 break
+            if len(page_alerts) < limit:
+                # A short page is the last page, so there is no need to spend a
+                # request discovering that the next one is empty. On a small
+                # incremental window that empty request was half of the calls.
+                break
 
             # Confirm the ordering from the first full page we receive.
             if not descending_confirmed and len(page_alerts) > 1:
