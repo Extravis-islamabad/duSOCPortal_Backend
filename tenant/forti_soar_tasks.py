@@ -101,7 +101,7 @@ def sync_forti_soar_alert_for_tenant(
                 forti_soar_tenant_id=forti_soar_tenant_id,
                 tenant_name=forti_soar_tenant_name,
                 alerts=data,
-                parse=fsoar.safe_parse_datetime,
+                parse=fsoar.parse_modify_date,
             )
     finally:
         cache.delete(lock_key)
@@ -110,6 +110,10 @@ def sync_forti_soar_alert_for_tenant(
 def record_tenant_watermark(forti_soar_tenant_id, tenant_name, alerts, parse):
     """
     Store the newest modifyDate seen in this response for the tenant.
+
+    ``parse`` must yield timezone-aware datetimes, not the ISO strings that
+    safe_parse_datetime() produces for storage, or the comparison against the
+    stored mark raises.
 
     Taken from what FortiSOAR returned rather than from what was stored, so
     that alerts discarded by transform_alerts() still move the mark forward.

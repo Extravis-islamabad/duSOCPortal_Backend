@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
@@ -79,6 +79,34 @@ class FortiSOAR:
             return dt.replace(microsecond=0).isoformat()
         except Exception:
             return None
+
+    @staticmethod
+    def parse_modify_date(value):
+        """
+        Parses a FortiSOAR ``modifyDate`` into a timezone-aware datetime.
+
+        Not to be confused with ``safe_parse_datetime()``, which returns an
+        ISO *string* for storage on the model. Comparing high-water marks needs
+        real datetimes, and they must be timezone-aware to be comparable with
+        the aware values Django returns from the database.
+
+        ``modifyDate`` arrives as epoch seconds, but accepts an ISO string too
+        so a change in the API's representation degrades to None rather than
+        raising inside the pagination loop.
+        """
+        if value is None:
+            return None
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        except (TypeError, ValueError, OSError, OverflowError):
+            pass
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
 
     def safe_parse_event_time(self, value):
         """
@@ -366,10 +394,10 @@ class FortiSOAR:
 
             # Confirm the ordering from the first full page we receive.
             if not descending_confirmed and len(page_alerts) > 1:
-                first_modified = self.safe_parse_datetime(
+                first_modified = self.parse_modify_date(
                     page_alerts[0].get("modifyDate")
                 )
-                last_modified = self.safe_parse_datetime(
+                last_modified = self.parse_modify_date(
                     page_alerts[-1].get("modifyDate")
                 )
                 if first_modified and last_modified:
@@ -378,7 +406,7 @@ class FortiSOAR:
             # Newest-first and this whole page predates our high-water mark:
             # everything beyond it is older still.
             if descending_confirmed and incremental:
-                newest_on_page = self.safe_parse_datetime(
+                newest_on_page = self.parse_modify_date(
                     page_alerts[0].get("modifyDate")
                 )
                 if newest_on_page and newest_on_page < modified_after:
