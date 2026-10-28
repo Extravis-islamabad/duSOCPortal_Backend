@@ -7,6 +7,10 @@ from .views import (
     LDAPGroupListView,
     LDAPGroupUsersView,
     LDAPUsersAPIView,
+    SAMLAcsAPIView,
+    SAMLConfigAPIView,
+    SAMLLoginAPIView,
+    SAMLMetadataAPIView,
     UserDetailsAPIView,
     UserLoginAPIView,
     UserLogoutAPIView,
@@ -50,4 +54,11 @@ urlpatterns = [
         UserPreferencesClearAPIView.as_view(),
         name="clear-user-preferences",
     ),
+    # SAML 2.0 SSO (FortiAuthenticator as IdP).
+    # Inactive unless SAML_ENABLED is set; no SLS route - Single Logout is
+    # out of scope for phase one.
+    path("saml/config/", SAMLConfigAPIView.as_view(), name="saml-config"),
+    path("saml/metadata/", SAMLMetadataAPIView.as_view(), name="saml-metadata"),
+    path("saml/login/", SAMLLoginAPIView.as_view(), name="saml-login"),
+    path("saml/acs/", SAMLAcsAPIView.as_view(), name="saml-acs"),
 ]

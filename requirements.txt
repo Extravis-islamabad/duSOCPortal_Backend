@@ -109,3 +109,4 @@ weasyprint==66.0
 webencodings==0.5.1
 websockets==15.0.1
 zopfli==0.2.3.post1
+python3-saml==1.16.0

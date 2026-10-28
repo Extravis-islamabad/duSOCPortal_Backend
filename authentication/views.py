@@ -1,15 +1,19 @@
 # Create your views here.
 import time
+from urllib.parse import quote
 
 from django.db.models import Q
 from django.db.models.functions import Lower
+from django.http import HttpResponse, HttpResponseRedirect
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from loguru import logger
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -17,6 +21,15 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenViewBase
 
 from authentication.permissions import IsAdminUser
+from authentication.saml import (
+    callback_url_for,
+    extract_identity,
+    get_sp_metadata,
+    init_saml_auth,
+    resolve_portal,
+    saml_available,
+    user_allowed_in_portal,
+)
 from common.constants import LDAPConstants, RBACConstants
 from common.utils import LDAP
 from tenant.models import Company
@@ -1344,3 +1357,248 @@ class UserPreferencesClearAPIView(APIView):
                 {"error": f"An error occurred: {str(e)}"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+
+class SAMLConfigAPIView(APIView):
+    """Tells the frontend whether to render the 'Login with SSO' button."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_description="Reports whether SAML SSO is enabled on this deployment.",
+        responses={
+            200: openapi.Response(
+                description="SSO availability",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "saml_enabled": openapi.Schema(type=openapi.TYPE_BOOLEAN)
+                    },
+                    example={"saml_enabled": True},
+                ),
+            )
+        },
+        tags=["Authentication"],
+    )
+    def get(self, request):
+        return Response({"saml_enabled": saml_available()}, status=status.HTTP_200_OK)
+
+
+class SAMLMetadataAPIView(APIView):
+    """
+    Serves this Service Provider's metadata XML.
+
+    Shared with the IdP operator (the du team) so they can configure the
+    Service Provider entry on FortiAuthenticator. Contains our public
+    certificate only - the private key never leaves this deployment.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_description="Returns the SP metadata XML for IdP configuration.",
+        responses={
+            200: "SP metadata XML",
+            503: "SAML is not enabled on this deployment",
+        },
+        tags=["Authentication"],
+    )
+    def get(self, request):
+        if not saml_available():
+            return Response(
+                {"error": "SAML is not enabled on this deployment"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        try:
+            metadata = get_sp_metadata()
+        except Exception as e:
+            logger.error(f"SAMLMetadataAPIView.get failed to build metadata: {e}")
+            return Response(
+                {"error": "Unable to generate SP metadata"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        return HttpResponse(metadata, content_type="text/xml")
+
+
+class SAMLLoginAPIView(APIView):
+    """
+    Starts the SP-initiated flow by redirecting the browser to the IdP.
+
+    The frontend must reach this with a full page navigation, not an XHR: the
+    response is a 302 to FortiAuthenticator and the browser has to follow it.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_description="Redirects the browser to the IdP to authenticate.",
+        responses={
+            302: "Redirect to the Identity Provider",
+            503: "SAML is not enabled on this deployment",
+        },
+        tags=["Authentication"],
+    )
+    def get(self, request):
+        # Which portal the user started from. Travels to the IdP and back in
+        # RelayState so the ACS can return them to the right origin.
+        portal = resolve_portal(request.GET.get("portal"))
+
+        if not saml_available():
+            # The browser arrives here by top-level navigation, so a JSON body
+            # would leave the user staring at raw text with no way back. Send
+            # them to the portal's callback instead, where the frontend renders
+            # a real error. Only possible if a callback is configured; without
+            # one there is nowhere safe to send them.
+            if callback_url_for(portal):
+                return _saml_error_redirect("sso_unavailable", portal)
+            return Response(
+                {"error": "SAML is not enabled on this deployment"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        try:
+            auth = init_saml_auth(request)
+            return HttpResponseRedirect(auth.login(return_to=portal))
+        except Exception as e:
+            logger.error(f"SAMLLoginAPIView.get failed to build AuthnRequest: {e}")
+            return _saml_error_redirect("sso_unavailable", portal)
+
+
+def _saml_error_redirect(code: str, portal: str) -> HttpResponseRedirect:
+    """
+    Send the browser back to the originating portal with an error code.
+
+    Errors travel in the URL fragment for the same reason tokens do: fragments
+    are not sent to the server, so they stay out of access logs and Referer
+    headers on the frontend's own subsequent requests.
+    """
+    base = callback_url_for(portal) or "/"
+    return HttpResponseRedirect(f"{base}#error={quote(code)}")
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class SAMLAcsAPIView(APIView):
+    """
+    Assertion Consumer Service.
+
+    Receives the IdP's assertion, validates it, matches an existing portal
+    user and issues the same SimpleJWT pair as the password login.
+
+    CSRF exemption is required: this POST originates at FortiAuthenticator,
+    so no CSRF token from this origin can accompany it. Authenticity comes
+    from the assertion's XML signature instead, which is the stronger check.
+
+    No auto-provisioning. The user must already exist and be active, exactly
+    as on the LDAP password path - a successful IdP authentication is not by
+    itself authorisation to use the portal.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_description=(
+            "Consumes a SAML assertion from the IdP and redirects to the "
+            "frontend with a JWT pair in the URL fragment."
+        ),
+        responses={
+            302: "Redirect to the frontend callback",
+            503: "SAML is not enabled on this deployment",
+        },
+        tags=["Authentication"],
+    )
+    def post(self, request):
+        start = time.time()
+        if not saml_available():
+            return Response(
+                {"error": "SAML is not enabled on this deployment"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # RelayState comes back through the browser and is untrusted, so it is
+        # resolved to a known portal key rather than used directly.
+        portal = resolve_portal(request.POST.get("RelayState"))
+
+        try:
+            auth = init_saml_auth(request)
+            auth.process_response()
+        except Exception as e:
+            logger.error(f"SAMLAcsAPIView.post failed to process response: {e}")
+            return _saml_error_redirect("invalid_assertion", portal)
+
+        errors = auth.get_errors()
+        if errors:
+            # get_last_error_reason() carries the signature/condition detail;
+            # it is logged but never returned to the browser.
+            logger.error(
+                f"SAMLAcsAPIView.post assertion rejected: {errors} "
+                f"reason={auth.get_last_error_reason()}"
+            )
+            return _saml_error_redirect("invalid_assertion", portal)
+
+        if not auth.is_authenticated():
+            logger.warning("SAMLAcsAPIView.post assertion was not authenticated")
+            return _saml_error_redirect("not_authenticated", portal)
+
+        try:
+            identity = extract_identity(auth)
+        except Exception as e:
+            logger.error(f"SAMLAcsAPIView.post failed to read attributes: {e}")
+            return _saml_error_redirect("invalid_assertion", portal)
+
+        username = identity.get("username")
+        if not username:
+            logger.error(
+                "SAMLAcsAPIView.post assertion carried no username; "
+                f"attributes present: {identity.get('attribute_names')}"
+            )
+            return _saml_error_redirect("missing_username", portal)
+
+        try:
+            user = User.objects.filter(
+                Q(username__iexact=username) | Q(email__iexact=username),
+                is_active=True,
+                is_deleted=False,
+            ).first()
+            if user is None:
+                # The IdP authenticated them, but they have no portal account.
+                # An onboarding task, not a configuration fault - the frontend
+                # reports these two cases differently.
+                logger.warning(
+                    f"SAMLAcsAPIView.post no active portal user for '{username}'"
+                )
+                return _saml_error_redirect("user_not_provisioned", portal)
+
+            # Restore the portal boundary that the two password endpoints get
+            # from binding against different AD trees. Checked before any
+            # token is minted: a user refused here receives nothing.
+            if not user_allowed_in_portal(user, portal):
+                logger.warning(
+                    f"SAMLAcsAPIView.post user '{user.username}' is not permitted "
+                    f"in the '{portal}' portal"
+                )
+                return _saml_error_redirect("wrong_portal", portal)
+
+            user.last_login = timezone.now()
+            user.save(update_fields=["last_login"])
+
+            refresh = RefreshToken.for_user(user)
+            logger.info(
+                f"SAMLAcsAPIView.post signed in '{user.username}' via SSO to the "
+                f"'{portal}' portal in {time.time() - start} seconds"
+            )
+
+            # Tokens travel in the fragment so they never reach server logs
+            # or Referer headers. The frontend reads them, stores them the way
+            # the password login does, and strips the fragment immediately.
+            base = callback_url_for(portal)
+            return HttpResponseRedirect(
+                f"{base}#access={quote(str(refresh.access_token))}"
+                f"&refresh={quote(str(refresh))}"
+            )
+
+        except Exception as e:
+            logger.error(f"An error occurred SAMLAcsAPIView.post: {str(e)}")
+            return _saml_error_redirect("server_error", portal)

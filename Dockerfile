@@ -45,6 +45,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     valgrind \
     && rm -rf /var/lib/apt/lists/*
 
+# FOR SAML (xmlsec1 native bindings required by python3-saml)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libxmlsec1-dev \
+    libxmlsec1-openssl \
+    libxml2-dev \
+    libxslt1-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy the requirements.txt into the container
 COPY requirements.txt /app/
 
