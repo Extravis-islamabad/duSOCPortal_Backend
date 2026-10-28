@@ -362,6 +362,28 @@ class FortiSOARConstants:
     ALERTS_ENDPOINT = "api/3/alerts"
     LIMIT = 1000
 
+    # Incremental collection. _get_alerts() asks FortiSOAR for only the alerts
+    # modified since our high-water mark instead of the full history. The query
+    # parameter name is kept here because it is the one thing in this change
+    # that depends on the remote API's filter syntax - if FortiSOAR expects a
+    # different spelling, this is the only line that needs to change.
+    ALERT_MODIFIED_AFTER_PARAM = "modifyDate[gt]"
+    ALERT_SORT_PARAM = "$orderby[modifyDate]"
+
+    # Overlap between the window we request and what we already hold, so an
+    # alert modified while a sweep was in flight cannot fall between two runs.
+    WATERMARK_OVERLAP_MINUTES = 15
+
+    # Hard ceiling on pagination. At LIMIT=1000 this is 100k alerts, far above
+    # any real incremental window, and it stops a misbehaving or unfiltered
+    # response from paging without bound against a production SOAR.
+    MAX_PAGES = 100
+
+    # A single tenant's sweep has been observed taking 15 minutes. The lock is
+    # held for longer than the worst observed run so a slow sweep cannot be
+    # re-entered by the next scheduled tick.
+    TENANT_SYNC_LOCK_SECONDS = 25 * 60
+
 
 class AdminWebsocketConstants:
     SYSTEM_METRICS_GROUP_NAME = "system_metrics_group"

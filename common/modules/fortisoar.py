@@ -213,7 +213,12 @@ class FortiSOAR:
         data = response.json()
         return data
 
-    def _get_alerts(self, tenant_name: str, timeout=SSLConstants.TIMEOUT):
+    def _get_alerts(
+        self,
+        tenant_name: str,
+        modified_after=None,
+        timeout=SSLConstants.TIMEOUT,
+    ):
         """
         Fetches the list of alerts from the FortiSOAR endpoint.
 
@@ -224,6 +229,10 @@ class FortiSOAR:
         and returns an empty dictionary.
 
         :param tenant_name: The name of the tenant.
+        :param modified_after: When set, only alerts modified at or after this
+            datetime are requested. Without it the full alert history is
+            fetched, which for a large tenant is tens of thousands of records
+            over dozens of paginated requests on every run.
         :param timeout: The timeout for the request in seconds.
         :return: A dictionary containing alert information if the request is successful, otherwise an empty dictionary.
         :raises: Logs any exceptions that occur during the request.
@@ -236,8 +245,30 @@ class FortiSOAR:
         last_page = None
         all_alerts = []
 
+        # Newest first, so that once we reach alerts older than our high-water
+        # mark there is nothing further back worth asking for.
+        base_params = {
+            "tenant__name": tenant_name,
+            "$limit": limit,
+            FortiSOARConstants.ALERT_SORT_PARAM: "desc",
+        }
+        if modified_after is not None:
+            base_params[FortiSOARConstants.ALERT_MODIFIED_AFTER_PARAM] = (
+                modified_after.isoformat()
+            )
+            logger.info(
+                f"FortiSOAR._get_alerts() requesting only alerts modified after "
+                f"{modified_after.isoformat()} for {tenant_name}"
+            )
+
+        # Only trust the early exit once we have seen that the response really
+        # is newest-first. If FortiSOAR ignores the sort parameter and returns
+        # oldest-first, stopping at the first old page would silently skip
+        # every new alert, so in that case we page through as before.
+        descending_confirmed = False
+
         while True:
-            params = {"tenant__name": tenant_name, "$page": page, "$limit": limit}
+            params = dict(base_params, **{"$page": page})
             try:
                 if EnvConstants.LOCAL:
                     proxies = {
@@ -299,6 +330,39 @@ class FortiSOAR:
             if last_page is not None and page >= last_page:
                 break
             if not page_alerts:
+                break
+
+            # Confirm the ordering from the first full page we receive.
+            if not descending_confirmed and len(page_alerts) > 1:
+                first_modified = self.safe_parse_datetime(
+                    page_alerts[0].get("modifyDate")
+                )
+                last_modified = self.safe_parse_datetime(
+                    page_alerts[-1].get("modifyDate")
+                )
+                if first_modified and last_modified:
+                    descending_confirmed = first_modified >= last_modified
+
+            # Newest-first and this whole page predates our high-water mark:
+            # everything beyond it is older still.
+            if descending_confirmed and modified_after is not None:
+                newest_on_page = self.safe_parse_datetime(
+                    page_alerts[0].get("modifyDate")
+                )
+                if newest_on_page and newest_on_page < modified_after:
+                    logger.info(
+                        f"FortiSOAR._get_alerts() reached alerts older than the "
+                        f"high-water mark on page {page} for {tenant_name}, stopping"
+                    )
+                    break
+
+            if page >= FortiSOARConstants.MAX_PAGES:
+                logger.warning(
+                    f"FortiSOAR._get_alerts() hit the {FortiSOARConstants.MAX_PAGES} "
+                    f"page ceiling for {tenant_name} after {len(all_alerts)} alerts. "
+                    f"Stopping to avoid unbounded load on FortiSOAR; the remaining "
+                    f"alerts will be collected on the next run."
+                )
                 break
 
             page += 1
@@ -477,6 +541,27 @@ class FortiSOAR:
         """
         start = time.time()
         logger.info(f"FortiSOAR._insert_incidents() started : {start}")
+
+        # Postgres rejects an ON CONFLICT DO UPDATE statement outright if two
+        # rows in the same batch carry the same conflict key - it raises
+        # CardinalityViolation ("cannot affect row a second time") and the whole
+        # tenant's insert is lost after we have already paid for every page of
+        # the fetch. Paginating a live table makes duplicates unavoidable: an
+        # alert modified mid-sweep shifts between pages and is returned twice.
+        # Keep the last occurrence of each key, which is the most recent copy.
+        deduplicated = {}
+        for record in records:
+            deduplicated[
+                (record.account, record.db_id, record.integration_id)
+            ] = record
+        duplicates = len(records) - len(deduplicated)
+        if duplicates:
+            logger.info(
+                f"FortiSOAR._insert_incidents() dropped {duplicates} duplicate "
+                f"record(s) from the batch before insert"
+            )
+        records = list(deduplicated.values())
+
         logger.info(f"Inserting the incident records: {len(records)}")
 
         try:

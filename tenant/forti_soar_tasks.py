@@ -1,8 +1,12 @@
 import time
+from datetime import timedelta
 
 from celery import shared_task
+from django.core.cache import cache
+from django.db.models import Max
 from loguru import logger
 
+from common.constants import FortiSOARConstants
 from common.modules.fortisoar import FortiSOAR
 from integration.models import (
     CredentialTypes,
@@ -10,7 +14,7 @@ from integration.models import (
     IntegrationTypes,
     SoarSubTypes,
 )
-from tenant.models import DUFortiSOARTenants
+from tenant.models import DUFortiSOARIncidentModel, DUFortiSOARTenants
 
 
 @shared_task
@@ -46,27 +50,86 @@ def sync_forti_soar_alert_for_tenant(
     integration_id,
 ):
     logger.info(f"Running sync_forti_soar_alerts for tenant {forti_soar_tenant_name}")
-    with FortiSOAR(
-        ip_address=ip_address,
-        port=port,
-        token=api_key,
-    ) as fsoar:
-        if forti_soar_tenant_name == "CDC-Mey-Test":
-            return
-        data = fsoar._get_alerts(tenant_name=forti_soar_tenant_name)
-        if not data:
-            logger.warning(f"No alerts found for tenant {forti_soar_tenant_name}")
-            return
-        transformed_data = fsoar.transform_alerts(
-            data=data,
-            integration_id=integration_id,
+    if forti_soar_tenant_name == "CDC-Mey-Test":
+        return
+
+    # A tenant sweep can take longer than the interval it is scheduled on, so
+    # without this guard each tick stacks another concurrent full collection of
+    # the same tenant on top of the ones still running. cache.add() is atomic,
+    # so only the first caller through takes the lock.
+    lock_key = f"forti_soar_sync:{integration_id}:{forti_soar_tenant_id}"
+    if not cache.add(
+        lock_key, "1", timeout=FortiSOARConstants.TENANT_SYNC_LOCK_SECONDS
+    ):
+        logger.warning(
+            f"Skipping sync for tenant {forti_soar_tenant_name}: a previous sweep "
+            f"is still running. This run is dropped rather than queued."
+        )
+        return
+
+    try:
+        modified_after = get_tenant_watermark(
             forti_soar_tenant_id=forti_soar_tenant_id,
-            name=forti_soar_tenant_name,
+            integration_id=integration_id,
+            tenant_name=forti_soar_tenant_name,
         )
+        with FortiSOAR(
+            ip_address=ip_address,
+            port=port,
+            token=api_key,
+        ) as fsoar:
+            data = fsoar._get_alerts(
+                tenant_name=forti_soar_tenant_name,
+                modified_after=modified_after,
+            )
+            if not data:
+                logger.info(
+                    f"No new or changed alerts for tenant {forti_soar_tenant_name}"
+                )
+                return
+            transformed_data = fsoar.transform_alerts(
+                data=data,
+                integration_id=integration_id,
+                forti_soar_tenant_id=forti_soar_tenant_id,
+                name=forti_soar_tenant_name,
+            )
+            logger.info(
+                f"Transformed {len(transformed_data)} alerts for tenant {forti_soar_tenant_name}"
+            )
+            fsoar._insert_alerts(transformed_data)
+    finally:
+        cache.delete(lock_key)
+
+
+def get_tenant_watermark(forti_soar_tenant_id, integration_id, tenant_name):
+    """
+    The point in time from which this tenant's alerts should be requested.
+
+    Returns the newest ``modified`` timestamp already stored for the tenant,
+    moved back by a short overlap so an alert changed while the previous sweep
+    was in flight cannot fall into the gap between two runs. Returns ``None``
+    when we hold nothing for the tenant yet, which requests the full history -
+    the one case where that is the correct thing to do.
+    """
+    newest = DUFortiSOARIncidentModel.objects.filter(
+        forti_soar_tenant_id=forti_soar_tenant_id,
+        integration_id=integration_id,
+    ).aggregate(newest=Max("modified"))["newest"]
+
+    if newest is None:
         logger.info(
-            f"Transformed {len(transformed_data)} alerts for tenant {forti_soar_tenant_name}"
+            f"No alerts stored yet for tenant {tenant_name}; requesting full history"
         )
-        fsoar._insert_alerts(transformed_data)
+        return None
+
+    watermark = newest - timedelta(
+        minutes=FortiSOARConstants.WATERMARK_OVERLAP_MINUTES
+    )
+    logger.info(
+        f"Tenant {tenant_name} high-water mark {newest.isoformat()}, "
+        f"requesting from {watermark.isoformat()}"
+    )
+    return watermark
 
 
 @shared_task
@@ -110,4 +173,10 @@ def sync_forti_soar_data():
             port=result.port,
             integration_id=result.integration.id,
         )
-        sync_forti_soar_alerts()
+
+    # Called once, after the loop. sync_forti_soar_alerts() already iterates
+    # over every credential and every tenant underneath it, so calling it per
+    # credential dispatched the whole sweep N times - N^2 * tenants requests to
+    # FortiSOAR per run instead of N * tenants. Harmless at one credential,
+    # which is what Production has; DEV had eight.
+    sync_forti_soar_alerts()
