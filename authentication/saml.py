@@ -14,11 +14,14 @@ SAML_Integration_Meeting_QA.md. No SLS endpoint is published and no
 SessionIndex is stored.
 """
 
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 from loguru import logger
 
 from common.constants import SAMLConstants
+
+XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>' + chr(10)
 
 try:
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
@@ -219,11 +222,24 @@ def get_sp_metadata() -> str:
     settings = OneLogin_Saml2_Settings(
         build_saml_settings(), sp_validation_only=True
     )
-    metadata = settings.get_sp_metadata()
+    # python3-saml defaults validUntil to two days out, which is shorter than
+    # the turnaround for an IdP administrator to receive a file by email and
+    # import it - our first attempt expired before the du team got to it, and
+    # FortiAuthenticator rejects expired metadata. A year is long enough that
+    # the file stays usable, and the endpoint regenerates it on every request
+    # anyway.
+    valid_until = datetime.now(timezone.utc) + timedelta(days=365)
+    metadata = settings.get_sp_metadata(valid_until=valid_until)
     errors = settings.validate_metadata(metadata)
     if errors:
         raise ValueError(f"Generated SP metadata is invalid: {errors}")
-    return metadata.decode("utf-8") if isinstance(metadata, bytes) else metadata
+    if isinstance(metadata, bytes):
+        metadata = metadata.decode("utf-8")
+    # Some metadata importers require the declaration before they will parse
+    # the document at all.
+    if not metadata.lstrip().startswith("<?xml"):
+        metadata = XML_DECLARATION + metadata
+    return metadata
 
 
 def _first(attributes: dict, name: str):
