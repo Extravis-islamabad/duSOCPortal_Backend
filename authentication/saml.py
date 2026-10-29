@@ -14,6 +14,7 @@ SAML_Integration_Meeting_QA.md. No SLS endpoint is published and no
 SessionIndex is stored.
 """
 
+import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
@@ -22,6 +23,10 @@ from loguru import logger
 from common.constants import SAMLConstants
 
 XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>' + chr(10)
+
+# How long a published copy of our SP metadata stays valid. The endpoint
+# regenerates on every request, so a long window only helps an emailed copy.
+SAML_METADATA_VALID_DAYS = 365
 
 try:
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
@@ -222,19 +227,36 @@ def get_sp_metadata() -> str:
     settings = OneLogin_Saml2_Settings(
         build_saml_settings(), sp_validation_only=True
     )
-    # python3-saml defaults validUntil to two days out, which is shorter than
-    # the turnaround for an IdP administrator to receive a file by email and
-    # import it - our first attempt expired before the du team got to it, and
-    # FortiAuthenticator rejects expired metadata. A year is long enough that
-    # the file stays usable, and the endpoint regenerates it on every request
-    # anyway.
-    valid_until = datetime.now(timezone.utc) + timedelta(days=365)
-    metadata = settings.get_sp_metadata(valid_until=valid_until)
+    metadata = settings.get_sp_metadata()
     errors = settings.validate_metadata(metadata)
     if errors:
         raise ValueError(f"Generated SP metadata is invalid: {errors}")
     if isinstance(metadata, bytes):
         metadata = metadata.decode("utf-8")
+
+    # python3-saml stamps validUntil two days out, which is shorter than the
+    # turnaround for an IdP administrator to receive a file by email and import
+    # it: the copy sent to the du team expired before they got to it, and
+    # FortiAuthenticator reports expired metadata as badly formatted rather
+    # than as expired.
+    #
+    # Rewritten after generation rather than passed in, because the installed
+    # version's get_sp_metadata() takes no arguments - a valid_until keyword
+    # raises TypeError on it. Substituting the attribute works across versions.
+    valid_until = datetime.now(timezone.utc) + timedelta(
+        days=SAML_METADATA_VALID_DAYS
+    )
+    metadata, substitutions = re.subn(
+        r'validUntil="[^"]*"',
+        'validUntil="{}"'.format(valid_until.strftime("%Y-%m-%dT%H:%M:%SZ")),
+        metadata,
+        count=1,
+    )
+    if not substitutions:
+        logger.warning(
+            "SP metadata carried no validUntil attribute to extend; serving it "
+            "as generated"
+        )
     # Some metadata importers require the declaration before they will parse
     # the document at all.
     if not metadata.lstrip().startswith("<?xml"):
